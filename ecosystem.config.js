@@ -1,5 +1,6 @@
-// Configuração do PM2 — controla os processos da Carla de forma previsível,
-// sem risco de subir duas instâncias brigando pela mesma conexão do WhatsApp.
+// Configuração do PM2 no servidor Linux — sem o túnel Cloudflare (esse era só um jeito de
+// expor o painel enquanto ele rodava num PC de casa sem IP público; aqui o servidor já tem
+// IP público de verdade e nginx na frente, o painel fica acessível direto).
 module.exports = {
   apps: [
     {
@@ -33,24 +34,6 @@ module.exports = {
       min_uptime: "10s",
       out_file: "./logs/painel-saida.log",
       error_file: "./logs/painel-erro.log",
-      time: true,
-    },
-    {
-      // Túnel público (Cloudflare) até o painel, pra acessar de fora de casa/da clínica.
-      // O link atual (https://algo.trycloudflare.com) muda toda vez que reinicia — ver
-      // "npm run logs:tunnel" pra descobrir o link vigente.
-      name: "carla-tunnel",
-      script: "C:\\Program Files (x86)\\cloudflared\\cloudflared.exe",
-      args: "tunnel --url http://localhost:3355",
-      cwd: __dirname,
-      instances: 1,
-      exec_mode: "fork",
-      autorestart: true,
-      watch: false,
-      max_restarts: 10,
-      min_uptime: "10s",
-      out_file: "./logs/tunnel-saida.log",
-      error_file: "./logs/tunnel-erro.log",
       time: true,
     },
   ],
