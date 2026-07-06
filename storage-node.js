@@ -177,9 +177,39 @@ function salvarSessao(telefone, sessao) {
   escreverJSON(ARQ_SESSOES, sessoes);
 }
 
+// Últimos contatos pro painel: um por telefone, ordenado do mais recente pro mais antigo.
+// Só entra quem já tem "ultimaAtividade" registrada (server.js carimba isso a cada
+// mensagem processada) — sessões antigas sem esse campo simplesmente não aparecem.
+function listarContatosRecentes(limite = 20) {
+  const sessoes = lerSessoes();
+  return Object.entries(sessoes)
+    .filter(([, s]) => s && s.ultimaAtividade)
+    .map(([telefone, s]) => ({
+      telefone,
+      ultimaAtividade: s.ultimaAtividade,
+      ultimaMensagem: s.ultimaMensagem || "",
+      fechou: !!s.ultimoAgendamento,
+      aguardandoHumano: !!s.aguardandoHumano,
+    }))
+    .sort((a, b) => new Date(b.ultimaAtividade) - new Date(a.ultimaAtividade))
+    .slice(0, limite);
+}
+
+// Taxa de conversão simples: quantos telefones que já falaram com a Carla (contatos únicos
+// com sessão registrada) resultaram em pelo menos um agendamento de verdade.
+function metricasConversao() {
+  const sessoes = lerSessoes();
+  const totalContatos = Object.keys(sessoes).length;
+  const telefonesComAgendamento = new Set(lerAgendamentos().map((a) => a.telefone));
+  const totalFechados = telefonesComAgendamento.size;
+  const taxa = totalContatos === 0 ? 0 : Math.round((totalFechados / totalContatos) * 100);
+  return { totalContatos, totalFechados, taxa };
+}
+
 module.exports = {
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,
+  listarContatosRecentes, metricasConversao,
 };

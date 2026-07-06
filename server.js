@@ -107,6 +107,8 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     sessao.historico = [...(sessao.historico || []), { role: "user", content: texto }, { role: "assistant", content: respostaEmergencia }].slice(-24);
     sessao.aguardandoHumano = false;
     sessao.aguardandoHumanoDesde = null;
+    sessao.ultimaAtividade = now.toISOString();
+    sessao.ultimaMensagem = texto.slice(0, 140);
     Storage.salvarSessao(telefone, sessao);
     await enviarResposta(sock, jid, telefone, respostaEmergencia, semAtraso);
     return;
@@ -152,6 +154,8 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     console.log(`[ALERTA: ESCALADO PELA IA] ${telefone}: "${resultado.escalar}"`);
   }
 
+  sessao.ultimaAtividade = now.toISOString();
+  sessao.ultimaMensagem = texto.slice(0, 140);
   Storage.salvarSessao(telefone, sessao);
 
   if (!resultado.resposta) {

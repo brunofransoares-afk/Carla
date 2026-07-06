@@ -8,101 +8,253 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#1E3324">
+<meta name="theme-color" content="#0b1512">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Carla">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f2f2f2; color: #222; padding: 24px; }
-  h1 { color: #075e54; font-size: 20px; margin: 0 0 4px; }
-  .subtitulo { color: #666; font-size: 13px; margin-bottom: 24px; }
-  .cartao { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  .cartao h2 { font-size: 15px; color: #075e54; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; }
-  .contagem { background: #128c7e; color: white; border-radius: 12px; padding: 2px 10px; font-size: 12px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
-  th { background: #f7f7f7; color: #555; }
-  .vazio { color: #999; font-size: 13px; padding: 8px 0; }
+
+  :root {
+    --acento: #34d399;
+    --acento-escuro: #0ea678;
+    --ouro: #e8c887;
+    --vidro: rgba(255,255,255,0.045);
+    --vidro-borda: rgba(255,255,255,0.09);
+    --texto: #e9f2ee;
+    --texto-fraco: #93a6a0;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    color: var(--texto);
+    background: radial-gradient(circle at 15% -10%, #123024 0%, transparent 45%),
+                radial-gradient(circle at 110% 15%, #1c2f45 0%, transparent 40%),
+                linear-gradient(160deg, #060b10 0%, #0a1713 55%, #050a08 100%);
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  .brilho { position: fixed; border-radius: 50%; filter: blur(90px); pointer-events: none; z-index: 0; opacity: 0.55; }
+  .brilho-1 { width: 420px; height: 420px; top: -140px; right: -100px; background: radial-gradient(circle, rgba(52,211,153,0.35), transparent 70%); }
+  .brilho-2 { width: 380px; height: 380px; bottom: -160px; left: -120px; background: radial-gradient(circle, rgba(232,200,135,0.18), transparent 70%); }
+
+  .pagina { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  h1, h2 { font-family: "Poppins", "Segoe UI", Arial, sans-serif; margin: 0; }
+
+  .topo { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+  .marca { display: flex; align-items: center; gap: 14px; }
+  .avatar {
+    width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--acento), var(--acento-escuro));
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Poppins", serif; font-weight: 700; font-size: 20px; color: #06231a;
+    box-shadow: 0 6px 18px rgba(52,211,153,0.35);
+  }
+  h1 { font-size: 22px; letter-spacing: 0.3px; color: #f2fbf7; }
+  .subtitulo { color: var(--texto-fraco); font-size: 12.5px; margin-top: 3px; display: flex; align-items: center; }
+
+  .icone { display: inline-flex; vertical-align: -3px; margin-right: 7px; opacity: 0.85; color: var(--acento); }
+  .icone svg { width: 16px; height: 16px; }
+
+  .cartao {
+    background: var(--vidro);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--vidro-borda);
+    border-radius: 18px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.35);
+  }
+  .cartao h2 {
+    font-size: 14.5px; font-weight: 600; color: #cdeee0;
+    margin: 0 0 14px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .titulo-icone { display: flex; align-items: center; }
+
+  .contagem { background: linear-gradient(135deg, var(--acento), var(--acento-escuro)); color: #06231a; border-radius: 12px; padding: 2px 10px; font-size: 11.5px; font-weight: 700; margin-left: 8px; }
+
+  #tabela-agendamentos { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  th { color: var(--texto-fraco); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.4px; }
+  td { color: #dcece5; }
+  .vazio { color: var(--texto-fraco); font-size: 13px; padding: 10px 0; }
+
   ul { list-style: none; padding: 0; margin: 0; }
-  li { padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
-  li.urgencia { background: #ffe5e5; color: #7a0000; }
-  li.nao_entendida { background: #fff3cd; color: #7a5c00; }
-  .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
-  .status.ok { background: #2ecc71; }
-  .status.erro { background: #e74c3c; }
-  #erro-conexao { display: none; color: #7a0000; background: #ffe5e5; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; }
-  .cartao-bot { display: flex; align-items: center; justify-content: space-between; }
-  .bot-status { display: flex; align-items: center; font-size: 14px; font-weight: 600; }
+  li { padding: 9px 12px; border-radius: 10px; margin-bottom: 7px; font-size: 13px; }
+  li.urgencia { background: rgba(255,90,90,0.12); color: #ffb3b3; border: 1px solid rgba(255,90,90,0.2); }
+  li.nao_entendida { background: rgba(232,200,135,0.14); color: #f0da9f; border: 1px solid rgba(232,200,135,0.22); }
+
+  .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 8px currentColor; }
+  .status.ok { background: #34d399; color: #34d399; }
+  .status.erro { background: #ef4444; color: #ef4444; }
+
+  #erro-conexao { display: none; color: #ffb3b3; background: rgba(255,90,90,0.12); border: 1px solid rgba(255,90,90,0.25); padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
+
+  .cartao-bot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; }
+  .bot-status { display: flex; align-items: center; font-size: 13.5px; font-weight: 600; }
   .bot-status .status { width: 11px; height: 11px; }
-  .bot-status.ligada { color: #128c7e; }
-  .bot-status.desligada { color: #999; }
-  #btn-toggle { border: none; border-radius: 20px; padding: 10px 22px; font-size: 14px; font-weight: 600; cursor: pointer; color: white; transition: opacity 0.15s; }
-  #btn-toggle.ligar { background: #2ecc71; }
-  #btn-toggle.desligar { background: #e74c3c; }
-  #btn-toggle:disabled { opacity: 0.6; cursor: default; }
-  .btn-x { border: none; background: #ffe5e5; color: #c0392b; width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 13px; line-height: 1; font-weight: 700; }
-  .btn-x:hover { background: #f5b7b1; }
+  .bot-status.ligada { color: var(--acento); }
+  .bot-status.desligada { color: var(--texto-fraco); }
+  #btn-toggle { border: none; border-radius: 20px; padding: 9px 20px; font-size: 13.5px; font-weight: 600; cursor: pointer; color: white; transition: opacity 0.15s, transform 0.15s; }
+  #btn-toggle:hover:not(:disabled) { transform: translateY(-1px); }
+  #btn-toggle.ligar { background: linear-gradient(135deg, #34d399, #0ea678); color: #06231a; }
+  #btn-toggle.desligar { background: linear-gradient(135deg, #f87171, #dc2626); }
+  #btn-toggle:disabled { opacity: 0.55; cursor: default; }
+
+  .btn-x { border: none; background: rgba(255,90,90,0.14); color: #ff9d9d; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 1; font-weight: 700; }
+  .btn-x:hover { background: rgba(255,90,90,0.28); }
   th.col-x, td.col-x { width: 32px; text-align: center; }
-  .btn-limpar { border: none; background: #eee; color: #555; border-radius: 12px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
-  .btn-limpar:hover { background: #e0e0e0; }
-  .calendario-nav { display: flex; align-items: center; gap: 10px; }
-  .calendario-nav button { border: none; background: #eee; color: #555; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 13px; }
-  .calendario-nav button:hover { background: #e0e0e0; }
-  .calendario-mes { font-size: 13px; color: #555; min-width: 110px; text-align: center; }
-  .calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
-  .cal-cabecalho { text-align: center; font-size: 11px; color: #999; padding-bottom: 2px; }
-  .cal-dia { position: relative; text-align: center; padding: 8px 0; border-radius: 6px; font-size: 13px; background: #f7f7f7; cursor: pointer; user-select: none; }
-  .cal-dia:hover { background: #ececec; }
+  .btn-limpar { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 12px; padding: 5px 13px; font-size: 12px; cursor: pointer; }
+  .btn-limpar:hover { background: rgba(255,255,255,0.12); }
+
+  .calendario-nav { display: flex; align-items: center; gap: 8px; }
+  .calendario-nav button { border: none; background: rgba(255,255,255,0.06); color: #cdeee0; border-radius: 7px; width: 26px; height: 26px; cursor: pointer; font-size: 12.5px; }
+  .calendario-nav button:hover { background: rgba(255,255,255,0.12); }
+  .calendario-mes { font-size: 12.5px; color: var(--texto-fraco); min-width: 105px; text-align: center; }
+
+  .btn-colapsar { display: flex; align-items: center; justify-content: center; }
+  .btn-colapsar svg { width: 14px; height: 14px; transition: transform 0.25s ease; }
+  #cartao-calendario.colapsado .btn-colapsar svg { transform: rotate(-90deg); }
+
+  .colapsavel { overflow: hidden; max-height: 640px; opacity: 1; transition: max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease; }
+  #cartao-calendario.colapsado .colapsavel { max-height: 0; opacity: 0; }
+
+  .calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 6px; }
+  .cal-cabecalho { text-align: center; font-size: 10.5px; color: var(--texto-fraco); padding-bottom: 2px; }
+  .cal-dia { position: relative; text-align: center; padding: 9px 0; border-radius: 8px; font-size: 12.5px; background: rgba(255,255,255,0.04); cursor: pointer; user-select: none; color: #dcece5; }
+  .cal-dia:hover { background: rgba(255,255,255,0.1); }
   .cal-dia.vazio { background: transparent; cursor: default; }
-  .cal-dia.sem-atendimento { color: #ccc; cursor: default; background: transparent; }
-  .cal-dia.passado { color: #ccc; cursor: default; background: transparent; }
-  .cal-dia.bloqueado { background: #ffb3b3; color: #7a0000; font-weight: 600; }
-  .cal-dia.bloqueado:hover { background: #ff9d9d; }
-  .cal-dia .cal-ponto { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: #128c7e; }
-  .calendario-legenda { display: flex; gap: 16px; margin-top: 10px; font-size: 11px; color: #777; }
+  .cal-dia.sem-atendimento { color: rgba(255,255,255,0.2); cursor: default; background: transparent; }
+  .cal-dia.passado { color: rgba(255,255,255,0.2); cursor: default; background: transparent; }
+  .cal-dia.bloqueado { background: rgba(255,90,90,0.3); color: #ffd4d4; font-weight: 600; }
+  .cal-dia.bloqueado:hover { background: rgba(255,90,90,0.42); }
+  .cal-dia .cal-ponto { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--acento); }
+  .calendario-legenda { display: flex; gap: 16px; margin-top: 12px; font-size: 11px; color: var(--texto-fraco); flex-wrap: wrap; }
   .calendario-legenda span { display: inline-flex; align-items: center; gap: 5px; }
   .legenda-cor { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  .layout-principal { display: grid; grid-template-columns: 1fr 300px; gap: 22px; align-items: start; }
+  @media (max-width: 880px) { .layout-principal { grid-template-columns: 1fr; } }
+  .coluna-principal, .coluna-lateral { min-width: 0; }
+
+  .coluna-lateral .cartao:last-child { margin-bottom: 0; }
+
+  #lista-contatos li { display: flex; flex-direction: column; gap: 3px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); }
+  .contato-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .contato-tel { font-weight: 600; font-size: 12.5px; color: #e9f2ee; }
+  .contato-tempo { font-size: 10.5px; color: var(--texto-fraco); white-space: nowrap; }
+  .contato-msg { font-size: 12px; color: var(--texto-fraco); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .contato-tags { display: flex; gap: 6px; margin-top: 2px; }
+  .contato-tag { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; }
+  .contato-tag.fechou { background: rgba(52,211,153,0.18); color: #6ee7b7; }
+  .contato-tag.aguardando { background: rgba(232,200,135,0.18); color: #e8c887; }
+
+  .cartao-conversao { text-align: center; }
+  .conversao-corpo { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .anel { width: 118px; height: 118px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: conic-gradient(rgba(255,255,255,0.08) 0 100%); transition: background 0.6s ease; }
+  .anel-interior { width: 90px; height: 90px; border-radius: 50%; background: #0b1713; display: flex; align-items: center; justify-content: center; }
+  #conversao-numero { font-family: "Poppins", sans-serif; font-size: 24px; font-weight: 700; color: var(--acento); }
+  .conversao-detalhe { font-size: 12px; color: var(--texto-fraco); line-height: 1.4; }
 </style>
 </head>
 <body>
 
-<h1>Painel da Carla</h1>
-<div class="subtitulo"><span class="status ok" id="status-dot"></span><span id="status-texto">Atualizando automaticamente...</span></div>
+<div class="brilho brilho-1"></div>
+<div class="brilho brilho-2"></div>
 
-<div id="erro-conexao">Não consegui atualizar. Confira se o painel (painel-server.js) ainda está rodando.</div>
+<div class="pagina">
 
-<div class="cartao cartao-bot">
-  <div class="bot-status desligada" id="bot-status">
-    <span class="status erro" id="bot-status-dot"></span>
-    <span id="bot-status-texto">Verificando...</span>
+  <div class="topo">
+    <div class="marca">
+      <div class="avatar">C</div>
+      <div>
+        <h1>Painel da Carla</h1>
+        <div class="subtitulo"><span class="status ok" id="status-dot"></span><span id="status-texto">Atualizando automaticamente...</span></div>
+      </div>
+    </div>
+
+    <div class="cartao cartao-bot">
+      <div class="bot-status desligada" id="bot-status">
+        <span class="status erro" id="bot-status-dot"></span>
+        <span id="bot-status-texto">Verificando...</span>
+      </div>
+      <button id="btn-toggle" disabled>Aguarde...</button>
+    </div>
   </div>
-  <button id="btn-toggle" disabled>Aguarde...</button>
-</div>
 
-<div class="cartao">
-  <h2>Agendamentos <span class="contagem" id="contagem-agendamentos">0</span></h2>
-  <div id="tabela-agendamentos"></div>
-</div>
+  <div id="erro-conexao">Não consegui atualizar. Confira se o painel (painel-server.js) ainda está rodando.</div>
 
-<div class="cartao">
-  <h2>
-    <span>Bloqueio de agenda</span>
-    <span class="calendario-nav">
-      <button id="cal-anterior" title="Mês anterior">◀</button>
-      <span class="calendario-mes" id="cal-mes-atual"></span>
-      <button id="cal-proximo" title="Próximo mês">▶</button>
-    </span>
-  </h2>
-  <div class="calendario" id="calendario"></div>
-  <div class="calendario-legenda">
-    <span><span class="legenda-cor" style="background:#ffb3b3"></span> Bloqueado (sem vaga nova)</span>
-    <span><span class="legenda-cor" style="background:#128c7e"></span> Tem consulta marcada</span>
+  <div class="layout-principal">
+    <main class="coluna-principal">
+
+      <div class="cartao">
+        <h2>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>Agendamentos</span>
+          <span class="contagem" id="contagem-agendamentos">0</span>
+        </h2>
+        <div id="tabela-agendamentos"></div>
+      </div>
+
+      <div class="cartao" id="cartao-calendario">
+        <h2>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Bloqueio de agenda</span>
+          <span class="calendario-nav">
+            <button id="cal-anterior" title="Mês anterior">◀</button>
+            <span class="calendario-mes" id="cal-mes-atual"></span>
+            <button id="cal-proximo" title="Próximo mês">▶</button>
+            <button id="btn-colapsar-calendario" class="btn-colapsar" title="Minimizar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+          </span>
+        </h2>
+        <div class="colapsavel" id="colapsavel-calendario">
+          <div class="calendario" id="calendario"></div>
+          <div class="calendario-legenda">
+            <span><span class="legenda-cor" style="background:rgba(255,90,90,0.6)"></span> Bloqueado (sem vaga nova)</span>
+            <span><span class="legenda-cor" style="background:#34d399"></span> Tem consulta marcada</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cartao">
+        <h2>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a5 5 0 0 0-5 5v3.5c0 .8-.3 1.6-.9 2.2L4 16h16l-2.1-2.3c-.6-.6-.9-1.4-.9-2.2V8a5 5 0 0 0-5-5Z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/></svg></span>Alertas <span class="contagem" id="contagem-alertas">0</span></span>
+          <button id="btn-limpar-alertas" class="btn-limpar">Limpar alertas</button>
+        </h2>
+        <ul id="lista-alertas"></ul>
+      </div>
+
+    </main>
+
+    <aside class="coluna-lateral">
+
+      <div class="cartao">
+        <h2>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.7 14.2c2.4.3 4.3 2.1 4.3 4.8"/></svg></span>Últimos contatos</span>
+        </h2>
+        <ul id="lista-contatos"></ul>
+      </div>
+
+      <div class="cartao cartao-conversao">
+        <h2>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span>Taxa de conversão</span>
+        </h2>
+        <div class="conversao-corpo">
+          <div class="anel" id="conversao-anel"><div class="anel-interior"><span id="conversao-numero">0%</span></div></div>
+          <div class="conversao-detalhe" id="conversao-detalhe">Sem dados ainda.</div>
+        </div>
+      </div>
+
+    </aside>
   </div>
-</div>
 
-<div class="cartao">
-  <h2><span>Alertas <span class="contagem" id="contagem-alertas">0</span></span><button id="btn-limpar-alertas" class="btn-limpar">Limpar alertas</button></h2>
-  <ul id="lista-alertas"></ul>
 </div>
 
 <script>
@@ -113,6 +265,19 @@
   function formatarDataBR(iso) {
     const [y, m, d] = iso.split("-");
     return `${d}/${m}/${y}`;
+  }
+
+  function tempoRelativo(iso) {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return "agora mesmo";
+    if (min < 60) return `há ${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `há ${h} h`;
+    const d = Math.floor(h / 24);
+    if (d === 1) return "ontem";
+    if (d < 7) return `há ${d} dias`;
+    return new Date(iso).toLocaleDateString("pt-BR");
   }
 
   let statusAtual = null; // { rodando, existe } — só usado pra saber o que o botão deve fazer
@@ -127,6 +292,16 @@
   let calAno = hoje.getFullYear();
   let calMes = hoje.getMonth(); // 0-11
   let alternandoBloqueio = false;
+
+  // Minimizar/maximizar o card do calendário — lembra a preferência entre visitas.
+  const cartaoCalendario = document.getElementById("cartao-calendario");
+  if (localStorage.getItem("carla_calendario_colapsado") === "1") {
+    cartaoCalendario.classList.add("colapsado");
+  }
+  document.getElementById("btn-colapsar-calendario").addEventListener("click", () => {
+    const colapsado = cartaoCalendario.classList.toggle("colapsado");
+    localStorage.setItem("carla_calendario_colapsado", colapsado ? "1" : "0");
+  });
 
   function dataStr(ano, mes, dia) {
     return `${ano}-${String(mes + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
@@ -265,6 +440,38 @@
     atualizar();
   }
 
+  function renderizarContatos(contatos) {
+    const lista = document.getElementById("lista-contatos");
+    if (!contatos || contatos.length === 0) {
+      lista.innerHTML = "<div class='vazio'>Nenhum contato registrado ainda.</div>";
+      return;
+    }
+    lista.innerHTML = contatos.map((c) => {
+      const tags = [
+        c.fechou ? `<span class="contato-tag fechou">Fechou consulta</span>` : "",
+        c.aguardandoHumano ? `<span class="contato-tag aguardando">Aguardando humano</span>` : "",
+      ].join("");
+      return `<li>
+        <div class="contato-topo">
+          <span class="contato-tel">${escapeHtml(c.telefone)}</span>
+          <span class="contato-tempo">${tempoRelativo(c.ultimaAtividade)}</span>
+        </div>
+        ${c.ultimaMensagem ? `<div class="contato-msg">"${escapeHtml(c.ultimaMensagem)}"</div>` : ""}
+        ${tags ? `<div class="contato-tags">${tags}</div>` : ""}
+      </li>`;
+    }).join("");
+  }
+
+  function renderizarConversao(metricas) {
+    const m = metricas || { totalContatos: 0, totalFechados: 0, taxa: 0 };
+    const anel = document.getElementById("conversao-anel");
+    anel.style.background = `conic-gradient(#34d399 ${m.taxa}%, rgba(255,255,255,0.08) 0)`;
+    document.getElementById("conversao-numero").textContent = `${m.taxa}%`;
+    document.getElementById("conversao-detalhe").textContent = m.totalContatos === 0
+      ? "Sem dados ainda."
+      : `${m.totalFechados} de ${m.totalContatos} contatos fecharam consulta`;
+  }
+
   async function atualizar() {
     try {
       const resp = await fetch("/api/dados");
@@ -312,6 +519,9 @@
           return `<li class="${classe}"><strong>[${rotulo}]</strong> ${quando} — ${escapeHtml(al.telefone)}: "${escapeHtml(al.mensagem)}"</li>`;
         }).join("");
       }
+
+      renderizarContatos(dados.contatos || []);
+      renderizarConversao(dados.metricas);
 
       bloqueiosAtuais = dados.bloqueios || [];
       diasComConsultaAtuais = new Set(agendamentos.map((a) => a.data));
