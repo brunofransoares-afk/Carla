@@ -1,0 +1,29 @@
+{
+  "name": "carla-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "pm2 start ecosystem.config.js",
+    "stop": "pm2 stop carla-bot",
+    "restart": "pm2 restart carla-bot",
+    "restart:painel": "pm2 restart carla-painel",
+    "restart:tunnel": "pm2 restart carla-tunnel",
+    "status": "pm2 status",
+    "logs": "pm2 logs carla-bot",
+    "logs:painel": "pm2 logs carla-painel",
+    "link": "pm2 logs carla-tunnel --lines 40 --nostream",
+    "dev": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "googleapis": "^173.0.0",
+    "qrcode": "^1.5.4"
+  }
+}

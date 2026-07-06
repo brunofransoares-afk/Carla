@@ -1,0 +1,11 @@
+# Segredos — nunca versionar
+.env
+google-credenciais.json
+
+# Dados reais (pacientes, sessões do WhatsApp, alertas) — ficam só no servidor
+data/
+logs/
+qr.png
+
+# Dependências (reinstaladas via package.json)
+node_modules/

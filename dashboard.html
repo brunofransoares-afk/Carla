@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel da Carla</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#1E3324">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carla">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f2f2f2; color: #222; padding: 24px; }
+  h1 { color: #075e54; font-size: 20px; margin: 0 0 4px; }
+  .subtitulo { color: #666; font-size: 13px; margin-bottom: 24px; }
+  .cartao { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .cartao h2 { font-size: 15px; color: #075e54; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; }
+  .contagem { background: #128c7e; color: white; border-radius: 12px; padding: 2px 10px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  th { background: #f7f7f7; color: #555; }
+  .vazio { color: #999; font-size: 13px; padding: 8px 0; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+  li.urgencia { background: #ffe5e5; color: #7a0000; }
+  li.nao_entendida { background: #fff3cd; color: #7a5c00; }
+  .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .status.ok { background: #2ecc71; }
+  .status.erro { background: #e74c3c; }
+  #erro-conexao { display: none; color: #7a0000; background: #ffe5e5; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; }
+  .cartao-bot { display: flex; align-items: center; justify-content: space-between; }
+  .bot-status { display: flex; align-items: center; font-size: 14px; font-weight: 600; }
+  .bot-status .status { width: 11px; height: 11px; }
+  .bot-status.ligada { color: #128c7e; }
+  .bot-status.desligada { color: #999; }
+  #btn-toggle { border: none; border-radius: 20px; padding: 10px 22px; font-size: 14px; font-weight: 600; cursor: pointer; color: white; transition: opacity 0.15s; }
+  #btn-toggle.ligar { background: #2ecc71; }
+  #btn-toggle.desligar { background: #e74c3c; }
+  #btn-toggle:disabled { opacity: 0.6; cursor: default; }
+  .btn-x { border: none; background: #ffe5e5; color: #c0392b; width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 13px; line-height: 1; font-weight: 700; }
+  .btn-x:hover { background: #f5b7b1; }
+  th.col-x, td.col-x { width: 32px; text-align: center; }
+  .btn-limpar { border: none; background: #eee; color: #555; border-radius: 12px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  .btn-limpar:hover { background: #e0e0e0; }
+  .calendario-nav { display: flex; align-items: center; gap: 10px; }
+  .calendario-nav button { border: none; background: #eee; color: #555; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 13px; }
+  .calendario-nav button:hover { background: #e0e0e0; }
+  .calendario-mes { font-size: 13px; color: #555; min-width: 110px; text-align: center; }
+  .calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+  .cal-cabecalho { text-align: center; font-size: 11px; color: #999; padding-bottom: 2px; }
+  .cal-dia { position: relative; text-align: center; padding: 8px 0; border-radius: 6px; font-size: 13px; background: #f7f7f7; cursor: pointer; user-select: none; }
+  .cal-dia:hover { background: #ececec; }
+  .cal-dia.vazio { background: transparent; cursor: default; }
+  .cal-dia.sem-atendimento { color: #ccc; cursor: default; background: transparent; }
+  .cal-dia.passado { color: #ccc; cursor: default; background: transparent; }
+  .cal-dia.bloqueado { background: #ffb3b3; color: #7a0000; font-weight: 600; }
+  .cal-dia.bloqueado:hover { background: #ff9d9d; }
+  .cal-dia .cal-ponto { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: #128c7e; }
+  .calendario-legenda { display: flex; gap: 16px; margin-top: 10px; font-size: 11px; color: #777; }
+  .calendario-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+  .legenda-cor { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<h1>Painel da Carla</h1>
+<div class="subtitulo"><span class="status ok" id="status-dot"></span><span id="status-texto">Atualizando automaticamente...</span></div>
+
+<div id="erro-conexao">Não consegui atualizar. Confira se o painel (painel-server.js) ainda está rodando.</div>
+
+<div class="cartao cartao-bot">
+  <div class="bot-status desligada" id="bot-status">
+    <span class="status erro" id="bot-status-dot"></span>
+    <span id="bot-status-texto">Verificando...</span>
+  </div>
+  <button id="btn-toggle" disabled>Aguarde...</button>
+</div>
+
+<div class="cartao">
+  <h2>Agendamentos <span class="contagem" id="contagem-agendamentos">0</span></h2>
+  <div id="tabela-agendamentos"></div>
+</div>
+
+<div class="cartao">
+  <h2>
+    <span>Bloqueio de agenda</span>
+    <span class="calendario-nav">
+      <button id="cal-anterior" title="Mês anterior">◀</button>
+      <span class="calendario-mes" id="cal-mes-atual"></span>
+      <button id="cal-proximo" title="Próximo mês">▶</button>
+    </span>
+  </h2>
+  <div class="calendario" id="calendario"></div>
+  <div class="calendario-legenda">
+    <span><span class="legenda-cor" style="background:#ffb3b3"></span> Bloqueado (sem vaga nova)</span>
+    <span><span class="legenda-cor" style="background:#128c7e"></span> Tem consulta marcada</span>
+  </div>
+</div>
+
+<div class="cartao">
+  <h2><span>Alertas <span class="contagem" id="contagem-alertas">0</span></span><button id="btn-limpar-alertas" class="btn-limpar">Limpar alertas</button></h2>
+  <ul id="lista-alertas"></ul>
+</div>
+
+<script>
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+
+  function formatarDataBR(iso) {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  }
+
+  let statusAtual = null; // { rodando, existe } — só usado pra saber o que o botão deve fazer
+  let acaoEmAndamento = false;
+
+  // Calendário de bloqueio de agenda.
+  const DIAS_SEM_ATENDIMENTO = [0, 3, 6]; // domingo, quarta, sábado — iguais aos do CARLA_CONFIG
+  const NOMES_MES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  let bloqueiosAtuais = [];
+  let diasComConsultaAtuais = new Set();
+  const hoje = new Date();
+  let calAno = hoje.getFullYear();
+  let calMes = hoje.getMonth(); // 0-11
+  let alternandoBloqueio = false;
+
+  function dataStr(ano, mes, dia) {
+    return `${ano}-${String(mes + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+  }
+
+  function renderizarCalendario() {
+    document.getElementById("cal-mes-atual").textContent = `${NOMES_MES[calMes]} de ${calAno}`;
+    const cal = document.getElementById("calendario");
+    const hojeStr = dataStr(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    const primeiroDiaSemana = new Date(calAno, calMes, 1).getDay();
+    const totalDias = new Date(calAno, calMes + 1, 0).getDate();
+
+    let html = ["D", "S", "T", "Q", "Q", "S", "S"].map((d) => `<div class="cal-cabecalho">${d}</div>`).join("");
+    for (let i = 0; i < primeiroDiaSemana; i++) html += `<div class="cal-dia vazio"></div>`;
+
+    for (let dia = 1; dia <= totalDias; dia++) {
+      const str = dataStr(calAno, calMes, dia);
+      const diaSemana = new Date(calAno, calMes, dia).getDay();
+      const classes = ["cal-dia"];
+      if (str < hojeStr) classes.push("passado");
+      else if (DIAS_SEM_ATENDIMENTO.includes(diaSemana)) classes.push("sem-atendimento");
+      else if (bloqueiosAtuais.includes(str)) classes.push("bloqueado");
+      const clicavel = !classes.includes("passado") && !classes.includes("sem-atendimento");
+      const ponto = diasComConsultaAtuais.has(str) ? `<span class="cal-ponto"></span>` : "";
+      html += `<div class="${classes.join(" ")}" ${clicavel ? `data-data="${str}"` : ""}>${dia}${ponto}</div>`;
+    }
+    cal.innerHTML = html;
+
+    cal.querySelectorAll(".cal-dia[data-data]").forEach((el) => {
+      el.addEventListener("click", () => alternarBloqueio(el.dataset.data));
+    });
+  }
+
+  async function alternarBloqueio(data) {
+    if (alternandoBloqueio) return;
+    alternandoBloqueio = true;
+    try {
+      const resp = await fetch("/api/bloqueio-toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data }),
+      });
+      const resultado = await resp.json();
+      bloqueiosAtuais = resultado.bloqueios || bloqueiosAtuais;
+      renderizarCalendario();
+    } catch (e) {
+      // ignora — se falhar, o calendário simplesmente não muda e o usuário pode tentar de novo
+    }
+    alternandoBloqueio = false;
+  }
+
+  document.getElementById("cal-anterior").addEventListener("click", () => {
+    calMes--;
+    if (calMes < 0) { calMes = 11; calAno--; }
+    renderizarCalendario();
+  });
+  document.getElementById("cal-proximo").addEventListener("click", () => {
+    calMes++;
+    if (calMes > 11) { calMes = 0; calAno++; }
+    renderizarCalendario();
+  });
+
+  function renderizarStatusBot(status) {
+    const dot = document.getElementById("bot-status-dot");
+    const texto = document.getElementById("bot-status-texto");
+    const container = document.getElementById("bot-status");
+    const botao = document.getElementById("btn-toggle");
+
+    if (status.rodando) {
+      dot.className = "status ok";
+      texto.textContent = "Carla ligada";
+      container.className = "bot-status ligada";
+      botao.className = "desligar";
+      botao.textContent = "Desligar Carla";
+    } else {
+      dot.className = "status erro";
+      texto.textContent = "Carla desligada";
+      container.className = "bot-status desligada";
+      botao.className = "ligar";
+      botao.textContent = "Ligar Carla";
+    }
+    botao.disabled = acaoEmAndamento;
+  }
+
+  async function atualizarStatusBot() {
+    try {
+      const resp = await fetch("/api/status");
+      statusAtual = await resp.json();
+      renderizarStatusBot(statusAtual);
+    } catch (e) {
+      // se nem o painel responder, o erro geral de conexão já cobre o aviso
+    }
+  }
+
+  document.getElementById("btn-toggle").addEventListener("click", async () => {
+    if (!statusAtual || acaoEmAndamento) return;
+    acaoEmAndamento = true;
+    const botao = document.getElementById("btn-toggle");
+    botao.disabled = true;
+    botao.textContent = statusAtual.rodando ? "Desligando..." : "Ligando...";
+
+    const rota = statusAtual.rodando ? "/api/desligar" : "/api/ligar";
+    try {
+      await fetch(rota, { method: "POST" });
+    } catch (e) {
+      // ignora — a atualização de status abaixo já vai refletir o estado real
+    }
+    // Dá um tempinho pro PM2 aplicar a mudança antes de checar de novo.
+    setTimeout(async () => {
+      await atualizarStatusBot();
+      acaoEmAndamento = false;
+    }, 1500);
+  });
+
+  document.getElementById("btn-limpar-alertas").addEventListener("click", async () => {
+    if (!confirm("Apagar todos os alertas? Não dá pra desfazer.")) return;
+    try {
+      await fetch("/api/limpar-alertas", { method: "POST" });
+    } catch (e) {
+      // ignora — se falhar, a lista simplesmente não vai atualizar
+    }
+    atualizar();
+  });
+
+  async function cancelarAgendamento(slotId) {
+    if (!confirm("Cancelar e apagar esse agendamento? Não dá pra desfazer.")) return;
+    try {
+      await fetch("/api/cancelar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slotId }),
+      });
+    } catch (e) {
+      // ignora — se falhar, a tabela simplesmente não vai atualizar e o dado continua lá
+    }
+    atualizar();
+  }
+
+  async function atualizar() {
+    try {
+      const resp = await fetch("/api/dados");
+      if (!resp.ok) throw new Error("resposta ruim");
+      const dados = await resp.json();
+
+      document.getElementById("erro-conexao").style.display = "none";
+      document.getElementById("status-dot").className = "status ok";
+      document.getElementById("status-texto").textContent = "Atualizado às " + new Date().toLocaleTimeString("pt-BR");
+
+      const agendamentos = dados.agendamentos.slice().sort((a, b) => a.slotId.localeCompare(b.slotId));
+      document.getElementById("contagem-agendamentos").textContent = agendamentos.length;
+      const tabela = document.getElementById("tabela-agendamentos");
+      if (agendamentos.length === 0) {
+        tabela.innerHTML = "<div class='vazio'>Nenhum agendamento ainda.</div>";
+      } else {
+        tabela.innerHTML = `<table>
+          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x"></th></tr></thead>
+          <tbody>${agendamentos.map((a) => `
+            <tr>
+              <td>${formatarDataBR(a.data)}</td>
+              <td>${a.horario}</td>
+              <td>${escapeHtml(a.responsavel)}</td>
+              <td>${escapeHtml(a.crianca)}</td>
+              <td>${escapeHtml(a.telefone)}</td>
+              <td class="col-x"><button class="btn-x" title="Cancelar agendamento" data-slot-id="${escapeHtml(a.slotId)}">✕</button></td>
+            </tr>`).join("")}</tbody>
+        </table>`;
+
+        tabela.querySelectorAll(".btn-x").forEach((btn) => {
+          btn.addEventListener("click", () => cancelarAgendamento(btn.dataset.slotId));
+        });
+      }
+
+      const alertas = dados.alertas.slice().reverse();
+      document.getElementById("contagem-alertas").textContent = alertas.length;
+      const lista = document.getElementById("lista-alertas");
+      if (alertas.length === 0) {
+        lista.innerHTML = "<div class='vazio'>Nenhum alerta registrado.</div>";
+      } else {
+        lista.innerHTML = alertas.map((al) => {
+          const classe = al.tipo === "nao_entendida" ? "nao_entendida" : "urgencia";
+          const rotulo = al.tipo === "nao_entendida" ? "NÃO ENTENDIDA" : "URGÊNCIA";
+          const quando = new Date(al.quando).toLocaleString("pt-BR");
+          return `<li class="${classe}"><strong>[${rotulo}]</strong> ${quando} — ${escapeHtml(al.telefone)}: "${escapeHtml(al.mensagem)}"</li>`;
+        }).join("");
+      }
+
+      bloqueiosAtuais = dados.bloqueios || [];
+      diasComConsultaAtuais = new Set(agendamentos.map((a) => a.data));
+      renderizarCalendario();
+    } catch (e) {
+      document.getElementById("erro-conexao").style.display = "block";
+      document.getElementById("status-dot").className = "status erro";
+      document.getElementById("status-texto").textContent = "Sem conexão com o servidor";
+    }
+  }
+
+  atualizar();
+  atualizarStatusBot();
+  setInterval(atualizar, 8000);
+  setInterval(atualizarStatusBot, 5000);
+</script>
+
+</body>
+</html>

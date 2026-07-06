@@ -1,0 +1,185 @@
+// Persistência em disco (equivalente ao localStorage da versão de teste no navegador).
+// Mesma responsabilidade do storage.js do carla-app: é a única peça que muda
+// quando se troca onde os dados ficam guardados. A lógica da Carla nunca toca aqui direto.
+
+const fs = require("fs");
+const path = require("path");
+
+// Garante CARLA_CONFIG (global) antes do Agenda, que depende dele — precisa disso aqui
+// porque o painel (painel-server.js) usa este arquivo sem nunca ter carregado config.js.
+require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
+const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"));
+
+const DIR_DADOS = path.join(__dirname, "data");
+const ARQ_AGENDAMENTOS = path.join(DIR_DADOS, "agendamentos.json");
+const ARQ_AGENDAMENTOS_CSV = path.join(DIR_DADOS, "agendamentos.csv");
+const ARQ_ALERTAS = path.join(DIR_DADOS, "alertas.json");
+const ARQ_SESSOES = path.join(DIR_DADOS, "sessoes.json");
+const ARQ_BLOQUEIOS = path.join(DIR_DADOS, "bloqueios.json");
+
+function garantirPasta() {
+  if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
+}
+
+function lerJSON(caminho, padrao) {
+  garantirPasta();
+  if (!fs.existsSync(caminho)) return padrao;
+  try {
+    return JSON.parse(fs.readFileSync(caminho, "utf8"));
+  } catch {
+    return padrao;
+  }
+}
+
+function escreverJSON(caminho, dados) {
+  garantirPasta();
+  fs.writeFileSync(caminho, JSON.stringify(dados, null, 2), "utf8");
+}
+
+function lerAgendamentos() {
+  return lerJSON(ARQ_AGENDAMENTOS, []);
+}
+
+// Dias bloqueados contam como "ocupados" pra todos os horários daquele dia — assim o
+// resto do sistema (consultar_horarios, doisSeguidos, urgente etc.) nunca precisa saber
+// que bloqueio existe, só enxerga que não sobrou vaga nesse dia. Reservas já feitas
+// num dia que depois foi bloqueado continuam valendo (bloqueio só afeta vaga nova).
+function idsOcupados(now = new Date()) {
+  const reais = lerAgendamentos().map((a) => a.slotId);
+  const bloqueios = new Set(lerBloqueios());
+  const dosBloqueios = bloqueios.size === 0
+    ? []
+    : Agenda.gerarSlotsPossiveis(now).filter((s) => bloqueios.has(s.date)).map((s) => s.id);
+  return new Set([...reais, ...dosBloqueios]);
+}
+
+function lerBloqueios() {
+  return lerJSON(ARQ_BLOQUEIOS, []);
+}
+
+// Alterna o bloqueio de um dia (AAAA-MM-DD): se já estava bloqueado, desbloqueia; senão,
+// bloqueia. Retorna a lista atualizada de dias bloqueados.
+function alternarBloqueioDia(data) {
+  const lista = lerBloqueios();
+  const idx = lista.indexOf(data);
+  if (idx >= 0) {
+    lista.splice(idx, 1);
+  } else {
+    lista.push(data);
+  }
+  escreverJSON(ARQ_BLOQUEIOS, lista);
+  return lista;
+}
+
+function formatarDataBR(isoDate) {
+  const [y, m, d] = isoDate.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function reescreverCSV(lista) {
+  const linhas = [
+    ["Nome do responsável", "Nome da criança", "Telefone", "Data da consulta", "Horário", "Registrado em"],
+    ...lista.map((a) => [
+      a.responsavel, a.crianca, a.telefone, formatarDataBR(a.data), a.horario,
+      new Date(a.registradoEm).toLocaleString("pt-BR"),
+    ]),
+  ];
+  const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  fs.writeFileSync(ARQ_AGENDAMENTOS_CSV, "﻿" + csv, "utf8");
+}
+
+// Retorna false se o horário já tiver sido reservado por outra família (nunca deixa duplicar).
+function reservar({ slot, responsavel, crianca, telefone, googleEventId = null }) {
+  const lista = lerAgendamentos();
+  if (lista.some((a) => a.slotId === slot.id)) return false;
+  lista.push({
+    slotId: slot.id,
+    data: slot.date,
+    horario: slot.time,
+    diaLabel: slot.label,
+    responsavel,
+    crianca,
+    telefone,
+    registradoEm: new Date().toISOString(),
+    lembretes: { semanaAntes: false, diaDaConsulta: false },
+    googleEventId,
+  });
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  reescreverCSV(lista);
+  return true;
+}
+
+// Agendamentos com telefone de verdade (não placeholder tipo "(a confirmar)") que ainda não
+// receberam o lembrete do tipo pedido e cuja data bate com o alvo de hoje ("diaDaConsulta" =
+// hoje; "semanaAntes" = daqui a 7 dias).
+function agendamentosProntosParaLembrete(hojeStr, tipo) {
+  let dataAlvo = hojeStr;
+  if (tipo === "semanaAntes") {
+    const d = new Date(hojeStr + "T00:00:00");
+    d.setDate(d.getDate() + 7);
+    dataAlvo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  return lerAgendamentos().filter((a) =>
+    typeof a.telefone === "string" && a.telefone.startsWith("+")
+    && a.data === dataAlvo
+    && !(a.lembretes && a.lembretes[tipo])
+  );
+}
+
+function marcarLembreteEnviado(slotId, tipo) {
+  const lista = lerAgendamentos();
+  const item = lista.find((a) => a.slotId === slotId);
+  if (!item) return;
+  item.lembretes = { semanaAntes: false, diaDaConsulta: false, ...(item.lembretes || {}), [tipo]: true };
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
+}
+
+// Cancela (apaga) um agendamento pelo slotId. Retorna o registro removido (inclui
+// googleEventId, se tiver, pra quem chamar poder cancelar o evento na agenda também),
+// ou null se não encontrar.
+function cancelarAgendamento(slotId) {
+  const lista = lerAgendamentos();
+  const removido = lista.find((a) => a.slotId === slotId);
+  if (!removido) return null;
+  const nova = lista.filter((a) => a.slotId !== slotId);
+  escreverJSON(ARQ_AGENDAMENTOS, nova);
+  reescreverCSV(nova);
+  return removido;
+}
+
+function lerAlertas() {
+  return lerJSON(ARQ_ALERTAS, []);
+}
+
+function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia" }) {
+  const lista = lerAlertas();
+  lista.push({ telefone, mensagem, tipo, quando: new Date().toISOString() });
+  escreverJSON(ARQ_ALERTAS, lista);
+}
+
+function limparAlertas() {
+  escreverJSON(ARQ_ALERTAS, []);
+}
+
+// Sessões por telefone: pra Carla não "esquecer" uma conversa em andamento se o bot reiniciar.
+function lerSessoes() {
+  return lerJSON(ARQ_SESSOES, {});
+}
+
+function obterSessao(telefone) {
+  const sessoes = lerSessoes();
+  return sessoes[telefone] || null;
+}
+
+function salvarSessao(telefone, sessao) {
+  const sessoes = lerSessoes();
+  sessoes[telefone] = sessao;
+  escreverJSON(ARQ_SESSOES, sessoes);
+}
+
+module.exports = {
+  lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, lerAlertas, registrarAlertaUrgencia,
+  limparAlertas, formatarDataBR, obterSessao, salvarSessao,
+  agendamentosProntosParaLembrete, marcarLembreteEnviado,
+  lerBloqueios, alternarBloqueioDia,
+};
