@@ -100,9 +100,9 @@ COMO CONDUZIR: entenda rapidamente o caso → contextualize brevemente → mostr
 
 Quando perguntarem sobre o motivo da consulta, conduza leve, tipo "Claro 😊 Me conta rapidinho qual seria o caso, pra eu te direcionar melhor" — nunca como formulário.
 
-AGENDAMENTO: assim que souber o motivo da consulta (ou antes, se a pessoa já pediu direto pra agendar), chame consultar_horarios IMEDIATAMENTE, sem perguntar dia ou período antes — mesmo que a pessoa não tenha dito nenhuma preferência, chame a ferramenta sem esses filtros e ofereça os 2 horários reais que ela devolver. Nunca pergunte "qual dia você prefere" ou "que período fica melhor" antes de consultar; conduza você, direto: "Tenho segunda às 10h ou quinta às 14h. Qual fica melhor?" Só pergunte por um dia/período específico se a pessoa pedir algo diferente dos 2 horários já oferecidos (aí sim, consulte de novo com esse filtro). Nunca invente ou assuma horário livre, mesmo que pareça óbvio pela grade semanal — sempre confie no que a ferramenta devolver. Ofereça no máximo 2 opções por vez, nunca liste a semana toda. A ferramenta nunca devolve um horário de hoje, mesmo que pareça haver vaga — o primeiro horário possível já vem sempre a partir do próximo dia de atendimento; isso é automático, você não precisa filtrar por conta própria.
+AGENDAMENTO: assim que souber o motivo da consulta (ou antes, se a pessoa já pediu direto pra agendar), chame consultar_horarios IMEDIATAMENTE, sem perguntar dia ou período antes — mesmo que a pessoa não tenha dito nenhuma preferência, chame a ferramenta sem esses filtros e ofereça os 2 horários reais que ela devolver. Nunca pergunte "qual dia você prefere" ou "que período fica melhor" antes de consultar; conduza você, direto: "Tenho segunda às 10h ou quinta às 14h. Qual fica melhor?" Só pergunte por um dia/período específico se a pessoa pedir algo diferente dos 2 horários já oferecidos (aí sim, consulte de novo com esse filtro). Nunca invente ou assuma horário livre, mesmo que pareça óbvio pela grade semanal — sempre confie no que a ferramenta devolver. Ofereça no máximo 2 opções por vez, nunca liste a semana toda.
 
-URGÊNCIA NA DATA (diferente de emergência médica): preste atenção se a família quer algo rápido ("encaixe", "pra logo", "o quanto antes", "essa semana", "amanhã") ou sinalizar que a criança não está bem sem ser emergência de verdade — ou se é algo sem pressa (rotina, acompanhamento, "quando tiver"). Quando for pedido rápido mas não especificamente pra hoje (ver regra PEDIDO DE ENCAIXE PARA HOJE abaixo, que é um caso à parte), use consultar_horarios com urgente=true — isso traz os próximos horários livres em ordem cronológica (do mais cedo pro mais tarde), sem pular pra datas distantes e sem nunca incluir hoje. Quando for rotina/sem pressa, não precisa de urgente=true; pode oferecer a preferência padrão do consultório mesmo que seja mais adiante.
+URGÊNCIA NA DATA (diferente de emergência médica): preste atenção se a família quer algo rápido ("encaixe", "pra logo", "o quanto antes", "essa semana", "hoje", "amanhã") ou sinalizar que a criança não está bem sem ser emergência de verdade — ou se é algo sem pressa (rotina, acompanhamento, "quando tiver"). Quando for pedido rápido, use consultar_horarios com urgente=true — isso traz os próximos horários livres em ordem cronológica (do mais cedo pro mais tarde), sem pular pra datas distantes. Quando for rotina/sem pressa, não precisa de urgente=true; pode oferecer a preferência padrão do consultório mesmo que seja mais adiante.
 
 ATENÇÃO — pedido urgente/pra hoje caindo num sábado ou domingo: confira a data de hoje no início deste prompt ANTES de chamar consultar_horarios. Se hoje já é sábado ou domingo e a família quer algo rápido/pra hoje, isso É um pedido de atendimento de fim de semana — não chame consultar_horarios pra oferecer só a próxima segunda-feira como se fosse a única opção. Vá direto pra regra ATENDIMENTO DE FIM DE SEMANA abaixo, mesmo que a família não tenha perguntado literalmente "vocês atendem sábado/domingo".
 
@@ -148,10 +148,6 @@ ATENDIMENTO DE FIM DE SEMANA: se perguntarem se o Dr. Bruno atende sábado ou do
 "O atendimento de fim de semana tem valor diferenciado e depende da disponibilidade do Dr. Bruno. A consulta fica em R$ 800. Vou anotar seus dados e alguém da equipe entra em contato pra confirmar."
 Não basta anotar isso só no motivo do escalar_humano — a família precisa ler isso na mensagem. Depois dessa frase, colete o nome do responsável e o nome da criança (o telefone você já tem, é o desta conversa — não precisa perguntar de novo). Só depois de ter os dois nomes, use escalar_humano incluindo esses dados no motivo. Não prometa horário nem tente fechar nada sozinha — só sinaliza pra equipe continuar. Você nunca confirma nem oferece horário de fim de semana sozinha (consultar_horarios só sabe da agenda de segunda a sexta).
 
-PEDIDO DE ENCAIXE PARA HOJE: a Carla NUNCA oferece nem confirma consulta pra hoje, mesmo que consultar_horarios pudesse tecnicamente ter vaga (ela já nem devolve isso, ver regra AGENDAMENTO). Se a família pedir especificamente uma consulta ainda hoje ("tem hoje?", "pode ser hoje?", "encaixe pra hoje", "é urgente, precisa ser hoje mesmo"), NÃO chame consultar_horarios pra esse pedido — sua RESPOSTA PRA FAMÍLIA precisa dizer algo como:
-"Vou verificar com a equipe se tem como encaixar ainda hoje e já te retorno."
-Depois dessa frase, colete o nome do responsável e o nome da criança (o telefone você já tem). Só depois de ter os dois nomes, use escalar_humano incluindo esses dados no motivo. Não ofereça nenhum outro horário nem outro dia nessa mesma resposta — deixe só pra equipe decidir e retornar. Se, na sequência, a família aceitar um horário normal (não mais hoje), aí sim retome o fluxo comum de agendamento (consultar_horarios a partir do próximo dia disponível).
-
 COMO FALAR DE ESCALONAMENTO: toda vez que usar escalar_humano, informe que "alguém da equipe vai entrar em contato" ou "vou passar pra equipe e já te retornam" (ou variação natural parecida). NUNCA use as palavras "transferir" ou "atendimento humano" na mensagem pra família — isso soa burocrático e frio. Vale pra fim de semana e pra qualquer outro handoff.
 
 Se não for possível ajudar com segurança, ou a situação realmente exigir alguém humano (ex: pedido muito específico fora do que você sabe, reclamação grave, algo ambíguo demais mesmo depois de tentar entender), use a ferramenta escalar_humano.
@@ -161,15 +157,6 @@ NUNCA: usar menu numerado, resposta gigante, repetir saudação, responder só o
 
 // Calcula o intervalo [início, fim] de um slot como objetos Date de verdade, pra checar
 // disponibilidade no Google Agenda (que trabalha com data/hora exatas, não strings soltas).
-// Ids de todos os slots de hoje, pra excluir do que a ferramenta consultar_horarios pode
-// oferecer — nunca deixa a Carla oferecer nem confirmar consulta no mesmo dia (regra de
-// negócio: encaixe pra hoje passa sempre por atendimento humano, ver PEDIDO DE ENCAIXE PARA
-// HOJE no prompt), mesmo que o dia ainda tenha vaga de verdade.
-function idsDeHoje(now) {
-  const hojeStr = Agenda.toDateStr(now);
-  return Agenda.gerarSlotsPossiveis(now).filter((s) => s.date === hojeStr).map((s) => s.id);
-}
-
 function intervaloDoSlot(slot) {
   const [ano, mes, dia] = slot.date.split("-").map(Number);
   const [h, m] = slot.time.split(":").map(Number);
@@ -235,7 +222,7 @@ async function executarFerramenta(nome, input, ctx) {
   console.log(`[FERRAMENTA] ${nome}(${JSON.stringify(input)})`);
   if (nome === "consultar_horarios") {
     if (input.doisSeguidos) {
-      const idsExcluidos = new Set([...ctx.idsOcupados, ...idsDeHoje(ctx.now)]);
+      const idsExcluidos = new Set(ctx.idsOcupados);
       let par = null;
       for (let tentativa = 0; tentativa < 6; tentativa++) {
         const candidato = Agenda.doisSeguidos(ctx.now, idsExcluidos);
@@ -264,7 +251,7 @@ async function executarFerramenta(nome, input, ctx) {
       // Ignora a preferência padrão do consultório (segunda de manhã/terça de tarde) e pega
       // os horários realmente mais próximos em ordem cronológica — pra não empurrar quem
       // pediu encaixe rápido pra uma data distante só porque bateu com a preferência.
-      const candidatosUrgente = Agenda.disponiveis(ctx.now, new Set([...ctx.idsOcupados, ...idsDeHoje(ctx.now)])).slice(0, 10);
+      const candidatosUrgente = Agenda.disponiveis(ctx.now, ctx.idsOcupados).slice(0, 10);
       const livresUrgente = [];
       for (const c of candidatosUrgente) {
         if (livresUrgente.length >= 2) break;
@@ -302,7 +289,7 @@ async function executarFerramenta(nome, input, ctx) {
     const dataPreferida = input.data || null;
     // Pega mais candidatos do que o necessário (6, não 2) porque alguns podem cair fora
     // depois de checar o Google Agenda — só ficam os 2 primeiros que passarem nas duas checagens.
-    const candidatos = Agenda.oferecerSlots(ctx.now, new Set([...ctx.idsOcupados, ...idsDeHoje(ctx.now)]), {
+    const candidatos = Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, {
       diaPreferido, periodo, dataPreferida, count: 6,
     });
     const livres = [];
@@ -330,12 +317,6 @@ async function executarFerramenta(nome, input, ctx) {
     const slotReal = Agenda.gerarSlotsPossiveis(ctx.now).find((s) => s.id === input.slotId);
     if (!slotReal) {
       return { sucesso: false, motivo: "Esse horário não corresponde a um horário real da agenda. Se essa consulta já foi confirmada antes nesta conversa, não chame essa ferramenta de novo — apenas continue a conversa normalmente (ex: informando a forma de pagamento)." };
-    }
-    // Trava de segurança (a regra de verdade já impede isso lá em consultar_horarios, que
-    // nunca devolve slotId de hoje — isso aqui é só um segundo freio, caso a IA tente
-    // confirmar um slotId de hoje por conta própria, sem ter vindo da ferramenta).
-    if (slotReal.date === Agenda.toDateStr(ctx.now)) {
-      return { sucesso: false, motivo: "Não é permitido confirmar consulta para o mesmo dia de hoje. Siga a regra PEDIDO DE ENCAIXE PARA HOJE: avise que vai verificar com a equipe, colete responsável e criança, e use escalar_humano — não ofereça nem confirme nenhum horário de hoje." };
     }
     const idsAtuais = Storage.idsOcupados();
     if (idsAtuais.has(input.slotId)) {
