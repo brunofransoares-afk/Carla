@@ -16,6 +16,7 @@ const ARQ_AGENDAMENTOS_CSV = path.join(DIR_DADOS, "agendamentos.csv");
 const ARQ_ALERTAS = path.join(DIR_DADOS, "alertas.json");
 const ARQ_SESSOES = path.join(DIR_DADOS, "sessoes.json");
 const ARQ_BLOQUEIOS = path.join(DIR_DADOS, "bloqueios.json");
+const ARQ_SILENCIADOS = path.join(DIR_DADOS, "contatos-silenciados.json");
 
 function garantirPasta() {
   if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
@@ -206,10 +207,35 @@ function metricasConversao() {
   return { totalContatos, totalFechados, taxa };
 }
 
+// Números que o Dr. Bruno silenciou manualmente pelo painel (família, amigos, pacientes
+// que ele já atende por fora etc) — a Carla nunca responde esses números, mas isso nunca
+// tem prioridade sobre a checagem de emergência (ver server.js: emergência sempre primeiro).
+function lerContatosSilenciados() {
+  return lerJSON(ARQ_SILENCIADOS, []);
+}
+
+function contatoSilenciado(telefone) {
+  return lerContatosSilenciados().includes(telefone);
+}
+
+function silenciarContato(telefone) {
+  const lista = lerContatosSilenciados();
+  if (!lista.includes(telefone)) lista.push(telefone);
+  escreverJSON(ARQ_SILENCIADOS, lista);
+  return lista;
+}
+
+function dessilenciarContato(telefone) {
+  const lista = lerContatosSilenciados().filter((t) => t !== telefone);
+  escreverJSON(ARQ_SILENCIADOS, lista);
+  return lista;
+}
+
 module.exports = {
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,
   listarContatosRecentes, metricasConversao,
+  lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
 };

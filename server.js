@@ -114,6 +114,14 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     return;
   }
 
+  // 1.5) Número silenciado manualmente pelo painel (família, amigos, pacientes que o Dr.
+  // Bruno já atende por fora etc) — ignora completamente, mas só depois de garantir que
+  // não é emergência (regra 1, acima, é inegociável e vale pra qualquer telefone).
+  if (Storage.contatoSilenciado(telefone)) {
+    console.log(`[IGNORADO — silenciado manualmente] ${telefone}`);
+    return;
+  }
+
   // 2) Se está aguardando atendimento humano, fica em silêncio — a não ser que já tenha
   // passado tempo suficiente (2h) sem ninguém dar seguimento, aí retoma sozinha.
   if (sessao.aguardandoHumano) {

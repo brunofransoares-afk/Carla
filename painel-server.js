@@ -44,6 +44,15 @@ function rodarComandoPm2(comando) {
   });
 }
 
+// Aceita o número digitado em qualquer formato (com espaço, parênteses, com ou sem DDI)
+// e devolve sempre no formato que a Carla usa de verdade ("+55..."), assumindo Brasil
+// quando não vier DDI — evita silenciar o número errado por causa de formatação.
+function normalizarTelefoneManual(bruto) {
+  let digitos = String(bruto || "").replace(/\D/g, "");
+  if (digitos.length <= 11) digitos = "55" + digitos;
+  return "+" + digitos;
+}
+
 function lerCorpoJSON(req) {
   return new Promise((resolve) => {
     let corpo = "";
@@ -132,6 +141,7 @@ const servidor = http.createServer(async (req, res) => {
       bloqueios: Storage.lerBloqueios(),
       contatos: Storage.listarContatosRecentes(20),
       metricas: Storage.metricasConversao(),
+      silenciados: Storage.lerContatosSilenciados(),
     }));
     return;
   }
@@ -141,6 +151,23 @@ const servidor = http.createServer(async (req, res) => {
     const bloqueios = corpo.data ? Storage.alternarBloqueioDia(corpo.data) : Storage.lerBloqueios();
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ ok: true, bloqueios }));
+    return;
+  }
+
+  if (req.url === "/api/silenciar" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const telefone = corpo.telefone ? normalizarTelefoneManual(corpo.telefone) : null;
+    const silenciados = telefone ? Storage.silenciarContato(telefone) : Storage.lerContatosSilenciados();
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true, silenciados }));
+    return;
+  }
+
+  if (req.url === "/api/dessilenciar" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const silenciados = corpo.telefone ? Storage.dessilenciarContato(corpo.telefone) : Storage.lerContatosSilenciados();
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true, silenciados }));
     return;
   }
 
