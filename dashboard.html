@@ -157,6 +157,19 @@
   .contato-tag { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; }
   .contato-tag.fechou { background: rgba(52,211,153,0.18); color: #6ee7b7; }
   .contato-tag.aguardando { background: rgba(232,200,135,0.18); color: #e8c887; }
+  .btn-silenciar-contato { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; margin-top: 2px; align-self: flex-start; }
+  .btn-silenciar-contato:hover { background: rgba(255,255,255,0.13); }
+  .btn-silenciar-contato.ativo { background: rgba(255,90,90,0.18); color: #ffb3b3; }
+
+  .silenciar-form { display: flex; gap: 8px; margin-bottom: 12px; }
+  .silenciar-form input { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); }
+  .silenciar-form input::placeholder { color: var(--texto-fraco); }
+  .silenciar-form button { border: none; background: rgba(255,255,255,0.09); color: #c9d6d0; border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+  .silenciar-form button:hover { background: rgba(255,255,255,0.15); }
+  .chips-silenciados { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip-silenciado { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,90,90,0.1); border: 1px solid rgba(255,90,90,0.2); color: #ffb3b3; font-size: 11.5px; padding: 4px 6px 4px 10px; border-radius: 12px; }
+  .chip-silenciado button { border: none; background: rgba(255,90,90,0.2); color: #ffd4d4; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; }
+  .chip-silenciado button:hover { background: rgba(255,90,90,0.35); }
 
   .cartao-conversao { text-align: center; }
   .conversao-corpo { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -240,6 +253,17 @@
           <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.7 14.2c2.4.3 4.3 2.1 4.3 4.8"/></svg></span>Últimos contatos</span>
         </h2>
         <ul id="lista-contatos"></ul>
+      </div>
+
+      <div class="cartao">
+        <h2>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4a5 5 0 1 1-9 3M3 3l18 18"/><path d="M12 4a5 5 0 0 1 5 5v3"/><path d="M6 9v3a6 6 0 0 0 6 6c.7 0 1.4-.1 2-.4M12 19v3"/></svg></span>Números silenciados</span>
+        </h2>
+        <div class="silenciar-form">
+          <input type="text" id="input-silenciar-manual" placeholder="Ex: 11999998888">
+          <button id="btn-silenciar-manual">Silenciar</button>
+        </div>
+        <div id="lista-silenciados" class="chips-silenciados"></div>
       </div>
 
       <div class="cartao cartao-conversao">
@@ -440,6 +464,8 @@
     atualizar();
   }
 
+  let silenciadosAtuais = new Set();
+
   function renderizarContatos(contatos) {
     const lista = document.getElementById("lista-contatos");
     if (!contatos || contatos.length === 0) {
@@ -451,6 +477,7 @@
         c.fechou ? `<span class="contato-tag fechou">Fechou consulta</span>` : "",
         c.aguardandoHumano ? `<span class="contato-tag aguardando">Aguardando humano</span>` : "",
       ].join("");
+      const silenciado = silenciadosAtuais.has(c.telefone);
       return `<li>
         <div class="contato-topo">
           <span class="contato-tel">${escapeHtml(c.telefone)}</span>
@@ -458,9 +485,64 @@
         </div>
         ${c.ultimaMensagem ? `<div class="contato-msg">"${escapeHtml(c.ultimaMensagem)}"</div>` : ""}
         ${tags ? `<div class="contato-tags">${tags}</div>` : ""}
+        <button class="btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado — reativar" : "Silenciar"}</button>
       </li>`;
     }).join("");
+
+    lista.querySelectorAll(".btn-silenciar-contato").forEach((btn) => {
+      btn.addEventListener("click", () => alternarSilencio(btn.dataset.telefone));
+    });
   }
+
+  async function alternarSilencio(telefone) {
+    const rota = silenciadosAtuais.has(telefone) ? "/api/dessilenciar" : "/api/silenciar";
+    try {
+      const resp = await fetch(rota, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone }),
+      });
+      const resultado = await resp.json();
+      silenciadosAtuais = new Set(resultado.silenciados || []);
+    } catch (e) {
+      // ignora — se falhar, o estado simplesmente não muda e o usuário pode tentar de novo
+    }
+    atualizar();
+  }
+
+  function renderizarSilenciados(silenciados) {
+    silenciadosAtuais = new Set(silenciados || []);
+    const container = document.getElementById("lista-silenciados");
+    if (silenciadosAtuais.size === 0) {
+      container.innerHTML = "<div class='vazio'>Nenhum número silenciado.</div>";
+      return;
+    }
+    container.innerHTML = [...silenciadosAtuais].map((tel) => `
+      <span class="chip-silenciado">${escapeHtml(tel)}<button data-telefone="${escapeHtml(tel)}" title="Reativar">✕</button></span>
+    `).join("");
+    container.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", () => alternarSilencio(btn.dataset.telefone));
+    });
+  }
+
+  document.getElementById("btn-silenciar-manual").addEventListener("click", async () => {
+    const input = document.getElementById("input-silenciar-manual");
+    const valor = input.value.trim();
+    if (!valor) return;
+    try {
+      const resp = await fetch("/api/silenciar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone: valor }),
+      });
+      const resultado = await resp.json();
+      silenciadosAtuais = new Set(resultado.silenciados || []);
+      input.value = "";
+    } catch (e) {
+      // ignora — se falhar, o usuário pode tentar de novo
+    }
+    atualizar();
+  });
 
   function renderizarConversao(metricas) {
     const m = metricas || { totalContatos: 0, totalFechados: 0, taxa: 0 };
@@ -520,6 +602,7 @@
         }).join("");
       }
 
+      renderizarSilenciados(dados.silenciados || []);
       renderizarContatos(dados.contatos || []);
       renderizarConversao(dados.metricas);
 
