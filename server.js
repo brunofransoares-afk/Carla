@@ -57,6 +57,16 @@ function normalizarTelefone(jid) {
   return "+" + jid.split("@")[0];
 }
 
+// Mesma regra usada tanto pra mensagem recebida em tempo real quanto pra captura de
+// conversas antigas logo abaixo (dentro de iniciar) — precisa ser idêntica nos dois
+// lugares, senão um contato antigo pode não bater com o telefone que a Carla usa de verdade.
+function telefoneDoJid(jid, remoteJidAlt) {
+  const jidComTelefone = remoteJidAlt?.endsWith("@s.whatsapp.net")
+    ? remoteJidAlt
+    : (jid.endsWith("@s.whatsapp.net") ? jid : null);
+  return jidComTelefone ? normalizarTelefone(jidComTelefone) : `lid:${jid.split("@")[0]}`;
+}
+
 function agendarProcessamento(sock, jid, telefone, texto) {
   let buffer = buffers.get(telefone);
   if (!buffer) {
@@ -249,9 +259,37 @@ async function iniciar() {
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    syncFullHistory: true,
   });
 
   sock.ev.on("creds.update", saveCreds);
+
+  // Se essa é a primeira vez que esse recurso liga (o arquivo ainda não existe), tira uma
+  // "foto" das conversas que já existem no WhatsApp durante um tempo curto logo após
+  // conectar. Tudo que aparecer nessa foto entra numa lista definitiva de números que a
+  // Carla passa a ignorar (silêncio total, nunca mais responde) — são as conversas "de
+  // antes dela existir". Qualquer conversa que comece depois dessa janela não entra na
+  // lista e continua sendo respondida normalmente, sem prazo nenhum.
+  if (!Storage.contatosAntigosJaCapturados()) {
+    const JANELA_CAPTURA_MS = 45 * 1000;
+    const capturados = new Set();
+    let capturando = true;
+    console.log(`[CONTATOS ANTIGOS] Primeira vez com esse recurso — capturando conversas já existentes por ${JANELA_CAPTURA_MS / 1000}s...`);
+    sock.ev.on("messaging-history.set", ({ chats }) => {
+      if (!capturando) return;
+      for (const chat of chats || []) {
+        const jid = chat.id || "";
+        if (!(jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"))) continue;
+        capturados.add(telefoneDoJid(jid));
+      }
+    });
+    setTimeout(() => {
+      if (!capturando) return;
+      capturando = false;
+      Storage.salvarContatosAntigos([...capturados]);
+      console.log(`[CONTATOS ANTIGOS] Captura concluída: ${capturados.size} número(s) que já conversavam antes de hoje — a Carla não vai mais responder pra eles. Conversas novas continuam normais.`);
+    }, JANELA_CAPTURA_MS);
+  }
 
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -290,12 +328,12 @@ async function iniciar() {
       const ehContatoValido = jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid");
       if (!ehContatoValido) continue;
 
-      // Quando o contato vem como "@lid", o Baileys costuma informar o JID real
-      // (com o número de telefone) em remoteJidAlt — prioriza ele pro registro do agendamento.
-      const jidComTelefone = msg.key.remoteJidAlt?.endsWith("@s.whatsapp.net")
-        ? msg.key.remoteJidAlt
-        : (jid.endsWith("@s.whatsapp.net") ? jid : null);
-      const telefone = jidComTelefone ? normalizarTelefone(jidComTelefone) : `lid:${jid.split("@")[0]}`;
+      const telefone = telefoneDoJid(jid, msg.key.remoteJidAlt);
+
+      if (Storage.ehContatoAntigoIgnorado(telefone)) {
+        console.log(`[IGNORADO — conversa de antes da Carla] ${telefone}`);
+        continue;
+      }
 
       const texto = msg.message.conversation
         || msg.message.extendedTextMessage?.text

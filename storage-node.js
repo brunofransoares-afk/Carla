@@ -16,6 +16,7 @@ const ARQ_AGENDAMENTOS_CSV = path.join(DIR_DADOS, "agendamentos.csv");
 const ARQ_ALERTAS = path.join(DIR_DADOS, "alertas.json");
 const ARQ_SESSOES = path.join(DIR_DADOS, "sessoes.json");
 const ARQ_BLOQUEIOS = path.join(DIR_DADOS, "bloqueios.json");
+const ARQ_CONTATOS_ANTIGOS = path.join(DIR_DADOS, "contatos-antigos-ignorados.json");
 
 function garantirPasta() {
   if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
@@ -206,10 +207,31 @@ function metricasConversao() {
   return { totalContatos, totalFechados, taxa };
 }
 
+// Lista de telefones que já tinham conversa no WhatsApp antes da Carla passar a ignorá-los
+// de propósito (ver server.js: captura automática logo na primeira vez que esse recurso liga).
+// Uma vez que esse arquivo existe, ele é definitivo — a captura nunca roda de novo, então
+// qualquer conversa nova (não capturada aqui) segue sendo respondida normalmente para sempre.
+function contatosAntigosJaCapturados() {
+  return fs.existsSync(ARQ_CONTATOS_ANTIGOS);
+}
+
+function lerContatosAntigos() {
+  return lerJSON(ARQ_CONTATOS_ANTIGOS, []);
+}
+
+function salvarContatosAntigos(lista) {
+  escreverJSON(ARQ_CONTATOS_ANTIGOS, lista);
+}
+
+function ehContatoAntigoIgnorado(telefone) {
+  return lerContatosAntigos().includes(telefone);
+}
+
 module.exports = {
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,
   listarContatosRecentes, metricasConversao,
+  contatosAntigosJaCapturados, lerContatosAntigos, salvarContatosAntigos, ehContatoAntigoIgnorado,
 };
