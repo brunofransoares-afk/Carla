@@ -124,14 +124,6 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     return;
   }
 
-  // 1.5) Conversa que já existia antes desse recurso (ver captura em iniciar()) — ignora
-  // silenciosamente, mas só DEPOIS de garantir que não é emergência (regra 1, acima, é
-  // inegociável e vale pra qualquer telefone, antigo ou novo).
-  if (Storage.ehContatoAntigoIgnorado(telefone)) {
-    console.log(`[IGNORADO — conversa de antes da Carla] ${telefone}`);
-    return;
-  }
-
   // 2) Se está aguardando atendimento humano, fica em silêncio — a não ser que já tenha
   // passado tempo suficiente (2h) sem ninguém dar seguimento, aí retoma sozinha.
   if (sessao.aguardandoHumano) {
@@ -337,6 +329,11 @@ async function iniciar() {
       if (!ehContatoValido) continue;
 
       const telefone = telefoneDoJid(jid, msg.key.remoteJidAlt);
+
+      if (Storage.ehContatoAntigoIgnorado(telefone)) {
+        console.log(`[IGNORADO — conversa de antes da Carla] ${telefone}`);
+        continue;
+      }
 
       const texto = msg.message.conversation
         || msg.message.extendedTextMessage?.text
