@@ -187,6 +187,23 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === "/api/marcar-paciente" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const telefone = corpo.telefone ? normalizarTelefoneManual(corpo.telefone) : null;
+    const pacientes = telefone ? Storage.marcarPacienteManual(telefone) : Storage.lerPacientesManuais();
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true, pacientesManuais: pacientes }));
+    return;
+  }
+
+  if (req.url === "/api/desmarcar-paciente" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const pacientes = corpo.telefone ? Storage.desmarcarPacienteManual(corpo.telefone) : Storage.lerPacientesManuais();
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true, pacientesManuais: pacientes }));
+    return;
+  }
+
   if (req.url === "/api/status") {
     const status = await statusDoBot();
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });

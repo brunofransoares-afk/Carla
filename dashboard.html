@@ -178,9 +178,12 @@
   .contato-tag.fechou { background: rgba(52,211,153,0.18); color: #6ee7b7; }
   .contato-tag.aguardando { background: rgba(232,200,135,0.18); color: #e8c887; }
   .contato-tag.paciente { background: rgba(122,162,255,0.18); color: #a9c1ff; }
-  .btn-silenciar-contato { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; margin-top: 2px; align-self: flex-start; }
-  .btn-silenciar-contato:hover { background: rgba(255,255,255,0.13); }
+  .contato-botoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .btn-silenciar-contato, .btn-marcar-contato { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
+  .btn-silenciar-contato:hover, .btn-marcar-contato:hover:not(:disabled) { background: rgba(255,255,255,0.13); }
   .btn-silenciar-contato.ativo { background: rgba(255,90,90,0.18); color: #ffb3b3; }
+  .btn-marcar-contato.ativo { background: rgba(122,162,255,0.18); color: #a9c1ff; }
+  .btn-marcar-contato:disabled { opacity: 0.5; cursor: default; }
 
   .silenciar-form { display: flex; gap: 8px; margin-bottom: 12px; }
   .silenciar-form input { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); }
@@ -275,6 +278,10 @@
           <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.7 14.2c2.4.3 4.3 2.1 4.3 4.8"/></svg></span>Contatos <span class="contagem" id="contagem-contatos">0</span></span>
         </h2>
         <input type="text" id="busca-contatos" class="busca-contatos" placeholder="Buscar por nome ou telefone...">
+        <div class="silenciar-form">
+          <input type="text" id="input-marcar-paciente" placeholder="Número já é paciente? Marca aqui">
+          <button id="btn-marcar-paciente">Marcar paciente</button>
+        </div>
         <ul id="lista-contatos"></ul>
       </div>
 
@@ -611,12 +618,18 @@
         </div>
         ${c.ultimaMensagem ? `<div class="contato-msg">"${escapeHtml(c.ultimaMensagem)}"</div>` : ""}
         ${tags ? `<div class="contato-tags">${tags}</div>` : ""}
-        <button class="btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado — reativar" : "Silenciar"}</button>
+        <div class="contato-botoes">
+          <button class="btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado — reativar" : "Silenciar"}</button>
+          <button class="btn-marcar-contato ${c.marcadoManualmente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}" ${c.contatoSalvo && !c.marcadoManualmente ? "disabled" : ""}>${c.marcadoManualmente ? "Remover marcação de paciente" : (c.contatoSalvo ? "Já é paciente" : "Marcar como paciente")}</button>
+        </div>
       </li>`;
     }).join("");
 
     lista.querySelectorAll(".btn-silenciar-contato").forEach((btn) => {
       btn.addEventListener("click", () => alternarSilencio(btn.dataset.telefone));
+    });
+    lista.querySelectorAll(".btn-marcar-contato:not(:disabled)").forEach((btn) => {
+      btn.addEventListener("click", () => alternarMarcacaoPaciente(btn.dataset.telefone));
     });
   }
 
@@ -637,6 +650,39 @@
     }
     atualizar();
   }
+
+  async function alternarMarcacaoPaciente(telefone) {
+    const contato = contatosAtuais.find((c) => c.telefone === telefone);
+    const marcado = !!(contato && contato.marcadoManualmente);
+    const rota = marcado ? "/api/desmarcar-paciente" : "/api/marcar-paciente";
+    try {
+      await fetch(rota, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone }),
+      });
+    } catch (e) {
+      // ignora — se falhar, o estado simplesmente não muda e o usuário pode tentar de novo
+    }
+    atualizar();
+  }
+
+  document.getElementById("btn-marcar-paciente").addEventListener("click", async () => {
+    const input = document.getElementById("input-marcar-paciente");
+    const valor = input.value.trim();
+    if (!valor) return;
+    try {
+      await fetch("/api/marcar-paciente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone: valor }),
+      });
+      input.value = "";
+    } catch (e) {
+      // ignora — se falhar, o usuário pode tentar de novo
+    }
+    atualizar();
+  });
 
   function renderizarSilenciados(silenciados) {
     silenciadosAtuais = new Set(silenciados || []);
