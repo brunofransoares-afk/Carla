@@ -149,6 +149,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   const resultado = await CerebroIA.responder({
     telefone, texto, historico: sessao.historico || [], now, idsOcupados,
     agendamentoAtual: sessao.ultimoAgendamento || null,
+    pacienteConhecido: Storage.ehPacienteConhecido(telefone),
   });
 
   sessao.historico = resultado.historico;
@@ -272,17 +273,36 @@ async function iniciar() {
 
   sock.ev.on("creds.update", saveCreds);
 
-  // Preenche a lista de contatos do WhatsApp (pro painel mostrar todo mundo, não só quem
-  // já falou com a Carla) com o histórico de conversas que o WhatsApp manda ao conectar.
-  // Só é informativo — nunca bloqueia nem ignora ninguém sozinho, é só pra você conseguir
-  // silenciar qualquer contato direto pela lista no painel.
-  sock.ev.on("messaging-history.set", ({ chats }) => {
+  // Preenche a lista de contatos do WhatsApp (pro painel mostrar todo mundo, não só quem já
+  // falou com a Carla, e pra Carla saber quem já é paciente salvo na agenda do celular) com
+  // o histórico que o WhatsApp manda ao conectar. Só é informativo — nunca bloqueia nem
+  // ignora ninguém sozinho, é só pra você conseguir silenciar qualquer contato pelo painel
+  // e pra Carla ajustar o tom pra quem já é paciente (ver PACIENTE JÁ CONHECIDO no cerebro-ia.js).
+  sock.ev.on("messaging-history.set", ({ chats, contacts }) => {
     for (const chat of chats || []) {
       const jid = chat.id || "";
       if (!(jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"))) continue;
-      Storage.registrarContatoWhatsapp(telefoneDoJid(jid), chat.name || null);
+      Storage.registrarContatoWhatsapp(telefoneDoJid(jid), { nomeSalvo: chat.name || null });
+    }
+    for (const contato of contacts || []) {
+      const jid = contato.id || "";
+      if (!(jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"))) continue;
+      Storage.registrarContatoWhatsapp(telefoneDoJid(jid), { nomeSalvo: contato.name || null, pushName: contato.notify || null });
     }
   });
+
+  // Contatos que passam a ter nome salvo (ou têm o nome atualizado) depois da conexão
+  // inicial — sem isso, só descobriríamos "virou paciente" no próximo restart do processo.
+  const capturarAtualizacaoContatos = (lista) => {
+    for (const contato of lista || []) {
+      const jid = contato.id || "";
+      if (!(jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"))) continue;
+      if (!contato.name && !contato.notify) continue;
+      Storage.registrarContatoWhatsapp(telefoneDoJid(jid), { nomeSalvo: contato.name || null, pushName: contato.notify || null });
+    }
+  };
+  sock.ev.on("contacts.upsert", capturarAtualizacaoContatos);
+  sock.ev.on("contacts.update", capturarAtualizacaoContatos);
 
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -327,11 +347,11 @@ async function iniciar() {
       // isso, mas ainda vale registrar o contato na lista do painel (sem nome, já que o
       // pushName aqui seria o dele mesmo, não de quem ele está falando).
       if (msg.key.fromMe) {
-        Storage.registrarContatoWhatsapp(telefone, null);
+        Storage.registrarContatoWhatsapp(telefone, {});
         continue;
       }
 
-      Storage.registrarContatoWhatsapp(telefone, msg.pushName || null);
+      Storage.registrarContatoWhatsapp(telefone, { pushName: msg.pushName || null });
 
       const texto = msg.message.conversation
         || msg.message.extendedTextMessage?.text

@@ -235,19 +235,36 @@ function listarContatosRecentes(limite = 20) {
     .slice(0, limite);
 }
 
-// Contatos conhecidos do WhatsApp (telefone -> nome, quando o WhatsApp informa um). Alimentado
-// tanto pela sincronização de histórico ao conectar quanto por toda mensagem vista (enviada ou
-// recebida) — é só informativo pro painel, nunca decide sozinho quem a Carla responde ou não.
+// Contatos conhecidos do WhatsApp. Guarda dois nomes bem diferentes:
+// - nomeSalvo: como o Dr. Bruno salvou esse número na agenda do celular dele. Só existe
+//   quando o WhatsApp sincroniza os contatos do telefone — e é justamente esse o sinal de
+//   que a pessoa já é paciente (ele só salva o nome depois que alguém já passou com ele).
+// - pushName: o nome que a PRÓPRIA pessoa escolheu no perfil dela do WhatsApp — qualquer
+//   um tem isso, não indica paciente nenhum, é só um apelido de exibição.
+// Alimentado pela sincronização de histórico ao conectar, por atualização de contatos, e por
+// toda mensagem vista (enviada ou recebida). É só informativo — nunca decide sozinho quem a
+// Carla responde ou não, mas o nomeSalvo alimenta o tom de conversa (ver cerebro-ia.js).
 function lerContatosWhatsappMapa() {
   return lerJSON(ARQ_CONTATOS_WHATSAPP, {});
 }
 
-function registrarContatoWhatsapp(telefone, nome) {
+function registrarContatoWhatsapp(telefone, { nomeSalvo, pushName } = {}) {
   const contatos = lerContatosWhatsappMapa();
-  const atual = contatos[telefone];
-  if (atual && (!nome || atual.nome === nome)) return; // nada novo, evita reescrever à toa
-  contatos[telefone] = { nome: nome || (atual && atual.nome) || null };
+  const atual = contatos[telefone] || { nomeSalvo: null, pushName: null };
+  const novo = {
+    nomeSalvo: nomeSalvo || atual.nomeSalvo || null,
+    pushName: pushName || atual.pushName || null,
+  };
+  if (novo.nomeSalvo === atual.nomeSalvo && novo.pushName === atual.pushName) return; // nada novo
+  contatos[telefone] = novo;
   escreverJSON(ARQ_CONTATOS_WHATSAPP, contatos);
+}
+
+// true quando o telefone está salvo com nome na agenda do celular do Dr. Bruno — o sinal de
+// que já é paciente, usado pra ajustar o tom de abordagem da Carla (ver cerebro-ia.js).
+function ehPacienteConhecido(telefone) {
+  const contato = lerContatosWhatsappMapa()[telefone];
+  return !!(contato && contato.nomeSalvo);
 }
 
 // Lista única pro painel: todo contato que a Carla já viu no WhatsApp, cruzado com a sessão
@@ -261,7 +278,8 @@ function listarTodosContatos() {
     const sessao = sessoes[telefone];
     return {
       telefone,
-      nome: info.nome || null,
+      nome: info.nomeSalvo || info.pushName || null,
+      contatoSalvo: !!info.nomeSalvo,
       ultimaAtividade: (sessao && sessao.ultimaAtividade) || null,
       ultimaMensagem: (sessao && sessao.ultimaMensagem) || "",
       fechou: !!(sessao && sessao.ultimoAgendamento),
@@ -321,5 +339,5 @@ module.exports = {
   lerBloqueiosHorarios, alternarBloqueioHorario, listarHorariosDoDia,
   listarContatosRecentes, metricasConversao,
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
-  registrarContatoWhatsapp, listarTodosContatos,
+  registrarContatoWhatsapp, listarTodosContatos, ehPacienteConhecido,
 };
