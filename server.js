@@ -27,6 +27,13 @@ const PORTA_TRAVA = 3357;
 const HORA_LEMBRETES = 8; // manda os lembretes automáticos a partir das 8h
 const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
 
+// Recado com o link da página de materiais do Dr. Bruno — cortesia, nunca venda. Só sai de
+// verdade quando LINK_MATERIAIS_URL estiver configurado no .env (a página ainda está sendo
+// feita em outro projeto); sem isso, fica inerte, sem quebrar nada. Textos exatamente como
+// definidos no briefing — sem travessão nem tracinho, não reescrever.
+const RECADO_MATERIAIS_A = "Que bom ter você por aqui. Já deixei sua consulta agendada com o Dr. Bruno. Enquanto isso, separei um presente pra você: alguns materiais gratuitos que o doutor preparou, sobre saúde mental e sobre o que fazer em caso de engasgo. É só acessar e baixar por aqui: {LINK}. Nessa mesma página você também encontra os outros materiais que ele produz, caso queira conhecer. Qualquer dúvida, estou por aqui.";
+const RECADO_MATERIAIS_B = "Tudo bem, fico à disposição pra quando você precisar. Se quiser conhecer os materiais que o Dr. Bruno produz, tem uma página com guias e conteúdos dele bem aqui: {LINK}. Sempre que quiser agendar, é só me chamar. Cuide-se.";
+
 // Não serve mais o painel (isso agora é o processo separado painel-server.js, que fica
 // de pé mesmo com o bot desligado). Aqui só sobrou a trava de instância única: se essa
 // porta já estiver ocupada, é sinal de que já existe uma Carla rodando, então encerra
@@ -105,6 +112,21 @@ async function enviarResposta(sock, jid, telefone, texto, semAtraso) {
   }
 }
 
+// Detecta despedida ou recusa explícita de agendar, usando os mesmos regex do config.js que
+// a IA já segue por instrução — aqui é só pra decidir, de forma 100% determinística, se cabe
+// o recado B (nunca a IA decide isso sozinha).
+function pareceDespedidaOuRecusa(texto) {
+  return !!(global.DESPEDIDA_REGEX && global.DESPEDIDA_REGEX.test(texto))
+    || !!(global.RECUSA_AGENDAR_REGEX && global.RECUSA_AGENDAR_REGEX.test(texto));
+}
+
+async function enviarRecadoMateriais(sock, jid, telefone, template, link, semAtraso) {
+  const texto = template.replace("{LINK}", link);
+  await enviarResposta(sock, jid, telefone, texto, semAtraso);
+  Storage.marcarMateriaisEnviados(telefone);
+  console.log(`[MATERIAIS] Recado com o link enviado pra ${telefone}`);
+}
+
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
   const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
   const now = new Date();
@@ -154,6 +176,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
 
   sessao.historico = resultado.historico;
 
+  const agendouNestaMensagem = (resultado.acoes || []).length > 0;
   for (const acao of resultado.acoes || []) {
     console.log(`[AGENDADO] ${acao.responsavel} / ${acao.crianca} em ${acao.slot.label}`);
     sessao.ultimoAgendamento = { crianca: acao.crianca, label: acao.slot.label };
@@ -183,6 +206,23 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   }
 
   await enviarResposta(sock, jid, telefone, resultado.resposta, semAtraso);
+
+  // Recado A (agendou) ou B (não agendou) com o link da página de materiais — ver constantes
+  // no topo do arquivo. Enquanto LINK_MATERIAIS_URL não estiver configurado no .env, este
+  // bloco inteiro fica inerte (não manda nada, não quebra nada).
+  const linkMateriais = (process.env.LINK_MATERIAIS_URL || "").trim();
+  if (linkMateriais && Storage.podeEnviarMateriais(telefone)) {
+    if (agendouNestaMensagem) {
+      await enviarRecadoMateriais(sock, jid, telefone, RECADO_MATERIAIS_A, linkMateriais, semAtraso);
+    } else if (
+      !resultado.escalar
+      && !sessao.ultimoAgendamento
+      && !Storage.lerAgendamentos().some((a) => a.telefone === telefone)
+      && pareceDespedidaOuRecusa(texto)
+    ) {
+      await enviarRecadoMateriais(sock, jid, telefone, RECADO_MATERIAIS_B, linkMateriais, semAtraso);
+    }
+  }
 }
 
 // Lembretes automáticos: aviso 1 semana antes e confirmação no dia da consulta. Só manda

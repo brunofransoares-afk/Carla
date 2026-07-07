@@ -122,3 +122,23 @@ ainda precisa ser feito manualmente na Onmed quando for conveniente.
 
 Quando um agendamento é cancelado pelo painel, o evento correspondente no
 Google Agenda também é cancelado junto, automaticamente.
+
+## Link da página de materiais
+
+Depois que a conversa termina, a Carla pode mandar um recado avulso com o
+link da página de materiais do Dr. Bruno (a página em si é outro projeto,
+separado deste). Só cortesia — ela nunca vende nem faz pitch, só entrega o
+link.
+
+- Se a conversa terminou **com agendamento confirmado**: manda um recado de
+  boas-vindas com o link, como um presente.
+- Se terminou **sem agendamento** (a família desistiu ou se despediu sem
+  marcar): manda um convite leve com o link, sem insistir.
+
+Nunca manda os dois no mesmo atendimento, nunca repete pro mesmo telefone
+antes de 90 dias, e nunca manda em cima de uma tentativa frustrada de
+agendar.
+
+Precisa de `LINK_MATERIAIS_URL` no `.env`, com a URL final da página. **Sem
+essa variável configurada, o recurso fica completamente inerte** — não manda
+nada, não muda nenhum outro comportamento da Carla.
