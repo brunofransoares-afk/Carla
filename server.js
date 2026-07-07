@@ -57,6 +57,16 @@ function normalizarTelefone(jid) {
   return "+" + jid.split("@")[0];
 }
 
+// Quando o contato vem como "@lid" (id interno do WhatsApp), o Baileys costuma informar o
+// JID real (com o número de telefone) em remoteJidAlt — prioriza ele. Sem isso, cai num
+// pseudo-telefone "lid:..." só pra ter uma chave estável (não é um número de verdade).
+function telefoneDoJid(jid, remoteJidAlt) {
+  const jidComTelefone = remoteJidAlt?.endsWith("@s.whatsapp.net")
+    ? remoteJidAlt
+    : (jid.endsWith("@s.whatsapp.net") ? jid : null);
+  return jidComTelefone ? normalizarTelefone(jidComTelefone) : `lid:${jid.split("@")[0]}`;
+}
+
 function agendarProcessamento(sock, jid, telefone, texto) {
   let buffer = buffers.get(telefone);
   if (!buffer) {
@@ -257,9 +267,22 @@ async function iniciar() {
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    syncFullHistory: true,
   });
 
   sock.ev.on("creds.update", saveCreds);
+
+  // Preenche a lista de contatos do WhatsApp (pro painel mostrar todo mundo, não só quem
+  // já falou com a Carla) com o histórico de conversas que o WhatsApp manda ao conectar.
+  // Só é informativo — nunca bloqueia nem ignora ninguém sozinho, é só pra você conseguir
+  // silenciar qualquer contato direto pela lista no painel.
+  sock.ev.on("messaging-history.set", ({ chats }) => {
+    for (const chat of chats || []) {
+      const jid = chat.id || "";
+      if (!(jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"))) continue;
+      Storage.registrarContatoWhatsapp(telefoneDoJid(jid), chat.name || null);
+    }
+  });
 
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -289,7 +312,7 @@ async function iniciar() {
     if (type !== "notify") return;
 
     for (const msg of messages) {
-      if (!msg.message || msg.key.fromMe) continue;
+      if (!msg.message) continue;
 
       const jid = msg.key.remoteJid || "";
       // O WhatsApp mais recente pode identificar o contato por "@lid" (id interno) em vez
@@ -298,12 +321,17 @@ async function iniciar() {
       const ehContatoValido = jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid");
       if (!ehContatoValido) continue;
 
-      // Quando o contato vem como "@lid", o Baileys costuma informar o JID real
-      // (com o número de telefone) em remoteJidAlt — prioriza ele pro registro do agendamento.
-      const jidComTelefone = msg.key.remoteJidAlt?.endsWith("@s.whatsapp.net")
-        ? msg.key.remoteJidAlt
-        : (jid.endsWith("@s.whatsapp.net") ? jid : null);
-      const telefone = jidComTelefone ? normalizarTelefone(jidComTelefone) : `lid:${jid.split("@")[0]}`;
+      const telefone = telefoneDoJid(jid, msg.key.remoteJidAlt);
+
+      // Mensagem enviada pelo próprio Dr. Bruno (do celular dele) — a Carla nunca responde
+      // isso, mas ainda vale registrar o contato na lista do painel (sem nome, já que o
+      // pushName aqui seria o dele mesmo, não de quem ele está falando).
+      if (msg.key.fromMe) {
+        Storage.registrarContatoWhatsapp(telefone, null);
+        continue;
+      }
+
+      Storage.registrarContatoWhatsapp(telefone, msg.pushName || null);
 
       const texto = msg.message.conversation
         || msg.message.extendedTextMessage?.text
