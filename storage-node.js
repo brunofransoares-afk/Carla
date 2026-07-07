@@ -16,6 +16,7 @@ const ARQ_AGENDAMENTOS_CSV = path.join(DIR_DADOS, "agendamentos.csv");
 const ARQ_ALERTAS = path.join(DIR_DADOS, "alertas.json");
 const ARQ_SESSOES = path.join(DIR_DADOS, "sessoes.json");
 const ARQ_BLOQUEIOS = path.join(DIR_DADOS, "bloqueios.json");
+const ARQ_BLOQUEIOS_HORARIOS = path.join(DIR_DADOS, "bloqueios-horarios.json");
 const ARQ_SILENCIADOS = path.join(DIR_DADOS, "contatos-silenciados.json");
 const ARQ_CONTATOS_WHATSAPP = path.join(DIR_DADOS, "contatos-whatsapp.json");
 
@@ -52,7 +53,44 @@ function idsOcupados(now = new Date()) {
   const dosBloqueios = bloqueios.size === 0
     ? []
     : Agenda.gerarSlotsPossiveis(now).filter((s) => bloqueios.has(s.date)).map((s) => s.id);
-  return new Set([...reais, ...dosBloqueios]);
+  return new Set([...reais, ...dosBloqueios, ...lerBloqueiosHorarios()]);
+}
+
+// Bloqueio de um horário específico (não o dia inteiro) — pra quando só um horário
+// precisa sair de circulação (ex: compromisso pessoal do Dr. Bruno naquele horário).
+function lerBloqueiosHorarios() {
+  return lerJSON(ARQ_BLOQUEIOS_HORARIOS, []);
+}
+
+function alternarBloqueioHorario(slotId) {
+  const lista = lerBloqueiosHorarios();
+  const idx = lista.indexOf(slotId);
+  if (idx >= 0) lista.splice(idx, 1);
+  else lista.push(slotId);
+  escreverJSON(ARQ_BLOQUEIOS_HORARIOS, lista);
+  return lista;
+}
+
+// Todos os horários de um dia específico, já cruzados com agendamento real, bloqueio do
+// dia inteiro e bloqueio individual — pro painel mostrar e deixar bloquear um por um.
+function listarHorariosDoDia(dataStr, now = new Date()) {
+  const agendamentos = lerAgendamentos();
+  const diaTodoBloqueado = lerBloqueios().includes(dataStr);
+  const bloqueiosHorarios = new Set(lerBloqueiosHorarios());
+  const horarios = Agenda.gerarSlotsPossiveis(now)
+    .filter((s) => s.date === dataStr)
+    .map((s) => {
+      const agendamento = agendamentos.find((a) => a.slotId === s.id);
+      return {
+        slotId: s.id,
+        time: s.time,
+        ocupado: !!agendamento,
+        responsavel: agendamento ? agendamento.responsavel : null,
+        crianca: agendamento ? agendamento.crianca : null,
+        bloqueado: diaTodoBloqueado || bloqueiosHorarios.has(s.id),
+      };
+    });
+  return { diaTodoBloqueado, horarios };
 }
 
 function lerBloqueios() {
@@ -280,6 +318,7 @@ module.exports = {
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,
+  lerBloqueiosHorarios, alternarBloqueioHorario, listarHorariosDoDia,
   listarContatosRecentes, metricasConversao,
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
   registrarContatoWhatsapp, listarTodosContatos,

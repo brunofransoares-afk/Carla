@@ -154,6 +154,22 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url.startsWith("/api/horarios-do-dia") && req.method === "GET") {
+    const data = new URL(req.url, "http://localhost").searchParams.get("data");
+    const resultado = data ? Storage.listarHorariosDoDia(data) : { diaTodoBloqueado: false, horarios: [] };
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(resultado));
+    return;
+  }
+
+  if (req.url === "/api/bloqueio-horario-toggle" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const bloqueiosHorarios = corpo.slotId ? Storage.alternarBloqueioHorario(corpo.slotId) : Storage.lerBloqueiosHorarios();
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true, bloqueiosHorarios }));
+    return;
+  }
+
   if (req.url === "/api/silenciar" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const telefone = corpo.telefone ? normalizarTelefoneManual(corpo.telefone) : null;

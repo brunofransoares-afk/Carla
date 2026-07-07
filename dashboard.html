@@ -125,7 +125,7 @@
   .btn-colapsar svg { width: 14px; height: 14px; transition: transform 0.25s ease; }
   #cartao-calendario.colapsado .btn-colapsar svg { transform: rotate(-90deg); }
 
-  .colapsavel { overflow: hidden; max-height: 640px; opacity: 1; transition: max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease; }
+  .colapsavel { overflow: hidden; max-height: 1400px; opacity: 1; transition: max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease; }
   #cartao-calendario.colapsado .colapsavel { max-height: 0; opacity: 0; }
 
   .calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 6px; }
@@ -140,6 +140,19 @@
   .cal-dia .cal-ponto { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--acento); }
   .calendario-legenda { display: flex; gap: 16px; margin-top: 12px; font-size: 11px; color: var(--texto-fraco); flex-wrap: wrap; }
   .calendario-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+  .cal-dia.selecionado { outline: 2px solid var(--acento); outline-offset: -2px; }
+
+  .painel-horarios-dia { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .horarios-dia-cabecalho { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 12.5px; color: #cdeee0; font-weight: 600; }
+  .horarios-dia-cabecalho .botoes { display: flex; gap: 8px; align-items: center; }
+  .horarios-dia-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
+  .horario-slot { border: 1px solid var(--vidro-borda); background: rgba(52,211,153,0.08); color: #bdeeda; border-radius: 8px; padding: 8px 4px; font-size: 12px; cursor: pointer; text-align: center; }
+  .horario-slot:hover:not(:disabled) { background: rgba(52,211,153,0.18); }
+  .horario-slot.bloqueado { background: rgba(255,90,90,0.16); border-color: rgba(255,90,90,0.3); color: #ffb3b3; }
+  .horario-slot.bloqueado:hover:not(:disabled) { background: rgba(255,90,90,0.28); }
+  .horario-slot.ocupado { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.08); color: var(--texto-fraco); cursor: default; }
+  .btn-fechar-horarios-dia { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 12px; }
+  .btn-fechar-horarios-dia:hover { background: rgba(255,255,255,0.13); }
   .legenda-cor { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 
   .layout-principal { display: grid; grid-template-columns: 1fr 300px; gap: 22px; align-items: start; }
@@ -240,6 +253,7 @@
             <span><span class="legenda-cor" style="background:rgba(255,90,90,0.6)"></span> Bloqueado (sem vaga nova)</span>
             <span><span class="legenda-cor" style="background:#34d399"></span> Tem consulta marcada</span>
           </div>
+          <div class="painel-horarios-dia" id="painel-horarios-dia" style="display:none"></div>
         </div>
       </div>
 
@@ -324,6 +338,7 @@
   let calAno = hoje.getFullYear();
   let calMes = hoje.getMonth(); // 0-11
   let alternandoBloqueio = false;
+  let diaExpandido = null; // data (AAAA-MM-DD) do dia com o painel de horários aberto, ou null
 
   // Minimizar/maximizar o card do calendário — lembra a preferência entre visitas.
   const cartaoCalendario = document.getElementById("cartao-calendario");
@@ -356,6 +371,7 @@
       if (str < hojeStr) classes.push("passado");
       else if (DIAS_SEM_ATENDIMENTO.includes(diaSemana)) classes.push("sem-atendimento");
       else if (bloqueiosAtuais.includes(str)) classes.push("bloqueado");
+      if (str === diaExpandido) classes.push("selecionado");
       const clicavel = !classes.includes("passado") && !classes.includes("sem-atendimento");
       const ponto = diasComConsultaAtuais.has(str) ? `<span class="cal-ponto"></span>` : "";
       html += `<div class="${classes.join(" ")}" ${clicavel ? `data-data="${str}"` : ""}>${dia}${ponto}</div>`;
@@ -363,10 +379,11 @@
     cal.innerHTML = html;
 
     cal.querySelectorAll(".cal-dia[data-data]").forEach((el) => {
-      el.addEventListener("click", () => alternarBloqueio(el.dataset.data));
+      el.addEventListener("click", () => alternarDiaExpandido(el.dataset.data));
     });
   }
 
+  // Bloqueia/desbloqueia o dia inteiro de uma vez (botão dentro do painel de horários do dia).
   async function alternarBloqueio(data) {
     if (alternandoBloqueio) return;
     alternandoBloqueio = true;
@@ -379,10 +396,88 @@
       const resultado = await resp.json();
       bloqueiosAtuais = resultado.bloqueios || bloqueiosAtuais;
       renderizarCalendario();
+      if (diaExpandido === data) await carregarHorariosDoDia(data);
     } catch (e) {
       // ignora — se falhar, o calendário simplesmente não muda e o usuário pode tentar de novo
     }
     alternandoBloqueio = false;
+  }
+
+  // Clicar num dia do calendário abre (ou fecha, se já estava aberto) o painel logo abaixo
+  // mostrando cada horário daquele dia, pra bloquear/desbloquear um por um.
+  async function alternarDiaExpandido(data) {
+    const painel = document.getElementById("painel-horarios-dia");
+    if (diaExpandido === data) {
+      diaExpandido = null;
+      painel.style.display = "none";
+      painel.innerHTML = "";
+      renderizarCalendario();
+      return;
+    }
+    diaExpandido = data;
+    painel.style.display = "block";
+    painel.innerHTML = "<div class='vazio'>Carregando horários...</div>";
+    renderizarCalendario();
+    await carregarHorariosDoDia(data);
+  }
+
+  async function carregarHorariosDoDia(data) {
+    const painel = document.getElementById("painel-horarios-dia");
+    try {
+      const resp = await fetch(`/api/horarios-do-dia?data=${encodeURIComponent(data)}`);
+      const resultado = await resp.json();
+      renderizarHorariosDia(data, resultado);
+    } catch (e) {
+      painel.innerHTML = "<div class='vazio'>Não consegui carregar os horários desse dia.</div>";
+    }
+  }
+
+  function renderizarHorariosDia(data, resultado) {
+    const painel = document.getElementById("painel-horarios-dia");
+    const horarios = resultado.horarios || [];
+    const diaTodoBloqueado = !!resultado.diaTodoBloqueado;
+
+    const cabecalho = `<div class="horarios-dia-cabecalho">
+      <span>${formatarDataBR(data)}</span>
+      <div class="botoes">
+        <button id="btn-bloquear-dia-inteiro" class="btn-limpar">${diaTodoBloqueado ? "Desbloquear dia inteiro" : "Bloquear dia inteiro"}</button>
+        <button id="btn-fechar-horarios-dia" class="btn-fechar-horarios-dia" title="Fechar">✕</button>
+      </div>
+    </div>`;
+
+    if (horarios.length === 0) {
+      painel.innerHTML = `${cabecalho}<div class="vazio">Nenhum horário de atendimento nesse dia.</div>`;
+    } else {
+      painel.innerHTML = `${cabecalho}<div class="horarios-dia-grid">${horarios.map((h) => {
+        const classes = ["horario-slot"];
+        if (h.ocupado) classes.push("ocupado");
+        else if (h.bloqueado) classes.push("bloqueado");
+        const titulo = h.ocupado
+          ? `${h.responsavel} / ${h.crianca}`
+          : (h.bloqueado ? "Bloqueado — clique pra liberar" : "Livre — clique pra bloquear");
+        return `<button class="${classes.join(" ")}" ${h.ocupado ? "disabled" : `data-slot-id="${escapeHtml(h.slotId)}"`} title="${escapeHtml(titulo)}">${h.time}</button>`;
+      }).join("")}</div>`;
+    }
+
+    document.getElementById("btn-fechar-horarios-dia").addEventListener("click", () => alternarDiaExpandido(data));
+    document.getElementById("btn-bloquear-dia-inteiro").addEventListener("click", () => alternarBloqueio(data));
+    painel.querySelectorAll(".horario-slot[data-slot-id]").forEach((btn) => {
+      btn.addEventListener("click", () => alternarBloqueioHorario(btn.dataset.slotId, data));
+    });
+  }
+
+  async function alternarBloqueioHorario(slotId, data) {
+    try {
+      await fetch("/api/bloqueio-horario-toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slotId }),
+      });
+    } catch (e) {
+      // ignora — se falhar, o horário simplesmente não muda e o usuário pode tentar de novo
+    }
+    await carregarHorariosDoDia(data);
+    atualizar();
   }
 
   document.getElementById("cal-anterior").addEventListener("click", () => {
