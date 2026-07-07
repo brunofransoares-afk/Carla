@@ -15,6 +15,7 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
+  downloadMediaMessage,
 } = require("@whiskeysockets/baileys");
 
 require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
@@ -133,6 +134,36 @@ async function enviarRecadoMateriais(sock, jid, telefone, template, link, semAtr
   await enviarResposta(sock, jid, telefone, texto, semAtraso);
   Storage.marcarMateriaisEnviados(telefone);
   console.log(`[MATERIAIS] Recado com o link enviado pra ${telefone}`);
+}
+
+// Imagem recebida (provável comprovante de pagamento) — não passa pelo fluxo normal de
+// texto/debounce, é tratada à parte porque não tem o que a IA "conversar" sobre uma imagem
+// sozinha ainda. Só analisa quando já compensa (link configurado, contato não silenciado,
+// não aguardando humano, e já com consulta marcada de verdade) — assim não gasta a checagem
+// de visão à toa com quem nunca agendou.
+async function processarImagemRecebida(sock, jid, telefone, msg) {
+  try {
+    if (Storage.contatoSilenciado(telefone)) return;
+
+    const sessao = Storage.obterSessao(telefone);
+    if (sessao && sessao.aguardandoHumano) return;
+
+    const jaTemAgendamento = !!(sessao && sessao.ultimoAgendamento) || Storage.lerAgendamentos().some((a) => a.telefone === telefone);
+    if (!jaTemAgendamento) return;
+
+    const linkMateriais = (process.env.LINK_MATERIAIS_URL || "").trim();
+    if (!linkMateriais || !Storage.podeEnviarMateriais(telefone)) return;
+
+    const buffer = await downloadMediaMessage(msg, "buffer", {});
+    const mimetype = msg.message?.imageMessage?.mimetype || "image/jpeg";
+    const pareceComprovante = await CerebroIA.pareceComprovantePagamento(buffer, mimetype);
+    if (!pareceComprovante) return;
+
+    console.log(`[COMPROVANTE] Imagem de ${telefone} parece comprovante de pagamento.`);
+    await enviarRecadoMateriais(sock, jid, telefone, RECADO_MATERIAIS_A, linkMateriais, false);
+  } catch (erro) {
+    console.error(`[COMPROVANTE] Erro ao processar imagem de ${telefone}:`, erro.message);
+  }
 }
 
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
@@ -410,6 +441,17 @@ async function iniciar() {
       const texto = msg.message.conversation
         || msg.message.extendedTextMessage?.text
         || "";
+
+      // Imagem sem legenda (provável comprovante de pagamento) — trata à parte, fora do
+      // fluxo normal de conversa. Com legenda, o texto normal já segue pelo caminho de
+      // sempre (a legenda pode ser uma pergunta de verdade, não só um comprovante).
+      if (msg.message.imageMessage && !texto.trim()) {
+        processarImagemRecebida(sock, jid, telefone, msg).catch((erro) => {
+          console.error("Erro ao processar imagem:", erro.message);
+        });
+        continue;
+      }
+
       if (!texto.trim()) continue;
 
       console.log(`[RECEBIDA] ${telefone} (jid: ${jid}): ${texto}`);

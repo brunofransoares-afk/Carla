@@ -130,11 +130,14 @@ link da página de materiais do Dr. Bruno (a página em si é outro projeto,
 separado deste). Só cortesia — ela nunca vende nem faz pitch, só entrega o
 link.
 
-- Se a família **já escolheu a forma de pagamento** (a Carla acabou de mandar
-  a chave Pix ou o link do cartão): manda um recado de boas-vindas com o
-  link, como um presente. Dispara nesse momento (não só no horário reservado)
-  porque não existe um "pagamento confirmado" de verdade no sistema — isso é
-  o sinal mais próximo disso.
+- Se a família **mandar uma imagem que parece comprovante de pagamento**
+  (foto de Pix, transferência ou recibo) num telefone que já tem consulta
+  marcada: manda um recado de boas-vindas com o link, como um presente. Uma
+  IA rápida (Haiku, bem mais barata que a que conduz a conversa) só confere
+  se a imagem parece mesmo um comprovante — não existe um evento de
+  "pagamento confirmado" de verdade no sistema, então isso é o sinal mais
+  confiável disponível. Imagem que não parecer comprovante é ignorada, do
+  jeito que já era antes (a Carla não processa imagem na conversa normal).
 - Se terminou **sem agendamento** (a família desistiu ou se despediu sem
   marcar): manda um convite leve com o link, sem insistir.
 
