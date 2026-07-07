@@ -278,15 +278,19 @@ async function iniciar() {
   // o histórico que o WhatsApp manda ao conectar. Só é informativo — nunca bloqueia nem
   // ignora ninguém sozinho, é só pra você conseguir silenciar qualquer contato pelo painel
   // e pra Carla ajustar o tom pra quem já é paciente (ver PACIENTE JÁ CONHECIDO no cerebro-ia.js).
+  // Só aceita jid no formato "@s.whatsapp.net" (telefone de verdade) nessas sincronizações —
+  // diferente de mensagem recebida em tempo real, aqui não tem um "remoteJidAlt" pra cruzar
+  // um "@lid" com o telefone real da mesma pessoa, então aceitar "@lid" cria um contato
+  // fantasma duplicado (mesmo nome, sem telefone de verdade, sem nunca ter conversa nenhuma).
   sock.ev.on("messaging-history.set", ({ chats, contacts }) => {
     for (const chat of chats || []) {
       const jid = chat.id || "";
-      if (!(jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"))) continue;
+      if (!jid.endsWith("@s.whatsapp.net")) continue;
       Storage.registrarContatoWhatsapp(telefoneDoJid(jid), { nomeSalvo: chat.name || null });
     }
     for (const contato of contacts || []) {
       const jid = contato.id || "";
-      if (!(jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"))) continue;
+      if (!jid.endsWith("@s.whatsapp.net")) continue;
       Storage.registrarContatoWhatsapp(telefoneDoJid(jid), { nomeSalvo: contato.name || null, pushName: contato.notify || null });
     }
   });
@@ -296,7 +300,7 @@ async function iniciar() {
   const capturarAtualizacaoContatos = (lista) => {
     for (const contato of lista || []) {
       const jid = contato.id || "";
-      if (!(jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"))) continue;
+      if (!jid.endsWith("@s.whatsapp.net")) continue;
       if (!contato.name && !contato.notify) continue;
       Storage.registrarContatoWhatsapp(telefoneDoJid(jid), { nomeSalvo: contato.name || null, pushName: contato.notify || null });
     }
