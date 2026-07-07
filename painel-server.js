@@ -204,6 +204,22 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === "/api/retomar-atendimento" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const ok = corpo.telefone ? Storage.retomarAtendimento(corpo.telefone) : false;
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok }));
+    return;
+  }
+
+  if (req.url === "/api/limpar-conversa" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    if (corpo.telefone) Storage.limparConversa(corpo.telefone);
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   if (req.url === "/api/status") {
     const status = await statusDoBot();
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });

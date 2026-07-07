@@ -218,6 +218,25 @@ function salvarSessao(telefone, sessao) {
   escreverJSON(ARQ_SESSOES, sessoes);
 }
 
+// Tira o telefone do estado "aguardando humano" pelo painel — útil quando você já resolveu
+// por fora e quer que a Carla volte a responder esse número sozinha antes das 2h automáticas.
+function retomarAtendimento(telefone) {
+  const sessao = obterSessao(telefone);
+  if (!sessao) return false;
+  sessao.aguardandoHumano = false;
+  sessao.aguardandoHumanoDesde = null;
+  salvarSessao(telefone, sessao);
+  return true;
+}
+
+// Apaga a sessão inteira desse telefone (histórico, aguardando humano, último agendamento
+// lembrado etc) — a próxima mensagem desse número é tratada como se fosse a primeira vez.
+function limparConversa(telefone) {
+  const sessoes = lerSessoes();
+  delete sessoes[telefone];
+  escreverJSON(ARQ_SESSOES, sessoes);
+}
+
 // Últimos contatos pro painel: um por telefone, ordenado do mais recente pro mais antigo.
 // Só entra quem já tem "ultimaAtividade" registrada (server.js carimba isso a cada
 // mensagem processada) — sessões antigas sem esse campo simplesmente não aparecem.
@@ -371,4 +390,5 @@ module.exports = {
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
   registrarContatoWhatsapp, listarTodosContatos, ehPacienteConhecido,
   lerPacientesManuais, marcarPacienteManual, desmarcarPacienteManual,
+  retomarAtendimento, limparConversa,
 };

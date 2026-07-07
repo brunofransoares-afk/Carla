@@ -184,6 +184,10 @@
   .btn-silenciar-contato.ativo { background: rgba(255,90,90,0.18); color: #ffb3b3; }
   .btn-marcar-contato.ativo { background: rgba(122,162,255,0.18); color: #a9c1ff; }
   .btn-marcar-contato:disabled { opacity: 0.5; cursor: default; }
+  .btn-retomar-contato { border: none; background: rgba(232,200,135,0.16); color: #e8c887; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
+  .btn-retomar-contato:hover { background: rgba(232,200,135,0.28); }
+  .btn-limpar-contato { border: none; background: rgba(255,90,90,0.1); color: #ffb3b3; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
+  .btn-limpar-contato:hover { background: rgba(255,90,90,0.22); }
 
   .silenciar-form { display: flex; gap: 8px; margin-bottom: 12px; }
   .silenciar-form input { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); }
@@ -621,6 +625,8 @@
         <div class="contato-botoes">
           <button class="btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado — reativar" : "Silenciar"}</button>
           <button class="btn-marcar-contato ${c.marcadoManualmente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}" ${c.contatoSalvo && !c.marcadoManualmente ? "disabled" : ""}>${c.marcadoManualmente ? "Remover marcação de paciente" : (c.contatoSalvo ? "Já é paciente" : "Marcar como paciente")}</button>
+          ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
+          ${c.ultimaAtividade ? `<button class="btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
         </div>
       </li>`;
     }).join("");
@@ -631,6 +637,39 @@
     lista.querySelectorAll(".btn-marcar-contato:not(:disabled)").forEach((btn) => {
       btn.addEventListener("click", () => alternarMarcacaoPaciente(btn.dataset.telefone));
     });
+    lista.querySelectorAll(".btn-retomar-contato").forEach((btn) => {
+      btn.addEventListener("click", () => retomarAtendimentoContato(btn.dataset.telefone));
+    });
+    lista.querySelectorAll(".btn-limpar-contato").forEach((btn) => {
+      btn.addEventListener("click", () => limparConversaContato(btn.dataset.telefone));
+    });
+  }
+
+  async function retomarAtendimentoContato(telefone) {
+    try {
+      await fetch("/api/retomar-atendimento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone }),
+      });
+    } catch (e) {
+      // ignora — se falhar, o usuário pode tentar de novo
+    }
+    atualizar();
+  }
+
+  async function limparConversaContato(telefone) {
+    if (!confirm("Apagar todo o histórico de conversa desse número? A Carla vai tratar a próxima mensagem como se fosse a primeira vez. Não dá pra desfazer.")) return;
+    try {
+      await fetch("/api/limpar-conversa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone }),
+      });
+    } catch (e) {
+      // ignora — se falhar, a conversa continua lá e o usuário pode tentar de novo
+    }
+    atualizar();
   }
 
   document.getElementById("busca-contatos").addEventListener("input", aplicarBuscaContatos);
