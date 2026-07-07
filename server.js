@@ -120,6 +120,14 @@ function pareceDespedidaOuRecusa(texto) {
     || !!(global.RECUSA_AGENDAR_REGEX && global.RECUSA_AGENDAR_REGEX.test(texto));
 }
 
+// Detecta se a própria resposta da Carla acabou de mandar a chave Pix ou o link de
+// pagamento por cartão — esse é o sinal de "forma de pagamento definida" (não tem um evento
+// de "pagamento confirmado" de verdade no sistema, então isso é o mais próximo e confiável).
+function mencionouFormaPagamento(texto) {
+  const chavePix = (global.CARLA_CONFIG && global.CARLA_CONFIG.pix) || "";
+  return (!!chavePix && texto.includes(chavePix)) || texto.includes("link.infinitepay.io");
+}
+
 async function enviarRecadoMateriais(sock, jid, telefone, template, link, semAtraso) {
   const texto = template.replace("{LINK}", link);
   await enviarResposta(sock, jid, telefone, texto, semAtraso);
@@ -207,19 +215,21 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
 
   await enviarResposta(sock, jid, telefone, resultado.resposta, semAtraso);
 
-  // Recado A (agendou) ou B (não agendou) com o link da página de materiais — ver constantes
-  // no topo do arquivo. Enquanto LINK_MATERIAIS_URL não estiver configurado no .env, este
-  // bloco inteiro fica inerte (não manda nada, não quebra nada).
+  // Recado A (forma de pagamento definida) ou B (não agendou) com o link da página de
+  // materiais — ver constantes no topo do arquivo. Enquanto LINK_MATERIAIS_URL não estiver
+  // configurado no .env, este bloco inteiro fica inerte (não manda nada, não quebra nada).
   const linkMateriais = (process.env.LINK_MATERIAIS_URL || "").trim();
+  const jaTemAgendamento = agendouNestaMensagem
+    || !!sessao.ultimoAgendamento
+    || Storage.lerAgendamentos().some((a) => a.telefone === telefone);
+
   if (linkMateriais && Storage.podeEnviarMateriais(telefone)) {
-    if (agendouNestaMensagem) {
+    // Recado A dispara só depois que a Carla manda a chave Pix ou o link do cartão nesta
+    // mesma resposta — ou seja, depois da forma de pagamento definida, não só do horário
+    // reservado (não existe um "pagamento confirmado" de verdade no sistema pra checar).
+    if (jaTemAgendamento && mencionouFormaPagamento(resultado.resposta)) {
       await enviarRecadoMateriais(sock, jid, telefone, RECADO_MATERIAIS_A, linkMateriais, semAtraso);
-    } else if (
-      !resultado.escalar
-      && !sessao.ultimoAgendamento
-      && !Storage.lerAgendamentos().some((a) => a.telefone === telefone)
-      && pareceDespedidaOuRecusa(texto)
-    ) {
+    } else if (!jaTemAgendamento && !resultado.escalar && pareceDespedidaOuRecusa(texto)) {
       await enviarRecadoMateriais(sock, jid, telefone, RECADO_MATERIAIS_B, linkMateriais, semAtraso);
     }
   }
