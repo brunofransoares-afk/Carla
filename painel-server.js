@@ -139,7 +139,7 @@ const servidor = http.createServer(async (req, res) => {
       agendamentos: Storage.lerAgendamentos(),
       alertas: Storage.lerAlertas(),
       bloqueios: Storage.lerBloqueios(),
-      contatos: Storage.listarContatosRecentes(20),
+      contatos: Storage.listarTodosContatos(),
       metricas: Storage.metricasConversao(),
       silenciados: Storage.lerContatosSilenciados(),
     }));

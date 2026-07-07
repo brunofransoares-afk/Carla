@@ -17,6 +17,7 @@ const ARQ_ALERTAS = path.join(DIR_DADOS, "alertas.json");
 const ARQ_SESSOES = path.join(DIR_DADOS, "sessoes.json");
 const ARQ_BLOQUEIOS = path.join(DIR_DADOS, "bloqueios.json");
 const ARQ_SILENCIADOS = path.join(DIR_DADOS, "contatos-silenciados.json");
+const ARQ_CONTATOS_WHATSAPP = path.join(DIR_DADOS, "contatos-whatsapp.json");
 
 function garantirPasta() {
   if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
@@ -196,6 +197,49 @@ function listarContatosRecentes(limite = 20) {
     .slice(0, limite);
 }
 
+// Contatos conhecidos do WhatsApp (telefone -> nome, quando o WhatsApp informa um). Alimentado
+// tanto pela sincronização de histórico ao conectar quanto por toda mensagem vista (enviada ou
+// recebida) — é só informativo pro painel, nunca decide sozinho quem a Carla responde ou não.
+function lerContatosWhatsappMapa() {
+  return lerJSON(ARQ_CONTATOS_WHATSAPP, {});
+}
+
+function registrarContatoWhatsapp(telefone, nome) {
+  const contatos = lerContatosWhatsappMapa();
+  const atual = contatos[telefone];
+  if (atual && (!nome || atual.nome === nome)) return; // nada novo, evita reescrever à toa
+  contatos[telefone] = { nome: nome || (atual && atual.nome) || null };
+  escreverJSON(ARQ_CONTATOS_WHATSAPP, contatos);
+}
+
+// Lista única pro painel: todo contato que a Carla já viu no WhatsApp, cruzado com a sessão
+// (última atividade, se fechou consulta, se está aguardando humano) e com o estado de
+// silenciado — assim dá pra ver e silenciar qualquer contato num só lugar, com rolagem.
+function listarTodosContatos() {
+  const contatosWhatsapp = lerContatosWhatsappMapa();
+  const sessoes = lerSessoes();
+  const silenciados = new Set(lerContatosSilenciados());
+  const lista = Object.entries(contatosWhatsapp).map(([telefone, info]) => {
+    const sessao = sessoes[telefone];
+    return {
+      telefone,
+      nome: info.nome || null,
+      ultimaAtividade: (sessao && sessao.ultimaAtividade) || null,
+      ultimaMensagem: (sessao && sessao.ultimaMensagem) || "",
+      fechou: !!(sessao && sessao.ultimoAgendamento),
+      aguardandoHumano: !!(sessao && sessao.aguardandoHumano),
+      silenciado: silenciados.has(telefone),
+    };
+  });
+  lista.sort((a, b) => {
+    if (a.ultimaAtividade && b.ultimaAtividade) return new Date(b.ultimaAtividade) - new Date(a.ultimaAtividade);
+    if (a.ultimaAtividade) return -1;
+    if (b.ultimaAtividade) return 1;
+    return (a.nome || a.telefone).localeCompare(b.nome || b.telefone);
+  });
+  return lista;
+}
+
 // Taxa de conversão simples: quantos telefones que já falaram com a Carla (contatos únicos
 // com sessão registrada) resultaram em pelo menos um agendamento de verdade.
 function metricasConversao() {
@@ -238,4 +282,5 @@ module.exports = {
   lerBloqueios, alternarBloqueioDia,
   listarContatosRecentes, metricasConversao,
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
+  registrarContatoWhatsapp, listarTodosContatos,
 };

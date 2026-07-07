@@ -148,9 +148,16 @@
 
   .coluna-lateral .cartao:last-child { margin-bottom: 0; }
 
+  #lista-contatos { max-height: 420px; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
+  #lista-contatos::-webkit-scrollbar { width: 6px; }
+  #lista-contatos::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
   #lista-contatos li { display: flex; flex-direction: column; gap: 3px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); }
+  .busca-contatos { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); margin-bottom: 10px; }
+  .busca-contatos::placeholder { color: var(--texto-fraco); }
   .contato-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
   .contato-tel { font-weight: 600; font-size: 12.5px; color: #e9f2ee; }
+  .contato-nome { font-weight: 600; font-size: 12.5px; color: #e9f2ee; }
+  .contato-tel-sub { font-size: 10.5px; color: var(--texto-fraco); }
   .contato-tempo { font-size: 10.5px; color: var(--texto-fraco); white-space: nowrap; }
   .contato-msg { font-size: 12px; color: var(--texto-fraco); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .contato-tags { display: flex; gap: 6px; margin-top: 2px; }
@@ -250,8 +257,9 @@
 
       <div class="cartao">
         <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.7 14.2c2.4.3 4.3 2.1 4.3 4.8"/></svg></span>Últimos contatos</span>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.7 14.2c2.4.3 4.3 2.1 4.3 4.8"/></svg></span>Contatos <span class="contagem" id="contagem-contatos">0</span></span>
         </h2>
+        <input type="text" id="busca-contatos" class="busca-contatos" placeholder="Buscar por nome ou telefone...">
         <ul id="lista-contatos"></ul>
       </div>
 
@@ -465,23 +473,44 @@
   }
 
   let silenciadosAtuais = new Set();
+  let contatosAtuais = [];
 
   function renderizarContatos(contatos) {
+    contatosAtuais = contatos || [];
+    document.getElementById("contagem-contatos").textContent = contatosAtuais.length;
+    aplicarBuscaContatos();
+  }
+
+  function aplicarBuscaContatos() {
+    const termo = document.getElementById("busca-contatos").value.trim().toLowerCase();
     const lista = document.getElementById("lista-contatos");
-    if (!contatos || contatos.length === 0) {
+    const filtrados = !termo ? contatosAtuais : contatosAtuais.filter((c) =>
+      (c.nome || "").toLowerCase().includes(termo) || c.telefone.toLowerCase().includes(termo)
+    );
+
+    if (contatosAtuais.length === 0) {
       lista.innerHTML = "<div class='vazio'>Nenhum contato registrado ainda.</div>";
       return;
     }
-    lista.innerHTML = contatos.map((c) => {
+    if (filtrados.length === 0) {
+      lista.innerHTML = "<div class='vazio'>Nenhum contato encontrado pra essa busca.</div>";
+      return;
+    }
+
+    lista.innerHTML = filtrados.map((c) => {
       const tags = [
         c.fechou ? `<span class="contato-tag fechou">Fechou consulta</span>` : "",
         c.aguardandoHumano ? `<span class="contato-tag aguardando">Aguardando humano</span>` : "",
       ].join("");
       const silenciado = silenciadosAtuais.has(c.telefone);
+      const tempo = c.ultimaAtividade ? tempoRelativo(c.ultimaAtividade) : "Nunca conversou com a Carla";
+      const titulo = c.nome
+        ? `<span class="contato-nome">${escapeHtml(c.nome)}</span><span class="contato-tel-sub"> · ${escapeHtml(c.telefone)}</span>`
+        : `<span class="contato-tel">${escapeHtml(c.telefone)}</span>`;
       return `<li>
         <div class="contato-topo">
-          <span class="contato-tel">${escapeHtml(c.telefone)}</span>
-          <span class="contato-tempo">${tempoRelativo(c.ultimaAtividade)}</span>
+          <span>${titulo}</span>
+          <span class="contato-tempo">${tempo}</span>
         </div>
         ${c.ultimaMensagem ? `<div class="contato-msg">"${escapeHtml(c.ultimaMensagem)}"</div>` : ""}
         ${tags ? `<div class="contato-tags">${tags}</div>` : ""}
@@ -493,6 +522,8 @@
       btn.addEventListener("click", () => alternarSilencio(btn.dataset.telefone));
     });
   }
+
+  document.getElementById("busca-contatos").addEventListener("input", aplicarBuscaContatos);
 
   async function alternarSilencio(telefone) {
     const rota = silenciadosAtuais.has(telefone) ? "/api/dessilenciar" : "/api/silenciar";
