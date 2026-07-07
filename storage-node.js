@@ -19,6 +19,7 @@ const ARQ_BLOQUEIOS = path.join(DIR_DADOS, "bloqueios.json");
 const ARQ_BLOQUEIOS_HORARIOS = path.join(DIR_DADOS, "bloqueios-horarios.json");
 const ARQ_SILENCIADOS = path.join(DIR_DADOS, "contatos-silenciados.json");
 const ARQ_CONTATOS_WHATSAPP = path.join(DIR_DADOS, "contatos-whatsapp.json");
+const ARQ_PACIENTES_MANUAIS = path.join(DIR_DADOS, "pacientes-manuais.json");
 
 function garantirPasta() {
   if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
@@ -260,26 +261,55 @@ function registrarContatoWhatsapp(telefone, { nomeSalvo, pushName } = {}) {
   escreverJSON(ARQ_CONTATOS_WHATSAPP, contatos);
 }
 
-// true quando o telefone está salvo com nome na agenda do celular do Dr. Bruno — o sinal de
-// que já é paciente, usado pra ajustar o tom de abordagem da Carla (ver cerebro-ia.js).
-function ehPacienteConhecido(telefone) {
-  const contato = lerContatosWhatsappMapa()[telefone];
-  return !!(contato && contato.nomeSalvo);
+// Pacientes marcados manualmente pelo painel — cobre o caso do sinal automático (nome salvo
+// no WhatsApp) não ter pego ainda (a sincronização de contatos nem sempre roda de novo numa
+// reconexão comum, só na primeira vez que conecta). Some diretamente na decisão de tom da
+// Carla, igual o nomeSalvo — ver ehPacienteConhecido.
+function lerPacientesManuais() {
+  return lerJSON(ARQ_PACIENTES_MANUAIS, []);
 }
 
-// Lista única pro painel: todo contato que a Carla já viu no WhatsApp, cruzado com a sessão
+function marcarPacienteManual(telefone) {
+  const lista = lerPacientesManuais();
+  if (!lista.includes(telefone)) lista.push(telefone);
+  escreverJSON(ARQ_PACIENTES_MANUAIS, lista);
+  return lista;
+}
+
+function desmarcarPacienteManual(telefone) {
+  const lista = lerPacientesManuais().filter((t) => t !== telefone);
+  escreverJSON(ARQ_PACIENTES_MANUAIS, lista);
+  return lista;
+}
+
+// true quando o telefone está salvo com nome na agenda do celular do Dr. Bruno (sinal
+// automático) OU foi marcado manualmente como paciente pelo painel — qualquer um dos dois
+// já ajusta o tom de abordagem da Carla (ver cerebro-ia.js).
+function ehPacienteConhecido(telefone) {
+  const contato = lerContatosWhatsappMapa()[telefone];
+  if (contato && contato.nomeSalvo) return true;
+  return lerPacientesManuais().includes(telefone);
+}
+
+// Lista única pro painel: todo contato que a Carla já viu no WhatsApp (mais quem foi marcado
+// manualmente como paciente, mesmo sem nunca ter aparecido ainda), cruzado com a sessão
 // (última atividade, se fechou consulta, se está aguardando humano) e com o estado de
-// silenciado — assim dá pra ver e silenciar qualquer contato num só lugar, com rolagem.
+// silenciado — assim dá pra ver, silenciar e marcar paciente num só lugar, com rolagem.
 function listarTodosContatos() {
   const contatosWhatsapp = lerContatosWhatsappMapa();
   const sessoes = lerSessoes();
   const silenciados = new Set(lerContatosSilenciados());
-  const lista = Object.entries(contatosWhatsapp).map(([telefone, info]) => {
+  const pacientesManuais = new Set(lerPacientesManuais());
+  const telefones = new Set([...Object.keys(contatosWhatsapp), ...pacientesManuais]);
+  const lista = [...telefones].map((telefone) => {
+    const info = contatosWhatsapp[telefone] || {};
     const sessao = sessoes[telefone];
+    const marcadoManualmente = pacientesManuais.has(telefone);
     return {
       telefone,
       nome: info.nomeSalvo || info.pushName || null,
-      contatoSalvo: !!info.nomeSalvo,
+      contatoSalvo: !!info.nomeSalvo || marcadoManualmente,
+      marcadoManualmente,
       ultimaAtividade: (sessao && sessao.ultimaAtividade) || null,
       ultimaMensagem: (sessao && sessao.ultimaMensagem) || "",
       fechou: !!(sessao && sessao.ultimoAgendamento),
@@ -340,4 +370,5 @@ module.exports = {
   listarContatosRecentes, metricasConversao,
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
   registrarContatoWhatsapp, listarTodosContatos, ehPacienteConhecido,
+  lerPacientesManuais, marcarPacienteManual, desmarcarPacienteManual,
 };
