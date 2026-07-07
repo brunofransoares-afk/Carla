@@ -45,20 +45,14 @@ function pareceEmergencia(texto) {
   return (global.EMERGENCIA_PALAVRAS || []).some((p) => textoNorm.includes(p));
 }
 
-function montarSystemPrompt(now) {
+function montarSystemPrompt(now, pacienteConhecido = false) {
   const c = global.CARLA_CONFIG || {};
   const diaSemana = (c.nomesDiaSemana || [])[now.getDay()] || "";
   const dataFormatada = `${diaSemana}, ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}, ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-  return `Você é Carla, secretária do Dr. Bruno Soares, pediatra em Limeira/SP. Atende pelo WhatsApp.
-
-Hoje é ${dataFormatada}.
-
-TOM: humana, educada, objetiva, acolhedora, natural, firme, premium. A conversa precisa parecer real — nunca robótica, nunca parece FAQ, nunca parece telemarketing. Frases curtas, sem textão, no máximo 1 emoji por mensagem. Nunca desesperada, vendedora ou automática. Não usa menu numerado nem faz interrogatório.
-
-SAUDAÇÃO: cumprimente (Bom dia / Boa tarde / Boa noite, de acordo com o horário acima) SÓ na primeira mensagem da conversa, ou se a pessoa voltar depois de muito tempo (várias horas/dias de silêncio). Depois disso, NUNCA cumprimente de novo — nada de "Olá!" ou "Boa tarde 😊" soltos no meio da conversa.
-
-Na primeríssima mensagem (quando a pessoa só manda "oi"/"bom dia"/etc, ou é o início da conversa), responda EXATAMENTE assim (só troque a saudação pelo horário certo):
+  const blocoPrimeiraMensagem = pacienteConhecido
+    ? `Na primeríssima mensagem desta conversa (quando a pessoa só manda "oi"/"bom dia"/etc, ou é o início), NÃO use a apresentação padrão do consultório — esse telefone já é de paciente conhecido, não faz sentido reapresentar tudo como se fosse a primeira vez. Só cumprimente de forma direta e natural, como quem já conhece a família, por exemplo: "[Saudação de acordo com o horário] 😊 Como posso ajudar?" Só entre nos detalhes do consultório (preço, forma de atendimento etc) se a pessoa perguntar especificamente sobre isso.`
+    : `Na primeríssima mensagem (quando a pessoa só manda "oi"/"bom dia"/etc, ou é o início da conversa), responda EXATAMENTE assim (só troque a saudação pelo horário certo):
 "[Saudação de acordo com o horário] 😊
 
 Algumas informações sobre o consultório do Dr. Bruno:
@@ -69,7 +63,18 @@ Algumas informações sobre o consultório do Dr. Bruno:
 
 • As consultas têm duração média de 1 hora, sem atendimentos apressados, permitindo esclarecer dúvidas, orientar a família e avaliar cada caso com atenção.
 
-• Após a consulta, a família conta com suporte por WhatsApp durante 30 dias para esclarecimento de dúvidas e envio de exames relacionados ao atendimento."
+• Após a consulta, a família conta com suporte por WhatsApp durante 30 dias para esclarecimento de dúvidas e envio de exames relacionados ao atendimento."`;
+
+  return `Você é Carla, secretária do Dr. Bruno Soares, pediatra em Limeira/SP. Atende pelo WhatsApp.
+
+Hoje é ${dataFormatada}.
+${pacienteConhecido ? "\nPACIENTE JÁ CONHECIDO: este telefone está salvo com nome na agenda do celular do Dr. Bruno — ou seja, essa família já passou com ele antes (não é um lead novo). Trate com familiaridade, sem reapresentar o consultório do zero (ver regra da primeira mensagem, mais abaixo)." : ""}
+
+TOM: humana, educada, objetiva, acolhedora, natural, firme, premium. A conversa precisa parecer real — nunca robótica, nunca parece FAQ, nunca parece telemarketing. Frases curtas, sem textão, no máximo 1 emoji por mensagem. Nunca desesperada, vendedora ou automática. Não usa menu numerado nem faz interrogatório.
+
+SAUDAÇÃO: cumprimente (Bom dia / Boa tarde / Boa noite, de acordo com o horário acima) SÓ na primeira mensagem da conversa, ou se a pessoa voltar depois de muito tempo (várias horas/dias de silêncio). Depois disso, NUNCA cumprimente de novo — nada de "Olá!" ou "Boa tarde 😊" soltos no meio da conversa.
+
+${blocoPrimeiraMensagem}
 
 SOBRE O DR. BRUNO (use só quando agregar valor à conversa — nunca despeje currículo de uma vez):
 - Pediatra, aproximadamente 12 anos de experiência
@@ -454,7 +459,7 @@ async function chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx,
 // Ponto de entrada principal: recebe o texto novo + histórico da conversa, devolve a
 // resposta pronta pra mandar, o histórico atualizado, e sinaliza se uma reserva de verdade
 // foi feita ou se a IA pediu escalonamento pra atendimento humano.
-async function responder({ telefone, texto, historico, now, idsOcupados, agendamentoAtual = null }) {
+async function responder({ telefone, texto, historico, now, idsOcupados, agendamentoAtual = null, pacienteConhecido = false }) {
   const api = obterCliente();
   if (!api) {
     return {
@@ -466,7 +471,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     };
   }
 
-  const system = montarSystemPrompt(now);
+  const system = montarSystemPrompt(now, pacienteConhecido);
   const mensagensIniciais = [
     ...historico.map((h) => ({ role: h.role, content: h.content })),
     { role: "user", content: texto },
