@@ -19,6 +19,9 @@ const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
 // um raciocínio mais demorado do que a classificação simples que a IA fazia antes.
 const MODELO = "claude-sonnet-5";
+// Haiku aqui sim, de propósito — é só uma classificação binária de imagem (parece
+// comprovante ou não), não precisa do raciocínio mais caro do Sonnet.
+const MODELO_VISAO = "claude-haiku-4-5-20251001";
 const DIA_NOME_PARA_NUMERO = { segunda: 1, terca: 2, quinta: 4, sexta: 5 };
 const DIACRITICOS_REGEX = new RegExp("[" + String.fromCharCode(0x0300) + "-" + String.fromCharCode(0x036f) + "]", "g");
 
@@ -43,6 +46,33 @@ function normalizar(t) {
 function pareceEmergencia(texto) {
   const textoNorm = normalizar(texto);
   return (global.EMERGENCIA_PALAVRAS || []).some((p) => textoNorm.includes(p));
+}
+
+// Classificação rápida e barata (Haiku) de uma imagem recebida: parece comprovante de
+// pagamento (Pix, transferência, recibo de cartão)? Só sim/não — quem decide o que fazer
+// com a resposta é o server.js (ex: mandar o link de materiais). Sem chave de API ou em
+// caso de erro, assume que não é (mais seguro do que arriscar um falso positivo).
+async function pareceComprovantePagamento(bufferImagem, mimetype = "image/jpeg") {
+  const api = obterCliente();
+  if (!api) return false;
+  try {
+    const resposta = await api.messages.create({
+      model: MODELO_VISAO,
+      max_tokens: 5,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mimetype, data: bufferImagem.toString("base64") } },
+          { type: "text", text: "Essa imagem parece um comprovante de pagamento (comprovante Pix, comprovante de transferência bancária ou comprovante de pagamento por cartão)? Responda só SIM ou NAO, nada mais." },
+        ],
+      }],
+    });
+    const textoResposta = resposta.content?.[0]?.text?.trim().toUpperCase() || "";
+    return textoResposta.startsWith("SIM");
+  } catch (erro) {
+    console.error("[COMPROVANTE] Erro ao analisar imagem:", erro.message);
+    return false;
+  }
 }
 
 function montarSystemPrompt(now, pacienteConhecido = false) {
@@ -527,4 +557,4 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
   };
 }
 
-module.exports = { responder, pareceEmergencia, iaDisponivel };
+module.exports = { responder, pareceEmergencia, iaDisponivel, pareceComprovantePagamento };

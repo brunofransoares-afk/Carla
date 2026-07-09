@@ -237,6 +237,24 @@ function limparConversa(telefone) {
   escreverJSON(ARQ_SESSOES, sessoes);
 }
 
+// Controla o "uma vez por contato dentro da janela" do recado com o link de materiais
+// (ver server.js) — não manda de novo pro mesmo telefone antes desse prazo, mesmo que ele
+// agende ou desista de novo nesse meio tempo.
+const MATERIAIS_COOLDOWN_DIAS = 90;
+
+function podeEnviarMateriais(telefone) {
+  const sessao = obterSessao(telefone);
+  if (!sessao || !sessao.materiaisEnviadoEm) return true;
+  const dias = (Date.now() - new Date(sessao.materiaisEnviadoEm).getTime()) / 86400000;
+  return dias >= MATERIAIS_COOLDOWN_DIAS;
+}
+
+function marcarMateriaisEnviados(telefone) {
+  const sessao = obterSessao(telefone) || { telefone, historico: [] };
+  sessao.materiaisEnviadoEm = new Date().toISOString();
+  salvarSessao(telefone, sessao);
+}
+
 // Últimos contatos pro painel: um por telefone, ordenado do mais recente pro mais antigo.
 // Só entra quem já tem "ultimaAtividade" registrada (server.js carimba isso a cada
 // mensagem processada) — sessões antigas sem esse campo simplesmente não aparecem.
@@ -391,4 +409,5 @@ module.exports = {
   registrarContatoWhatsapp, listarTodosContatos, ehPacienteConhecido,
   lerPacientesManuais, marcarPacienteManual, desmarcarPacienteManual,
   retomarAtendimento, limparConversa,
+  podeEnviarMateriais, marcarMateriaisEnviados,
 };

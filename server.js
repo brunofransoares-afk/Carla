@@ -15,6 +15,7 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
+  downloadMediaMessage,
 } = require("@whiskeysockets/baileys");
 
 require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
@@ -26,6 +27,13 @@ const ATRASO_RESPOSTA_MS = 3000;
 const PORTA_TRAVA = 3357;
 const HORA_LEMBRETES = 8; // manda os lembretes automáticos a partir das 8h
 const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
+
+// Recado com o link da página de materiais do Dr. Bruno — cortesia, nunca venda. Só sai de
+// verdade quando LINK_MATERIAIS_URL estiver configurado no .env (a página ainda está sendo
+// feita em outro projeto); sem isso, fica inerte, sem quebrar nada. Textos exatamente como
+// definidos no briefing — sem travessão nem tracinho, não reescrever.
+const RECADO_MATERIAIS_A = "Que bom ter você por aqui. Já deixei sua consulta agendada com o Dr. Bruno. Enquanto isso, separei um presente pra você: alguns materiais gratuitos que o doutor preparou, sobre saúde mental e sobre o que fazer em caso de engasgo. É só acessar e baixar por aqui: {LINK}. Nessa mesma página você também encontra os outros materiais que ele produz, caso queira conhecer. Qualquer dúvida, estou por aqui.";
+const RECADO_MATERIAIS_B = "Tudo bem, fico à disposição pra quando você precisar. Se quiser conhecer os materiais que o Dr. Bruno produz, tem uma página com guias e conteúdos dele bem aqui: {LINK}. Sempre que quiser agendar, é só me chamar. Cuide-se.";
 
 // Não serve mais o painel (isso agora é o processo separado painel-server.js, que fica
 // de pé mesmo com o bot desligado). Aqui só sobrou a trava de instância única: se essa
@@ -105,6 +113,59 @@ async function enviarResposta(sock, jid, telefone, texto, semAtraso) {
   }
 }
 
+// Detecta despedida ou recusa explícita de agendar, usando os mesmos regex do config.js que
+// a IA já segue por instrução — aqui é só pra decidir, de forma 100% determinística, se cabe
+// o recado B (nunca a IA decide isso sozinha).
+function pareceDespedidaOuRecusa(texto) {
+  return !!(global.DESPEDIDA_REGEX && global.DESPEDIDA_REGEX.test(texto))
+    || !!(global.RECUSA_AGENDAR_REGEX && global.RECUSA_AGENDAR_REGEX.test(texto));
+}
+
+// Detecta se a própria resposta da Carla acabou de mandar a chave Pix ou o link de
+// pagamento por cartão — esse é o sinal de "forma de pagamento definida" (não tem um evento
+// de "pagamento confirmado" de verdade no sistema, então isso é o mais próximo e confiável).
+function mencionouFormaPagamento(texto) {
+  const chavePix = (global.CARLA_CONFIG && global.CARLA_CONFIG.pix) || "";
+  return (!!chavePix && texto.includes(chavePix)) || texto.includes("link.infinitepay.io");
+}
+
+async function enviarRecadoMateriais(sock, jid, telefone, template, link, semAtraso) {
+  const texto = template.replace("{LINK}", link);
+  await enviarResposta(sock, jid, telefone, texto, semAtraso);
+  Storage.marcarMateriaisEnviados(telefone);
+  console.log(`[MATERIAIS] Recado com o link enviado pra ${telefone}`);
+}
+
+// Imagem recebida (provável comprovante de pagamento) — não passa pelo fluxo normal de
+// texto/debounce, é tratada à parte porque não tem o que a IA "conversar" sobre uma imagem
+// sozinha ainda. Só analisa quando já compensa (link configurado, contato não silenciado,
+// não aguardando humano, e já com consulta marcada de verdade) — assim não gasta a checagem
+// de visão à toa com quem nunca agendou.
+async function processarImagemRecebida(sock, jid, telefone, msg) {
+  try {
+    if (Storage.contatoSilenciado(telefone)) return;
+
+    const sessao = Storage.obterSessao(telefone);
+    if (sessao && sessao.aguardandoHumano) return;
+
+    const jaTemAgendamento = !!(sessao && sessao.ultimoAgendamento) || Storage.lerAgendamentos().some((a) => a.telefone === telefone);
+    if (!jaTemAgendamento) return;
+
+    const linkMateriais = (process.env.LINK_MATERIAIS_URL || "").trim();
+    if (!linkMateriais || !Storage.podeEnviarMateriais(telefone)) return;
+
+    const buffer = await downloadMediaMessage(msg, "buffer", {});
+    const mimetype = msg.message?.imageMessage?.mimetype || "image/jpeg";
+    const pareceComprovante = await CerebroIA.pareceComprovantePagamento(buffer, mimetype);
+    if (!pareceComprovante) return;
+
+    console.log(`[COMPROVANTE] Imagem de ${telefone} parece comprovante de pagamento.`);
+    await enviarRecadoMateriais(sock, jid, telefone, RECADO_MATERIAIS_A, linkMateriais, false);
+  } catch (erro) {
+    console.error(`[COMPROVANTE] Erro ao processar imagem de ${telefone}:`, erro.message);
+  }
+}
+
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
   const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
   const now = new Date();
@@ -154,6 +215,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
 
   sessao.historico = resultado.historico;
 
+  const agendouNestaMensagem = (resultado.acoes || []).length > 0;
   for (const acao of resultado.acoes || []) {
     console.log(`[AGENDADO] ${acao.responsavel} / ${acao.crianca} em ${acao.slot.label}`);
     sessao.ultimoAgendamento = { crianca: acao.crianca, label: acao.slot.label };
@@ -183,6 +245,25 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   }
 
   await enviarResposta(sock, jid, telefone, resultado.resposta, semAtraso);
+
+  // Recado A (forma de pagamento definida) ou B (não agendou) com o link da página de
+  // materiais — ver constantes no topo do arquivo. Enquanto LINK_MATERIAIS_URL não estiver
+  // configurado no .env, este bloco inteiro fica inerte (não manda nada, não quebra nada).
+  const linkMateriais = (process.env.LINK_MATERIAIS_URL || "").trim();
+  const jaTemAgendamento = agendouNestaMensagem
+    || !!sessao.ultimoAgendamento
+    || Storage.lerAgendamentos().some((a) => a.telefone === telefone);
+
+  if (linkMateriais && Storage.podeEnviarMateriais(telefone)) {
+    // Recado A dispara só depois que a Carla manda a chave Pix ou o link do cartão nesta
+    // mesma resposta — ou seja, depois da forma de pagamento definida, não só do horário
+    // reservado (não existe um "pagamento confirmado" de verdade no sistema pra checar).
+    if (jaTemAgendamento && mencionouFormaPagamento(resultado.resposta)) {
+      await enviarRecadoMateriais(sock, jid, telefone, RECADO_MATERIAIS_A, linkMateriais, semAtraso);
+    } else if (!jaTemAgendamento && !resultado.escalar && pareceDespedidaOuRecusa(texto)) {
+      await enviarRecadoMateriais(sock, jid, telefone, RECADO_MATERIAIS_B, linkMateriais, semAtraso);
+    }
+  }
 }
 
 // Lembretes automáticos: aviso 1 semana antes e confirmação no dia da consulta. Só manda
@@ -360,6 +441,17 @@ async function iniciar() {
       const texto = msg.message.conversation
         || msg.message.extendedTextMessage?.text
         || "";
+
+      // Imagem sem legenda (provável comprovante de pagamento) — trata à parte, fora do
+      // fluxo normal de conversa. Com legenda, o texto normal já segue pelo caminho de
+      // sempre (a legenda pode ser uma pergunta de verdade, não só um comprovante).
+      if (msg.message.imageMessage && !texto.trim()) {
+        processarImagemRecebida(sock, jid, telefone, msg).catch((erro) => {
+          console.error("Erro ao processar imagem:", erro.message);
+        });
+        continue;
+      }
+
       if (!texto.trim()) continue;
 
       console.log(`[RECEBIDA] ${telefone} (jid: ${jid}): ${texto}`);
