@@ -96,6 +96,14 @@ A tela de teste no navegador (pasta `carla-app/`) continua funcionando do
 jeito antigo, só com regras, sem precisar de chave nenhuma — ela não foi
 alterada.
 
+## Lembretes automáticos de consulta
+
+Todo agendamento gera dois avisos automáticos por WhatsApp, sem precisar de
+ninguém lembrar manualmente: um 1 semana antes da consulta, e outro no dia da
+consulta (a partir das 8h). Isso é 100% código, roda de forma independente da
+conversa (confere a cada 15 minutos) e nunca manda o mesmo lembrete duas vezes
+pro mesmo agendamento.
+
 ## Integração com o Google Agenda (Onmed)
 
 A Carla também consulta e cria eventos direto na agenda do Google que a Onmed
