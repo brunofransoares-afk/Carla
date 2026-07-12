@@ -124,6 +124,18 @@ async function enviarResposta(sock, jid, telefone, texto, semAtraso) {
   }
 }
 
+// Áudio (mensagem de voz ou arquivo de áudio) — a Carla ainda não consegue ouvir, então só
+// pede, de forma fixa e educada, pra mandar por escrito. Sempre determinístico, nunca passa
+// pela IA. Respeita silêncio manual e atendimento humano em andamento, igual mensagem de texto.
+const PEDIDO_MANDAR_POR_ESCRITO = "Oi 😊 Por aqui eu ainda não consigo ouvir áudio. Poderia me mandar por escrito, por favor? Assim consigo te ajudar certinho.";
+
+async function processarAudioRecebido(sock, jid, telefone) {
+  if (Storage.contatoSilenciado(telefone)) return;
+  const sessao = Storage.obterSessao(telefone);
+  if (sessao && sessao.aguardandoHumano) return;
+  await enviarResposta(sock, jid, telefone, PEDIDO_MANDAR_POR_ESCRITO, false);
+}
+
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
   const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
   const now = new Date();
@@ -376,6 +388,13 @@ async function iniciar() {
       }
 
       Storage.registrarContatoWhatsapp(telefone, { pushName: msg.pushName || null });
+
+      if (msg.message.audioMessage) {
+        processarAudioRecebido(sock, jid, telefone).catch((erro) => {
+          console.error("Erro ao processar áudio:", erro.message);
+        });
+        continue;
+      }
 
       const texto = msg.message.conversation
         || msg.message.extendedTextMessage?.text
