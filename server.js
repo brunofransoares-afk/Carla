@@ -53,6 +53,25 @@ function iniciarTravaInstancia() {
 const DEBOUNCE_MS = 6000;
 const buffers = new Map(); // telefone -> { textos, jid, timer }
 
+// O WhatsApp pode reentregar a mesma mensagem depois de uma reconexão (ex: instabilidade de
+// rede) — se isso acontecer fora da janela do debounce acima, viraria um segundo
+// processamento completo da mesma mensagem, gerando uma resposta duplicada e confusa (a IA
+// vendo a mesma pergunta "de novo" já com a primeira resposta no histórico). Guarda o ID de
+// cada mensagem já vista por um tempo pra nunca processar a mesma duas vezes.
+const DEDUP_JANELA_MS = 10 * 60 * 1000;
+const idsMensagensVistas = new Map(); // msg.key.id -> timestamp de quando foi vista
+
+function jaProcessouMensagem(id) {
+  if (!id) return false;
+  const agora = Date.now();
+  for (const [msgId, vistoEm] of idsMensagensVistas) {
+    if (agora - vistoEm > DEDUP_JANELA_MS) idsMensagensVistas.delete(msgId);
+  }
+  if (idsMensagensVistas.has(id)) return true;
+  idsMensagensVistas.set(id, agora);
+  return false;
+}
+
 function normalizarTelefone(jid) {
   return "+" + jid.split("@")[0];
 }
@@ -337,6 +356,7 @@ async function iniciar() {
 
     for (const msg of messages) {
       if (!msg.message) continue;
+      if (jaProcessouMensagem(msg.key.id)) continue;
 
       const jid = msg.key.remoteJid || "";
       // O WhatsApp mais recente pode identificar o contato por "@lid" (id interno) em vez
