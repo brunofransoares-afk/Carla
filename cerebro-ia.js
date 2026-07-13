@@ -359,12 +359,16 @@ async function executarFerramenta(nome, input, ctx) {
     });
 
     // Manda uma cópia pro Sistema Pediátrico Integrado também (fail-open — ver app-agenda.js).
-    // Reaproveita os mesmos dados e horários já usados acima pro Google Agenda.
+    // Reaproveita os mesmos dados e horários já usados acima pro Google Agenda. Não é
+    // aguardada (não atrasa a resposta pra família) — quando responder, guarda o id lá do
+    // outro sistema junto do agendamento local, pra dar pra cancelar também depois.
     AppAgenda.enviarAgendamento({
       pacienteNome: input.crianca,
       responsavelNome: input.responsavel,
       telefone: ctx.telefone,
       inicio, fim,
+    }).then((appAgendamentoId) => {
+      if (appAgendamentoId) Storage.definirAppAgendamentoId(slotFinal.id, appAgendamentoId);
     });
 
     const ok = Storage.reservar({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca, telefone: ctx.telefone, googleEventId });
@@ -410,6 +414,9 @@ async function executarFerramenta(nome, input, ctx) {
     }
     if (removido.googleEventId) {
       await GoogleAgenda.cancelarEvento(removido.googleEventId);
+    }
+    if (removido.appAgendamentoId) {
+      await AppAgenda.cancelarAgendamento(removido.appAgendamentoId);
     }
     ctx.cancelamentosRealizados.push({ crianca: removido.crianca, label: removido.diaLabel });
     return { sucesso: true, canceladoLabel: removido.diaLabel, crianca: removido.crianca };
