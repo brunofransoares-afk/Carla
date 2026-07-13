@@ -144,10 +144,21 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null }
     registradoEm: new Date().toISOString(),
     lembretes: { semanaAntes: false, diaDaConsulta: false },
     googleEventId,
+    appAgendamentoId: null,
   });
   escreverJSON(ARQ_AGENDAMENTOS, lista);
   reescreverCSV(lista);
   return true;
+}
+
+// Preenche o id do registro criado no Sistema Pediátrico Integrado depois que o envio (fora
+// do fluxo síncrono do agendamento) responde — assim dá pra cancelar lá também depois.
+function definirAppAgendamentoId(slotId, appAgendamentoId) {
+  const lista = lerAgendamentos();
+  const item = lista.find((a) => a.slotId === slotId);
+  if (!item) return;
+  item.appAgendamentoId = appAgendamentoId;
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
 }
 
 // Agendamentos com telefone de verdade (não placeholder tipo "(a confirmar)") que ainda não
@@ -381,7 +392,7 @@ function dessilenciarContato(telefone) {
 }
 
 module.exports = {
-  lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, lerAlertas, registrarAlertaUrgencia,
+  lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,

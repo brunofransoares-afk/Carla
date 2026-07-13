@@ -12,6 +12,7 @@ const { exec } = require("child_process");
 
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
+const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
 
 const PORTA = 3355;
 const NOME_APP_BOT = "carla-bot";
@@ -246,6 +247,9 @@ const servidor = http.createServer(async (req, res) => {
     const removido = corpo.slotId ? Storage.cancelarAgendamento(corpo.slotId) : null;
     if (removido && removido.googleEventId) {
       await GoogleAgenda.cancelarEvento(removido.googleEventId);
+    }
+    if (removido && removido.appAgendamentoId) {
+      await AppAgenda.cancelarAgendamento(removido.appAgendamentoId);
     }
     // Se a Carla tinha em cache "essa conversa já tem consulta marcada" pra esse
     // telefone, apaga o cache — senão ela continua achando que ainda está marcada
