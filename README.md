@@ -104,6 +104,13 @@ consulta (a partir das 8h). Isso é 100% código, roda de forma independente da
 conversa (confere a cada 15 minutos) e nunca manda o mesmo lembrete duas vezes
 pro mesmo agendamento.
 
+## Aviso pro Dr. Bruno a cada agendamento novo
+
+Toda vez que a Carla confirma um agendamento, ela manda uma mensagem de
+WhatsApp (não notificação de navegador — mais confiável) pro número do Dr.
+Bruno, avisando quem marcou e quando. Precisa de `DR_BRUNO_TELEFONE` no
+`.env` (formato `+55...`). Sem essa variável, fica inerte, sem mandar nada.
+
 ## Integração com o Google Agenda (Onmed)
 
 A Carla também consulta e cria eventos direto na agenda do Google que a Onmed

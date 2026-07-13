@@ -136,6 +136,21 @@ async function processarAudioRecebido(sock, jid, telefone) {
   await enviarResposta(sock, jid, telefone, PEDIDO_MANDAR_POR_ESCRITO, false);
 }
 
+// Avisa o Dr. Bruno por WhatsApp (mensagem de verdade, não notificação de navegador — mais
+// confiável) toda vez que a Carla confirma um agendamento novo. Inerte sem DR_BRUNO_TELEFONE
+// configurado no .env. Nunca é aguardada por quem chama — não pode atrasar a resposta pra família.
+async function notificarNovoAgendamento(sock, acao, telefoneFamilia) {
+  const telefoneDrBruno = (process.env.DR_BRUNO_TELEFONE || "").trim();
+  if (!telefoneDrBruno) return;
+  try {
+    const jid = telefoneDrBruno.replace("+", "") + "@s.whatsapp.net";
+    const texto = `Novo agendamento pela Carla 📅\n\nCriança: ${acao.crianca}\nResponsável: ${acao.responsavel}\nTelefone: ${telefoneFamilia}\nQuando: ${acao.slot.label}`;
+    await sock.sendMessage(jid, { text: texto });
+  } catch (erro) {
+    console.error("[NOTIFICAÇÃO] Erro ao avisar o Dr. Bruno:", erro.message);
+  }
+}
+
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
   const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
   const now = new Date();
@@ -188,6 +203,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   for (const acao of resultado.acoes || []) {
     console.log(`[AGENDADO] ${acao.responsavel} / ${acao.crianca} em ${acao.slot.label}`);
     sessao.ultimoAgendamento = { crianca: acao.crianca, label: acao.slot.label };
+    notificarNovoAgendamento(sock, acao, telefone);
   }
 
   for (const cancelado of resultado.cancelamentos || []) {
