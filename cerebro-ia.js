@@ -14,6 +14,7 @@ const path = require("path");
 const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"));
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
+const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
 
 // Sonnet em vez de Haiku aqui de propósito: esse módulo conduz a conversa inteira e
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
@@ -355,6 +356,15 @@ async function executarFerramenta(nome, input, ctx) {
       inicio, fim,
       titulo: `Consulta - ${input.crianca}`,
       descricao: `Responsável: ${input.responsavel}\nTelefone: ${ctx.telefone}\nAgendado pela Carla (WhatsApp)`,
+    });
+
+    // Manda uma cópia pro Sistema Pediátrico Integrado também (fail-open — ver app-agenda.js).
+    // Reaproveita os mesmos dados e horários já usados acima pro Google Agenda.
+    AppAgenda.enviarAgendamento({
+      pacienteNome: input.crianca,
+      responsavelNome: input.responsavel,
+      telefone: ctx.telefone,
+      inicio, fim,
     });
 
     const ok = Storage.reservar({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca, telefone: ctx.telefone, googleEventId });
