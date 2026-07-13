@@ -130,3 +130,24 @@ ainda precisa ser feito manualmente na Onmed quando for conveniente.
 
 Quando um agendamento é cancelado pelo painel, o evento correspondente no
 Google Agenda também é cancelado junto, automaticamente.
+
+## Integração com o Sistema Pediátrico Integrado (prontuário)
+
+Assim que a Carla confirma um agendamento (no mesmo momento em que cria o
+evento no Google Agenda), ela também manda uma cópia desse agendamento pro
+Sistema Pediátrico Integrado — outro projeto, separado deste, que cuida do
+prontuário do paciente.
+
+Precisa de três variáveis no `.env`:
+- `APP_SUPABASE_URL` — URL do projeto Supabase do Sistema Pediátrico Integrado
+- `APP_OWNER_ID` — identificador do Dr. Bruno dentro daquele sistema
+- `APP_SERVICE_ROLE_KEY` — chave `service_role` do Supabase (acesso de servidor,
+  não expor em lugar nenhum além do `.env`)
+
+Sem as três configuradas, esse envio fica completamente inerte — a Carla
+segue confirmando e gravando o agendamento normalmente aqui e no Google
+Agenda, só não manda nada pro outro sistema.
+
+Essa chamada é **fail-open**: se falhar (serviço fora do ar, chave errada,
+timeout), só fica registrado no log — nunca desfaz nem atrasa o agendamento
+de verdade, que já está confirmado antes dessa chamada acontecer.
