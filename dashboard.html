@@ -92,6 +92,7 @@
   li { padding: 9px 12px; border-radius: 10px; margin-bottom: 7px; font-size: 13px; }
   li.urgencia { background: rgba(255,90,90,0.12); color: #ffb3b3; border: 1px solid rgba(255,90,90,0.2); }
   li.nao_entendida { background: rgba(232,200,135,0.14); color: #f0da9f; border: 1px solid rgba(232,200,135,0.22); }
+  li.comercial { background: rgba(135,180,232,0.14); color: #a9c9f0; border: 1px solid rgba(135,180,232,0.22); }
 
   .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 8px currentColor; }
   .status.ok { background: #34d399; color: #34d399; }
@@ -808,8 +809,8 @@
         lista.innerHTML = "<div class='vazio'>Nenhum alerta registrado.</div>";
       } else {
         lista.innerHTML = alertas.map((al) => {
-          const classe = al.tipo === "nao_entendida" ? "nao_entendida" : "urgencia";
-          const rotulo = al.tipo === "nao_entendida" ? "NÃO ENTENDIDA" : "URGÊNCIA";
+          const classe = al.tipo === "nao_entendida" ? "nao_entendida" : al.tipo === "comercial" ? "comercial" : "urgencia";
+          const rotulo = al.tipo === "nao_entendida" ? "NÃO ENTENDIDA" : al.tipo === "comercial" ? "COMERCIAL" : "URGÊNCIA";
           const quando = new Date(al.quando).toLocaleString("pt-BR");
           return `<li class="${classe}"><strong>[${rotulo}]</strong> ${quando} — ${escapeHtml(al.telefone)}: "${escapeHtml(al.mensagem)}"</li>`;
         }).join("");

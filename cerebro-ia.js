@@ -161,6 +161,8 @@ COMO FALAR DE ESCALONAMENTO: toda vez que usar escalar_humano, informe que "algu
 
 Se não for possível ajudar com segurança, ou a situação realmente exigir alguém humano (ex: pedido muito específico fora do que você sabe, reclamação grave, algo ambíguo demais mesmo depois de tentar entender), use a ferramenta escalar_humano.
 
+CONTATO COMERCIAL/PROFISSIONAL (não é família de paciente): se a mensagem for claramente de representante de laboratório, convite pra palestra/evento, proposta de parceria, divulgação de produto ou qualquer contato comercial/profissional que não seja sobre agendar consulta pra uma criança, NÃO tente ajudar nem conduza como se fosse atendimento normal. Responda educadamente, uma única vez, algo como "Obrigada pelo contato! Vou repassar essa mensagem pro Dr. Bruno." e use escalar_humano com tipo="comercial" e o motivo resumindo do que se trata. Depois disso você fica em silêncio nessa conversa (não continue interagindo sobre o assunto).
+
 NUNCA: usar menu numerado, resposta gigante, repetir saudação, responder só o preço seco, negociar valor, oferecer desconto, fazer interrogatório, despejar currículo de uma vez, parecer clínica popular ou chatbot automático.`;
 }
 
@@ -221,7 +223,10 @@ const FERRAMENTAS = [
     description: "Chama quando não for possível ajudar com segurança pelas regras normais, ou a situação exigir atendimento humano direto.",
     input_schema: {
       type: "object",
-      properties: { motivo: { type: "string" } },
+      properties: {
+        motivo: { type: "string" },
+        tipo: { type: "string", enum: ["atendimento", "comercial"], description: "\"comercial\" quando for representante de laboratório, convite pra palestra/evento, proposta de parceria ou qualquer contato comercial/profissional (não família de paciente). Deixe \"atendimento\" (ou omita) pros outros casos de escalonamento." },
+      },
       required: ["motivo"],
     },
   },
@@ -427,6 +432,7 @@ async function executarFerramenta(nome, input, ctx) {
 
   if (nome === "escalar_humano") {
     ctx.escalar = input.motivo || "não especificado";
+    ctx.escalarTipo = input.tipo === "comercial" ? "comercial" : "atendimento";
     return { ok: true };
   }
 
@@ -497,7 +503,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     { role: "user", content: texto },
   ];
 
-  const ctx = { now, idsOcupados, telefone, acoesRealizadas: [], cancelamentosRealizados: [], escalar: null, agendamentoAtual };
+  const ctx = { now, idsOcupados, telefone, acoesRealizadas: [], cancelamentosRealizados: [], escalar: null, escalarTipo: null, agendamentoAtual };
   let respostaTexto;
   try {
     respostaTexto = await chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx });
@@ -541,6 +547,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     acoes: ctx.acoesRealizadas,
     cancelamentos: ctx.cancelamentosRealizados,
     escalar: ctx.escalar,
+    escalarTipo: ctx.escalarTipo,
   };
 }
 
