@@ -216,7 +216,8 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // Usa o motivo que a própria IA escreveu (geralmente já inclui nome do responsável e da
     // criança, quando ela colheu isso antes de escalar) em vez da última mensagem crua —
     // é bem mais útil pra você conseguir retornar o contato sabendo do que se trata.
-    Storage.registrarAlertaUrgencia({ telefone, mensagem: resultado.escalar, tipo: "nao_entendida" });
+    const tipoAlerta = resultado.escalarTipo === "comercial" ? "comercial" : "nao_entendida";
+    Storage.registrarAlertaUrgencia({ telefone, mensagem: resultado.escalar, tipo: tipoAlerta });
     console.log(`[ALERTA: ESCALADO PELA IA] ${telefone}: "${resultado.escalar}"`);
   }
 
