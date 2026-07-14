@@ -834,6 +834,12 @@
   atualizarStatusBot();
   setInterval(atualizar, 8000);
   setInterval(atualizarStatusBot, 5000);
+
+  // Registra o service worker — é o que faz o navegador oferecer "Instalar" o painel
+  // como app no PC (e no celular). Não muda nada no funcionamento normal da página.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
 </script>
 
 </body>

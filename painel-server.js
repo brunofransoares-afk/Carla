@@ -120,6 +120,13 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  // Service worker — necessário pro navegador oferecer "Instalar" o painel como app.
+  if (req.url === "/sw.js") {
+    res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" });
+    res.end(fs.readFileSync(path.join(__dirname, "sw.js")));
+    return;
+  }
+
   // path.basename corta qualquer ".." do pedido — só serve arquivo que já existe
   // dentro da pasta icons/, nunca deixa escapar pra ler outro arquivo do projeto.
   if (req.url.startsWith("/icons/")) {
