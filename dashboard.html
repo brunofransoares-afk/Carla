@@ -52,10 +52,9 @@
   .marca { display: flex; align-items: center; gap: 14px; }
   .avatar {
     width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
-    background: linear-gradient(135deg, var(--acento), var(--acento-escuro));
-    display: flex; align-items: center; justify-content: center;
-    font-family: "Poppins", serif; font-weight: 700; font-size: 20px; color: #06231a;
-    box-shadow: 0 6px 18px rgba(52,211,153,0.35);
+    object-fit: cover; display: block;
+    border: 1px solid var(--vidro-borda);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
   }
   h1 { font-size: 22px; letter-spacing: 0.3px; color: #f2fbf7; }
   .subtitulo { color: var(--texto-fraco); font-size: 12.5px; margin-top: 3px; display: flex; align-items: center; }
@@ -217,7 +216,8 @@
 
   <div class="topo">
     <div class="marca">
-      <div class="avatar">C</div>
+      <img class="avatar" src="/icons/carla.jpg" alt="Carla">
+
       <div>
         <h1>Painel da Carla</h1>
         <div class="subtitulo"><span class="status ok" id="status-dot"></span><span id="status-texto">Atualizando automaticamente...</span></div>

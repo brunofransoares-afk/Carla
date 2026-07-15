@@ -132,7 +132,12 @@ const servidor = http.createServer(async (req, res) => {
   if (req.url.startsWith("/icons/")) {
     const arquivo = path.join(PASTA_ICONES, path.basename(req.url));
     if (arquivo.startsWith(PASTA_ICONES) && fs.existsSync(arquivo)) {
-      res.writeHead(200, { "Content-Type": "image/png" });
+      const ext = path.extname(arquivo).toLowerCase();
+      const tipo = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"
+        : ext === ".webp" ? "image/webp"
+        : ext === ".svg" ? "image/svg+xml"
+        : "image/png";
+      res.writeHead(200, { "Content-Type": tipo });
       res.end(fs.readFileSync(arquivo));
     } else {
       res.writeHead(404);
