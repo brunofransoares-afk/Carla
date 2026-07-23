@@ -20,6 +20,7 @@ const ARQ_BLOQUEIOS_HORARIOS = path.join(DIR_DADOS, "bloqueios-horarios.json");
 const ARQ_SILENCIADOS = path.join(DIR_DADOS, "contatos-silenciados.json");
 const ARQ_CONTATOS_WHATSAPP = path.join(DIR_DADOS, "contatos-whatsapp.json");
 const ARQ_PACIENTES_MANUAIS = path.join(DIR_DADOS, "pacientes-manuais.json");
+const ARQ_NAO_PACIENTES_MANUAIS = path.join(DIR_DADOS, "nao-pacientes-manuais.json");
 
 function garantirPasta() {
   if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
@@ -299,23 +300,42 @@ function lerPacientesManuais() {
   return lerJSON(ARQ_PACIENTES_MANUAIS, []);
 }
 
+// Lista de telefones que o painel forçou a NÃO ser paciente, mesmo estando salvos com nome
+// na agenda do celular. Sobrepõe a detecção automática por nomeSalvo — assim dá pra fazer a
+// Carla tratar de novo como lead novo (primeira vez) alguém que ela detectaria como conhecido.
+function lerNaoPacientesManuais() {
+  return lerJSON(ARQ_NAO_PACIENTES_MANUAIS, []);
+}
+
+// Marca como paciente: tira da lista de "não-paciente" (se estava) e, se não for um contato
+// já salvo com nome, adiciona na lista de pacientes manuais. Sempre resulta em paciente.
 function marcarPacienteManual(telefone) {
+  const naoPacientes = lerNaoPacientesManuais().filter((t) => t !== telefone);
+  escreverJSON(ARQ_NAO_PACIENTES_MANUAIS, naoPacientes);
   const lista = lerPacientesManuais();
   if (!lista.includes(telefone)) lista.push(telefone);
   escreverJSON(ARQ_PACIENTES_MANUAIS, lista);
   return lista;
 }
 
+// Remove a marcação de paciente: tira da lista de pacientes manuais E adiciona na lista de
+// "não-paciente" (que sobrepõe o nomeSalvo). Sempre resulta em não-paciente, mesmo pra quem
+// estava salvo com nome na agenda.
 function desmarcarPacienteManual(telefone) {
   const lista = lerPacientesManuais().filter((t) => t !== telefone);
   escreverJSON(ARQ_PACIENTES_MANUAIS, lista);
+  const naoPacientes = lerNaoPacientesManuais();
+  if (!naoPacientes.includes(telefone)) naoPacientes.push(telefone);
+  escreverJSON(ARQ_NAO_PACIENTES_MANUAIS, naoPacientes);
   return lista;
 }
 
 // true quando o telefone está salvo com nome na agenda do celular do Dr. Bruno (sinal
 // automático) OU foi marcado manualmente como paciente pelo painel — qualquer um dos dois
-// já ajusta o tom de abordagem da Carla (ver cerebro-ia.js).
+// já ajusta o tom de abordagem da Carla (ver cerebro-ia.js). A lista de "não-paciente"
+// (forçada pelo painel) sobrepõe tudo isso, sempre.
 function ehPacienteConhecido(telefone) {
+  if (lerNaoPacientesManuais().includes(telefone)) return false;
   const contato = lerContatosWhatsappMapa()[telefone];
   if (contato && contato.nomeSalvo) return true;
   return lerPacientesManuais().includes(telefone);
@@ -330,15 +350,20 @@ function listarTodosContatos() {
   const sessoes = lerSessoes();
   const silenciados = new Set(lerContatosSilenciados());
   const pacientesManuais = new Set(lerPacientesManuais());
+  const naoPacientes = new Set(lerNaoPacientesManuais());
   const telefones = new Set([...Object.keys(contatosWhatsapp), ...pacientesManuais]);
   const lista = [...telefones].map((telefone) => {
     const info = contatosWhatsapp[telefone] || {};
     const sessao = sessoes[telefone];
     const marcadoManualmente = pacientesManuais.has(telefone);
+    // Estado efetivo de paciente (o mesmo que a Carla usa): "não-paciente" forçado sobrepõe
+    // tudo; senão, é paciente se estiver salvo com nome ou marcado manualmente.
+    const ehPaciente = naoPacientes.has(telefone) ? false : (!!info.nomeSalvo || marcadoManualmente);
     return {
       telefone,
       nome: info.nomeSalvo || info.pushName || null,
-      contatoSalvo: !!info.nomeSalvo || marcadoManualmente,
+      ehPaciente,
+      contatoSalvo: ehPaciente,
       marcadoManualmente,
       ultimaAtividade: (sessao && sessao.ultimaAtividade) || null,
       ultimaMensagem: (sessao && sessao.ultimaMensagem) || "",
@@ -400,6 +425,6 @@ module.exports = {
   listarContatosRecentes, metricasConversao,
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
   registrarContatoWhatsapp, listarTodosContatos, ehPacienteConhecido,
-  lerPacientesManuais, marcarPacienteManual, desmarcarPacienteManual,
+  lerPacientesManuais, lerNaoPacientesManuais, marcarPacienteManual, desmarcarPacienteManual,
   retomarAtendimento, limparConversa,
 };

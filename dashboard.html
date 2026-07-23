@@ -625,7 +625,7 @@
         ${tags ? `<div class="contato-tags">${tags}</div>` : ""}
         <div class="contato-botoes">
           <button class="btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado — reativar" : "Silenciar"}</button>
-          <button class="btn-marcar-contato ${c.marcadoManualmente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}" ${c.contatoSalvo && !c.marcadoManualmente ? "disabled" : ""}>${c.marcadoManualmente ? "Remover marcação de paciente" : (c.contatoSalvo ? "Já é paciente" : "Marcar como paciente")}</button>
+          <button class="btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${c.ehPaciente ? "Remover marcação de paciente" : "Marcar como paciente"}</button>
           ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
           ${c.ultimaAtividade ? `<button class="btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
         </div>
@@ -693,8 +693,8 @@
 
   async function alternarMarcacaoPaciente(telefone) {
     const contato = contatosAtuais.find((c) => c.telefone === telefone);
-    const marcado = !!(contato && contato.marcadoManualmente);
-    const rota = marcado ? "/api/desmarcar-paciente" : "/api/marcar-paciente";
+    const ehPaciente = !!(contato && contato.ehPaciente);
+    const rota = ehPaciente ? "/api/desmarcar-paciente" : "/api/marcar-paciente";
     try {
       await fetch(rota, {
         method: "POST",
