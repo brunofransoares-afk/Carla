@@ -8,7 +8,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#0b1512">
+<meta name="theme-color" content="#1e3324">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Carla">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,13 +17,16 @@
   * { box-sizing: border-box; }
 
   :root {
-    --acento: #34d399;
-    --acento-escuro: #0ea678;
-    --ouro: #e8c887;
-    --vidro: rgba(255,255,255,0.045);
-    --vidro-borda: rgba(255,255,255,0.09);
-    --texto: #e9f2ee;
-    --texto-fraco: #93a6a0;
+    --verde-logo: #1e3324;
+    --ouro: #cba05a;
+    --ouro-claro: #e8c887;
+    --acento: #cba05a;          /* acento agora e o dourado da logo */
+    --acento-escuro: #a67c3c;
+    --sucesso: #4fb07d;         /* verde de estado positivo (online, fechou, ocupado) */
+    --vidro: rgba(255,255,255,0.035);
+    --vidro-borda: rgba(203,160,90,0.15);
+    --texto: #eef3ec;
+    --texto-fraco: #96a89a;
   }
 
   html { scroll-behavior: smooth; }
@@ -33,16 +36,17 @@
     min-height: 100vh;
     font-family: "Inter", "Segoe UI", Arial, sans-serif;
     color: var(--texto);
-    background: radial-gradient(circle at 15% -10%, #123024 0%, transparent 45%),
-                radial-gradient(circle at 110% 15%, #1c2f45 0%, transparent 40%),
-                linear-gradient(160deg, #060b10 0%, #0a1713 55%, #050a08 100%);
+    background: radial-gradient(circle at 12% -8%, #274733 0%, transparent 46%),
+                radial-gradient(circle at 108% 10%, rgba(203,160,90,0.12) 0%, transparent 44%),
+                linear-gradient(165deg, #0b1610 0%, #13251a 52%, #081007 100%);
+    background-color: #0a140e;
     position: relative;
     overflow-x: hidden;
   }
 
-  .brilho { position: fixed; border-radius: 50%; filter: blur(90px); pointer-events: none; z-index: 0; opacity: 0.55; }
-  .brilho-1 { width: 420px; height: 420px; top: -140px; right: -100px; background: radial-gradient(circle, rgba(52,211,153,0.35), transparent 70%); }
-  .brilho-2 { width: 380px; height: 380px; bottom: -160px; left: -120px; background: radial-gradient(circle, rgba(232,200,135,0.18), transparent 70%); }
+  .brilho { position: fixed; border-radius: 50%; filter: blur(100px); pointer-events: none; z-index: 0; opacity: 0.5; }
+  .brilho-1 { width: 440px; height: 440px; top: -150px; right: -110px; background: radial-gradient(circle, rgba(203,160,90,0.22), transparent 70%); }
+  .brilho-2 { width: 400px; height: 400px; bottom: -170px; left: -130px; background: radial-gradient(circle, rgba(46,90,60,0.5), transparent 70%); }
 
   .pagina { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
 
@@ -51,11 +55,10 @@
   .topo { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
   .marca { display: flex; align-items: center; gap: 14px; }
   .avatar {
-    width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
-    background: linear-gradient(135deg, var(--acento), var(--acento-escuro));
-    display: flex; align-items: center; justify-content: center;
-    font-family: "Poppins", serif; font-weight: 700; font-size: 20px; color: #06231a;
-    box-shadow: 0 6px 18px rgba(52,211,153,0.35);
+    width: 52px; height: 52px; border-radius: 15px; flex-shrink: 0;
+    object-fit: cover; display: block;
+    border: 1px solid rgba(203,160,90,0.35);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
   }
   h1 { font-size: 22px; letter-spacing: 0.3px; color: #f2fbf7; }
   .subtitulo { color: var(--texto-fraco); font-size: 12.5px; margin-top: 3px; display: flex; align-items: center; }
@@ -65,17 +68,19 @@
 
   .cartao {
     background: var(--vidro);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
     border: 1px solid var(--vidro-borda);
-    border-radius: 18px;
+    border-radius: 20px;
     padding: 18px 20px;
     margin-bottom: 20px;
-    box-shadow: 0 10px 35px rgba(0,0,0,0.35);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.4);
   }
   .cartao h2 {
-    font-size: 14.5px; font-weight: 600; color: #cdeee0;
-    margin: 0 0 14px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 14.5px; font-weight: 600; color: #dfeede;
+    margin: 0 0 14px; padding-bottom: 11px;
+    border-bottom: 1px solid rgba(203,160,90,0.14);
+    display: flex; justify-content: space-between; align-items: center;
   }
   .titulo-icone { display: flex; align-items: center; }
 
@@ -95,7 +100,7 @@
   li.comercial { background: rgba(135,180,232,0.14); color: #a9c9f0; border: 1px solid rgba(135,180,232,0.22); }
 
   .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 8px currentColor; }
-  .status.ok { background: #34d399; color: #34d399; }
+  .status.ok { background: var(--sucesso); color: var(--sucesso); }
   .status.erro { background: #ef4444; color: #ef4444; }
 
   #erro-conexao { display: none; color: #ffb3b3; background: rgba(255,90,90,0.12); border: 1px solid rgba(255,90,90,0.25); padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
@@ -103,11 +108,11 @@
   .cartao-bot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; }
   .bot-status { display: flex; align-items: center; font-size: 13.5px; font-weight: 600; }
   .bot-status .status { width: 11px; height: 11px; }
-  .bot-status.ligada { color: var(--acento); }
+  .bot-status.ligada { color: var(--sucesso); }
   .bot-status.desligada { color: var(--texto-fraco); }
   #btn-toggle { border: none; border-radius: 20px; padding: 9px 20px; font-size: 13.5px; font-weight: 600; cursor: pointer; color: white; transition: opacity 0.15s, transform 0.15s; }
   #btn-toggle:hover:not(:disabled) { transform: translateY(-1px); }
-  #btn-toggle.ligar { background: linear-gradient(135deg, #34d399, #0ea678); color: #06231a; }
+  #btn-toggle.ligar { background: linear-gradient(135deg, #5cbf88, #2f8f5f); color: #05210f; }
   #btn-toggle.desligar { background: linear-gradient(135deg, #f87171, #dc2626); }
   #btn-toggle:disabled { opacity: 0.55; cursor: default; }
 
@@ -138,7 +143,7 @@
   .cal-dia.passado { color: rgba(255,255,255,0.2); cursor: default; background: transparent; }
   .cal-dia.bloqueado { background: rgba(255,90,90,0.3); color: #ffd4d4; font-weight: 600; }
   .cal-dia.bloqueado:hover { background: rgba(255,90,90,0.42); }
-  .cal-dia .cal-ponto { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--acento); }
+  .cal-dia .cal-ponto { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--sucesso); }
   .calendario-legenda { display: flex; gap: 16px; margin-top: 12px; font-size: 11px; color: var(--texto-fraco); flex-wrap: wrap; }
   .calendario-legenda span { display: inline-flex; align-items: center; gap: 5px; }
   .cal-dia.selecionado { outline: 2px solid var(--acento); outline-offset: -2px; }
@@ -217,7 +222,7 @@
 
   <div class="topo">
     <div class="marca">
-      <div class="avatar">C</div>
+      <img class="avatar" src="/icons/icon-192.png" alt="Carla">
       <div>
         <h1>Painel da Carla</h1>
         <div class="subtitulo"><span class="status ok" id="status-dot"></span><span id="status-texto">Atualizando automaticamente...</span></div>
@@ -260,7 +265,7 @@
           <div class="calendario" id="calendario"></div>
           <div class="calendario-legenda">
             <span><span class="legenda-cor" style="background:rgba(255,90,90,0.6)"></span> Bloqueado (sem vaga nova)</span>
-            <span><span class="legenda-cor" style="background:#34d399"></span> Tem consulta marcada</span>
+            <span><span class="legenda-cor" style="background:#4fb07d"></span> Tem consulta marcada</span>
           </div>
           <div class="painel-horarios-dia" id="painel-horarios-dia" style="display:none"></div>
         </div>
@@ -761,7 +766,7 @@
   function renderizarConversao(metricas) {
     const m = metricas || { totalContatos: 0, totalFechados: 0, taxa: 0 };
     const anel = document.getElementById("conversao-anel");
-    anel.style.background = `conic-gradient(#34d399 ${m.taxa}%, rgba(255,255,255,0.08) 0)`;
+    anel.style.background = `conic-gradient(#cba05a ${m.taxa}%, rgba(255,255,255,0.07) 0)`;
     document.getElementById("conversao-numero").textContent = `${m.taxa}%`;
     document.getElementById("conversao-detalhe").textContent = m.totalContatos === 0
       ? "Sem dados ainda."
