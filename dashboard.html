@@ -157,6 +157,18 @@
   .horario-slot.bloqueado { background: rgba(255,90,90,0.16); border-color: rgba(255,90,90,0.3); color: #ffb3b3; }
   .horario-slot.bloqueado:hover:not(:disabled) { background: rgba(255,90,90,0.28); }
   .horario-slot.ocupado { background: rgba(52,211,153,0.14); border-color: rgba(52,211,153,0.3); color: #6ee7b7; cursor: default; }
+  .horario-slot.extra { border-color: rgba(203,160,90,0.5); box-shadow: inset 0 0 0 1px rgba(203,160,90,0.18); }
+  .horario-slot.extra::after { content: "+"; font-size: 9px; vertical-align: super; color: var(--ouro); margin-left: 2px; }
+
+  .extra-form { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  .extra-form input { background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--texto); color-scheme: dark; }
+  .extra-form button { border: none; background: rgba(203,160,90,0.18); color: var(--ouro-claro); border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+  .extra-form button:hover { background: rgba(203,160,90,0.3); }
+  .extras-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip-extra { display: inline-flex; align-items: center; gap: 6px; background: rgba(203,160,90,0.1); border: 1px solid rgba(203,160,90,0.25); color: var(--ouro-claro); font-size: 11.5px; padding: 4px 6px 4px 10px; border-radius: 12px; }
+  .chip-extra button { border: none; background: rgba(203,160,90,0.25); color: #f3e2c4; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; }
+  .chip-extra button:hover { background: rgba(203,160,90,0.45); }
+
   .btn-fechar-horarios-dia { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 12px; }
   .btn-fechar-horarios-dia:hover { background: rgba(255,255,255,0.13); }
   .legenda-cor { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
@@ -463,25 +475,74 @@
       </div>
     </div>`;
 
-    if (horarios.length === 0) {
-      painel.innerHTML = `${cabecalho}<div class="vazio">Nenhum horário de atendimento nesse dia.</div>`;
-    } else {
-      painel.innerHTML = `${cabecalho}<div class="horarios-dia-grid">${horarios.map((h) => {
-        const classes = ["horario-slot"];
-        if (h.ocupado) classes.push("ocupado");
-        else if (h.bloqueado) classes.push("bloqueado");
-        const titulo = h.ocupado
-          ? `${h.responsavel} / ${h.crianca}`
-          : (h.bloqueado ? "Bloqueado — clique pra liberar" : "Livre — clique pra bloquear");
-        return `<button class="${classes.join(" ")}" ${h.ocupado ? "disabled" : `data-slot-id="${escapeHtml(h.slotId)}"`} title="${escapeHtml(titulo)}">${h.time}</button>`;
-      }).join("")}</div>`;
-    }
+    const grade = horarios.length === 0
+      ? `<div class="vazio">Nenhum horário de atendimento nesse dia.</div>`
+      : `<div class="horarios-dia-grid">${horarios.map((h) => {
+          const classes = ["horario-slot"];
+          if (h.ocupado) classes.push("ocupado");
+          else if (h.bloqueado) classes.push("bloqueado");
+          if (h.extra) classes.push("extra");
+          const titulo = h.ocupado
+            ? `${h.responsavel} / ${h.crianca}`
+            : (h.bloqueado ? "Bloqueado — clique pra liberar" : "Livre — clique pra bloquear");
+          const sufixo = h.extra ? " (horário extra)" : "";
+          return `<button class="${classes.join(" ")}" ${h.ocupado ? "disabled" : `data-slot-id="${escapeHtml(h.slotId)}"`} title="${escapeHtml(titulo + sufixo)}">${h.time}</button>`;
+        }).join("")}</div>`;
+
+    // Só dá pra remover um horário extra que ainda não tem consulta marcada — senão a
+    // consulta ficaria órfã, sem o horário correspondente na agenda.
+    const extrasRemoviveis = horarios.filter((h) => h.extra && !h.ocupado);
+    const chipsExtras = extrasRemoviveis.length === 0 ? "" : `<div class="extras-lista">${extrasRemoviveis.map((h) =>
+      `<span class="chip-extra">${h.time}<button data-remover-extra="${escapeHtml(h.slotId)}" title="Remover esse horário extra">✕</button></span>`
+    ).join("")}</div>`;
+
+    painel.innerHTML = `${cabecalho}${grade}
+      <div class="extra-form">
+        <input type="time" id="input-hora-extra" step="1800">
+        <button id="btn-add-extra">Liberar horário</button>
+      </div>${chipsExtras}`;
 
     document.getElementById("btn-fechar-horarios-dia").addEventListener("click", () => alternarDiaExpandido(data));
     document.getElementById("btn-bloquear-dia-inteiro").addEventListener("click", () => alternarBloqueio(data));
     painel.querySelectorAll(".horario-slot[data-slot-id]").forEach((btn) => {
       btn.addEventListener("click", () => alternarBloqueioHorario(btn.dataset.slotId, data));
     });
+    document.getElementById("btn-add-extra").addEventListener("click", () => adicionarHorarioExtra(data));
+    document.getElementById("input-hora-extra").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") adicionarHorarioExtra(data);
+    });
+    painel.querySelectorAll("[data-remover-extra]").forEach((btn) => {
+      btn.addEventListener("click", () => removerHorarioExtra(btn.dataset.removerExtra, data));
+    });
+  }
+
+  async function adicionarHorarioExtra(data) {
+    const input = document.getElementById("input-hora-extra");
+    const hora = (input.value || "").slice(0, 5);
+    if (!hora) return;
+    try {
+      await fetch("/api/horario-extra", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data, hora }),
+      });
+    } catch (e) {
+      // se falhar, o horário simplesmente não entra e dá pra tentar de novo
+    }
+    carregarHorariosDoDia(data);
+  }
+
+  async function removerHorarioExtra(slotId, data) {
+    try {
+      await fetch("/api/horario-extra-remover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slotId }),
+      });
+    } catch (e) {
+      // idem: sem efeito se falhar
+    }
+    carregarHorariosDoDia(data);
   }
 
   async function alternarBloqueioHorario(slotId, data) {

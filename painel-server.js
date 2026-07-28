@@ -183,6 +183,31 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  // Libera um horário fora da grade padrão (ex: uma sexta à tarde). Valida data e hora
+  // aqui, no servidor — o painel nunca é a única barreira contra um valor esquisito.
+  if (req.url === "/api/horario-extra" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const data = typeof corpo.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(corpo.data) ? corpo.data : null;
+    const hora = typeof corpo.hora === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(corpo.hora) ? corpo.hora : null;
+    if (!data || !hora) {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: false, erro: "Data ou hora inválida." }));
+      return;
+    }
+    Storage.adicionarHorarioExtra(data, hora);
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true, horarios: Storage.listarHorariosDoDia(data) }));
+    return;
+  }
+
+  if (req.url === "/api/horario-extra-remover" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    if (corpo.slotId) Storage.removerHorarioExtra(corpo.slotId);
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   if (req.url === "/api/silenciar" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const telefone = corpo.telefone ? normalizarTelefoneManual(corpo.telefone) : null;

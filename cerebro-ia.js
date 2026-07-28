@@ -265,7 +265,12 @@ async function executarFerramenta(nome, input, ctx) {
       // Ignora a preferência padrão do consultório (segunda de manhã/terça de tarde) e pega
       // os horários realmente mais próximos em ordem cronológica — pra não empurrar quem
       // pediu encaixe rápido pra uma data distante só porque bateu com a preferência.
-      const candidatosUrgente = Agenda.disponiveis(ctx.now, ctx.idsOcupados).slice(0, 10);
+      // Junta os horários extras liberados na mão e reordena no tempo: num pedido urgente o
+      // que importa é o mais cedo, então um extra pode legitimamente vir antes da grade.
+      const candidatosUrgente = [
+        ...Agenda.disponiveis(ctx.now, ctx.idsOcupados),
+        ...Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados),
+      ].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).slice(0, 10);
       const livresUrgente = [];
       for (const c of candidatosUrgente) {
         if (livresUrgente.length >= 2) break;
@@ -303,9 +308,13 @@ async function executarFerramenta(nome, input, ctx) {
     const dataPreferida = input.data || null;
     // Pega mais candidatos do que o necessário (6, não 2) porque alguns podem cair fora
     // depois de checar o Google Agenda — só ficam os 2 primeiros que passarem nas duas checagens.
-    const candidatos = Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, {
-      diaPreferido, periodo, dataPreferida, count: 6,
-    });
+    // Os horários extras entram DEPOIS dos da grade, de propósito: a preferência normal do
+    // consultório continua ganhando, e o extra funciona como capacidade a mais — aparece
+    // quando a grade não tem vaga suficiente, ou quando pedem justamente aquele dia/período.
+    const candidatos = [
+      ...Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida, count: 6 }),
+      ...Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida }),
+    ];
     const livres = [];
     for (const c of candidatos) {
       if (livres.length >= 2) break;
@@ -328,7 +337,7 @@ async function executarFerramenta(nome, input, ctx) {
     // a agenda real antes de gravar qualquer coisa. Isso também cobre o caso de a IA tentar
     // "reconfirmar" um agendamento que já foi feito antes nessa mesma conversa: se o id não
     // bater com um horário real e gerável pela agenda, a reserva simplesmente não acontece.
-    const slotReal = Agenda.gerarSlotsPossiveis(ctx.now).find((s) => s.id === input.slotId);
+    const slotReal = Storage.slotsPossiveisComExtras(ctx.now).find((s) => s.id === input.slotId);
     if (!slotReal) {
       return { sucesso: false, motivo: "Esse horário não corresponde a um horário real da agenda. Se essa consulta já foi confirmada antes nesta conversa, não chame essa ferramenta de novo — apenas continue a conversa normalmente (ex: informando a forma de pagamento)." };
     }
