@@ -20,36 +20,58 @@ Git de propósito, porque são segredo e dado de paciente. `carla-app/` ficou de
 acidente estrutural. É código de regra de negócio, e código de regra de negócio pertence
 ao repositório.
 
-## Como versionar (rode no VPS)
+## Como versionar
+
+**NUNCA troque o branch dentro de `/root/carla`.** Essa é a pasta de onde o PM2 roda a
+Carla de verdade, e o `auto-deploy.sh` espera encontrá-la em `main`. Deixar o checkout de
+produção apontando para outro branch é uma armadilha: qualquer push futuro naquele branch
+passaria a cair na pasta de produção.
+
+A pasta de produção é só de leitura neste procedimento.
+
+### Passo 1, no VPS: conferir se há segredo
+
+O repositório `Carla` é **público**. Antes de qualquer coisa:
 
 ```bash
-cd /root/carla
+grep -niE 'key|token|senha|password|secret|credential|@gmail|https://' /root/carla/carla-app/js/config.js /root/carla/carla-app/js/agenda.js
+```
 
-# 1. ver o que existe
-ls -la carla-app/js/
+Se aparecer alguma linha com chave, token ou senha, **pare** e avise antes de continuar.
 
-# 2. copiar pra dentro do repositório, num branch que não vai pra produção
-git fetch origin carla/lab
-git checkout carla/lab
+### Passo 2, no VPS: mostrar o conteúdo
+
+```bash
+wc -l /root/carla/carla-app/js/config.js /root/carla/carla-app/js/agenda.js
+cat /root/carla/carla-app/js/config.js
+cat /root/carla/carla-app/js/agenda.js
+```
+
+O conteúdo é copiado e commitado a partir daí, sem rodar nenhum comando de Git no
+servidor. Isso é `cat`: leitura pura, nada é alterado, a Carla nem percebe.
+
+### Alternativa, se preferir commitar do servidor
+
+Use um **clone separado**, nunca a pasta de produção:
+
+```bash
+git clone /root/carla /root/carla-lab-tmp
+cd /root/carla-lab-tmp
+git remote set-url origin <url-do-github>
+git fetch origin carla/lab && git checkout carla/lab
+
 mkdir -p carla-lab/vps/arquivos
-cp carla-app/js/config.js  carla-lab/vps/arquivos/config.js
-cp carla-app/js/agenda.js  carla-lab/vps/arquivos/agenda.js
-
-# 3. CONFERIR ANTES DE COMMITAR
-#    Se houver chave, token ou senha dentro desses arquivos, PARE e me avise.
-grep -niE 'key|token|senha|password|secret|credential' carla-lab/vps/arquivos/*.js
+cp /root/carla/carla-app/js/config.js carla-lab/vps/arquivos/
+cp /root/carla/carla-app/js/agenda.js carla-lab/vps/arquivos/
 
 git add carla-lab/vps/arquivos
 git commit -m "Versiona config.js e agenda.js, que so existiam no VPS"
 git push origin carla/lab
+
+cd / && rm -rf /root/carla-lab-tmp
 ```
 
-O passo 3 não é formalidade. O repositório `Carla` é **público**. Enquanto esses arquivos
-não forem lidos por alguém, não dá para afirmar que não contêm nada sensível. Rode o
-`grep`, olhe o resultado, e só então commite.
-
-Nada disso muda o comportamento da Carla: é cópia de arquivo, em branch que não vai para
-`main`, e o `auto-deploy.sh` só faz `merge --ff-only` em `main`.
+Em qualquer um dos caminhos, `/root/carla` continua em `main`, intocada.
 
 ## O contrato que esses arquivos precisam cumprir
 

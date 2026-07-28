@@ -48,13 +48,42 @@ pm2 logs carla-staging-bot
 O passo 3 é deliberado: staging começa com a agenda vazia. Copiar `data/` de produção
 traria nome e telefone de crianças para um ambiente de teste, e não há motivo para isso.
 
-## Rodar a suíte de regressão
+## Rodar a suíte de regressão NÃO exige tudo isso
+
+Correção de uma afirmação anterior deste documento: a suíte **não precisa de chip de
+WhatsApp, nem de sessão do Baileys, nem deste staging completo**.
+
+`executar.js` carrega `cerebro-ia.js` diretamente. Ele nunca carrega `server.js`, que é
+quem fala com o WhatsApp. Nenhuma mensagem sai para ninguém, em nenhum cenário.
+
+O Google Agenda se protege sozinho: `google-agenda.js` só age se **as duas** condições
+forem verdadeiras, o arquivo `google-credenciais.json` existir e `GOOGLE_CALENDAR_ID`
+estiver definida. Faltando qualquer uma, o módulo fica inerte por decisão do próprio
+código, não por configuração que alguém possa esquecer.
+
+Então para rodar a suíte basta um clone separado, sem credencial:
 
 ```bash
-cd /root/carla-staging
-node carla-lab/regressao/verificar-cobertura.js   # integridade do corpus
-node carla-lab/regressao/executar.js              # a Carla de verdade, 55 casos
+git clone /root/carla /root/carla-testes
+cd /root/carla-testes
+git remote set-url origin <url-do-github>
+git fetch origin carla/lab && git checkout carla/lab
+npm install
+
+# o carla-app precisa estar ao lado, igual em produção
+cp -r /root/carla-app /root/carla-testes-app
+# (ajuste o caminho conforme o layout do servidor)
+
+mkdir -p data logs   # agenda vazia, nunca os dados reais
+
+# NÃO copie google-credenciais.json pra cá. É essa ausência que garante
+# que nenhum evento seja criado na agenda do médico.
+ANTHROPIC_API_KEY="sua-chave" node carla-lab/regressao/executar.js
 ```
+
+O staging completo abaixo continua sendo necessário para testar a Carla **de ponta a
+ponta pelo WhatsApp**, com uma pessoa conversando com ela. Para a suíte de regressão, ele
+é excesso.
 
 **Custo.** A suíte tem 55 casos e 87 turnos. Cada turno é uma chamada ao Sonnet com um
 prompt de ~24 mil caracteres, mais as chamadas de ferramenta. Uma rodada completa custa
