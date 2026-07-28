@@ -1,0 +1,138 @@
+[
+  {
+    "id": "abertura-oi-simples",
+    "titulo": "Um \"oi\" recebe a abertura em quatro partes",
+    "regras": ["identidade", "primeira-mensagem", "saudacao", "tom"],
+    "contexto": { "quando": "2026-07-27T09:05", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "oi",
+        "esperado": {
+          "deveConter": ["bom dia", "carla", "particular"],
+          "naoDeveConter": ["550", "menu", "1 -", "18 anos", "residência"],
+          "naoDeveChamar": ["consultar_horarios", "confirmar_agendamento"],
+          "maxCaracteres": 400
+        }
+      }
+    ]
+  },
+  {
+    "id": "abertura-tudo-bem",
+    "titulo": "\"tudo bem?\" é respondido de verdade antes de seguir",
+    "regras": ["primeira-mensagem", "tom"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "boa tarde, tudo bem?",
+        "esperado": {
+          "deveConter": ["boa tarde"],
+          "naoDeveConter": ["550", "nao atendemos convenio", "infelizmente"],
+          "maxCaracteres": 400
+        }
+      }
+    ]
+  },
+  {
+    "id": "abertura-particular-nunca-como-recusa",
+    "titulo": "O aviso de particular na abertura é cortesia, nunca negativa",
+    "regras": ["primeira-mensagem"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "bom dia",
+        "esperado": {
+          "deveConter": ["particular"],
+          "naoDeveConter": [
+            "nao atendemos convenio",
+            "infelizmente nao aceitamos",
+            "nao aceitamos convenio"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "abertura-paciente-conhecido",
+    "titulo": "Família conhecida não recebe a apresentação do zero",
+    "regras": ["primeira-mensagem", "contexto-de-agora"],
+    "contexto": { "quando": "2026-07-27T09:30", "pacienteConhecido": true },
+    "turnos": [
+      {
+        "usuario": "oi Carla, bom dia",
+        "esperado": {
+          "deveConter": ["bom dia"],
+          "naoDeveConter": ["particular", "550", "ate os 18 anos"],
+          "maxCaracteres": 250
+        }
+      }
+    ]
+  },
+  {
+    "id": "abertura-com-pergunta-junto",
+    "titulo": "Pergunta enviada junto do \"oi\" é respondida na mesma mensagem",
+    "regras": ["primeira-mensagem", "preco-como-informar"],
+    "contexto": { "quando": "2026-07-27T11:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "oi, quanto custa a consulta?",
+        "esperado": {
+          "deveConter": ["550"],
+          "naoDeveConter": ["como posso ajudar voce hoje?"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "abertura-convenio-junto-nao-repete",
+    "titulo": "Pergunta de convênio junto do \"oi\" não é respondida duas vezes",
+    "regras": ["primeira-mensagem", "fatos"],
+    "contexto": { "quando": "2026-07-27T14:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "boa tarde, vocês atendem Unimed?",
+        "esperado": {
+          "deveConter": ["particular"],
+          "contarNoMaximo": { "particular": 1 }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sem-saudacao-repetida",
+    "titulo": "Ela não cumprimenta de novo no meio da conversa",
+    "regras": ["saudacao", "continuidade"],
+    "contexto": { "quando": "2026-07-27T09:10", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "oi", "esperado": { "deveConter": ["bom dia"] } },
+      {
+        "usuario": "minha filha está com febre há dois dias",
+        "esperado": { "naoDeveConter": ["bom dia", "boa tarde", "ola!"] }
+      }
+    ]
+  },
+  {
+    "id": "sem-travessao",
+    "titulo": "Nenhuma resposta usa travessão",
+    "regras": ["tom", "nunca"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "oi, como funciona a consulta de vocês?", "esperado": { "naoDeveConter": ["—"] } },
+      { "usuario": "e quanto custa?", "esperado": { "naoDeveConter": ["—"] } }
+    ]
+  },
+  {
+    "id": "curriculo-nao-e-despejado",
+    "titulo": "O currículo sai aos poucos, nunca de uma vez",
+    "regras": ["sobre-o-profissional", "nunca"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "quem é o doutor? ele é bom?",
+        "esperado": {
+          "naoDeveConter": ["pos-graduacao em psiquiatria da infancia e adolescencia"],
+          "maxCaracteres": 500
+        }
+      }
+    ]
+  }
+]

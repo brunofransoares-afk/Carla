@@ -1,0 +1,201 @@
+[
+  {
+    "id": "consulta-agenda-sem-perguntar-dia",
+    "titulo": "Ela consulta a agenda em vez de perguntar o dia preferido",
+    "regras": ["agendamento", "como-conduzir", "motivo-da-consulta"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "quero marcar uma consulta de rotina pro meu filho",
+        "esperado": {
+          "deveChamar": "consultar_horarios",
+          "naoDeveConter": ["qual dia voce prefere", "que periodo fica melhor"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "no-maximo-duas-opcoes",
+    "titulo": "Ela oferece no máximo dois horários por vez",
+    "regras": ["agendamento"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "quero agendar, é acompanhamento de rotina",
+        "esperado": { "maxHorariosOferecidos": 2 }
+      }
+    ]
+  },
+  {
+    "id": "nunca-inventa-horario",
+    "titulo": "Nenhum horário é oferecido sem consultar a agenda",
+    "regras": ["agendamento", "seguranca-confirmacao"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "tem vaga na quinta de manhã?",
+        "esperado": { "deveChamar": "consultar_horarios" }
+      }
+    ]
+  },
+  {
+    "id": "nao-repete-horarios",
+    "titulo": "Horários já oferecidos não voltam na mensagem seguinte",
+    "regras": ["nao-repetir-horarios"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quero marcar, é uma dor de ouvido", "esperado": { "deveChamar": "consultar_horarios" } },
+      {
+        "usuario": "ele tá chorando muito à noite, quase não dorme",
+        "esperado": { "naoDeveRepetirHorariosDoTurnoAnterior": true }
+      },
+      {
+        "usuario": "e o retorno, precisa pagar de novo?",
+        "esperado": { "naoDeveRepetirHorariosDoTurnoAnterior": true }
+      }
+    ]
+  },
+  {
+    "id": "dia-fechado-sem-listar-dias",
+    "titulo": "No dia fechado ela não lista os dias de atendimento",
+    "regras": ["dia-sem-atendimento"],
+    "contexto": { "quando": "2026-07-29T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "o doutor tá atendendo hoje? queria levar meu filho",
+        "esperado": {
+          "naoDeveConter": ["segunda, terca, quinta e sexta", "ele atende segunda"],
+          "maxCaracteres": 300
+        }
+      }
+    ]
+  },
+  {
+    "id": "encaixe-usa-urgente",
+    "titulo": "Pedido de encaixe busca os horários mais próximos",
+    "regras": ["urgencia-na-data", "encaixe-sem-data-distante"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "preciso de um encaixe o quanto antes, ele não está bem",
+        "esperado": { "deveChamar": "consultar_horarios", "deveChamarComArgumento": { "urgente": true } }
+      }
+    ]
+  },
+  {
+    "id": "coleta-nomes-juntos",
+    "titulo": "Os dois nomes são pedidos na mesma mensagem",
+    "regras": ["coleta-de-nomes"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quero marcar, é rotina", "esperado": { "deveChamar": "consultar_horarios" } },
+      {
+        "usuario": "pode ser o primeiro horário que você falou",
+        "esperado": { "deveConter": ["responsavel", "crianca"], "naoDeveChamar": ["confirmar_agendamento"] }
+      }
+    ]
+  },
+  {
+    "id": "irmaos-dois-seguidos",
+    "titulo": "Dois filhos pedem horários realmente consecutivos",
+    "regras": ["irmaos"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "queria marcar pros meus dois filhos, se der um seguido do outro",
+        "esperado": { "deveChamar": "consultar_horarios", "deveChamarComArgumento": { "doisSeguidos": true } }
+      }
+    ]
+  },
+  {
+    "id": "ajuste-de-horario-nao-e-oferecido",
+    "titulo": "O ajuste de 30 minutos nunca é oferecido por conta própria",
+    "regras": ["ajuste-de-horario"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quero marcar pra semana que vem", "esperado": { "deveChamar": "consultar_horarios" } },
+      {
+        "usuario": "esses horários tão bons",
+        "esperado": { "naoDeveConter": ["posso ajustar", "30 minutos", "meia hora antes"] }
+      }
+    ]
+  },
+  {
+    "id": "confirmacao-so-depois-da-ferramenta",
+    "titulo": "Ela não diz que reservou sem a ferramenta confirmar",
+    "regras": ["seguranca-confirmacao", "mensagem-pos-confirmacao"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quero marcar, é rotina", "esperado": { "deveChamar": "consultar_horarios" } },
+      { "usuario": "pode ser o primeiro", "esperado": {} },
+      {
+        "usuario": "responsável Ana Paula, criança Beatriz",
+        "esperado": {
+          "deveChamar": "confirmar_agendamento",
+          "seNaoChamouFerramentaNaoDeveConter": ["deixei reservado", "esta confirmado", "ja agendei"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "confirmacao-traz-endereco-e-pagamento",
+    "titulo": "A confirmação traz endereço e pergunta a forma de pagamento",
+    "regras": ["mensagem-pos-confirmacao"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quero marcar, é rotina", "esperado": {} },
+      { "usuario": "pode ser o primeiro", "esperado": {} },
+      {
+        "usuario": "responsável Ana Paula, criança Beatriz",
+        "esperado": {
+          "seChamouFerramentaDeveConter": ["ranulpho", "pix"],
+          "naoDeveConter": ["brunofransoares@gmail.com", "link.infinitepay.io"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "nomes-confusos-nao-viram-promessa-solta",
+    "titulo": "Nome confuso vira pergunta, nunca um \"só um instante\" solto",
+    "regras": ["promessa-sem-acao"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quero marcar, é rotina", "esperado": {} },
+      { "usuario": "pode ser o primeiro", "esperado": {} },
+      {
+        "usuario": "nehaon negunha",
+        "esperado": {
+          "deveTerPerguntaOuFerramenta": true,
+          "naoDeveTerApenas": ["so um instante", "deixa eu confirmar certinho", "ja te retorno"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cancelamento-confirma-antes",
+    "titulo": "Cancelamento é confirmado antes de acontecer",
+    "regras": ["cancelamento"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": true },
+    "turnos": [
+      {
+        "usuario": "preciso cancelar a consulta",
+        "esperado": { "deveTerPergunta": true, "naoDeveConter": ["cancelei", "cancelado com sucesso"] }
+      }
+    ]
+  },
+  {
+    "id": "consulta-existente-e-conferida",
+    "titulo": "Ela confere na hora se a consulta ainda existe",
+    "regras": ["verificar-agendamento"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": true },
+    "turnos": [
+      {
+        "usuario": "minha consulta de quinta ainda tá marcada mesmo?",
+        "esperado": {
+          "deveChamar": "cancelar_agendamento",
+          "deveChamarComArgumento": { "apenasConsultar": true }
+        }
+      }
+    ]
+  }
+]

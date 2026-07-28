@@ -1,0 +1,171 @@
+[
+  {
+    "id": "preco-nunca-seco",
+    "titulo": "O valor vem depois de descrever o atendimento",
+    "regras": ["preco-como-informar", "fatos"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "quanto é a consulta?",
+        "esperado": {
+          "deveConter": ["550"],
+          "naoDeveConter": ["atraves de", "tanto em"],
+          "naoDeveComecarCom": ["o valor e r$ 550"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "convite-depois-do-preco",
+    "titulo": "Depois do preço ela convida a agendar",
+    "regras": ["convite-agendar"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "qual o valor da consulta?",
+        "esperado": { "deveConter": ["550"], "deveConterAlgum": ["horario", "agendar"] }
+      }
+    ]
+  },
+  {
+    "id": "convite-nao-repete-na-seguinte",
+    "titulo": "O convite não aparece em duas mensagens seguidas",
+    "regras": ["convite-agendar"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quanto custa?", "esperado": { "deveConter": ["550"] } },
+      {
+        "usuario": "e o retorno é cobrado à parte?",
+        "esperado": { "naoDeveConter": ["quer que eu veja", "posso ja ver um horario", "vejo um horario"] }
+      },
+      {
+        "usuario": "e vocês parcelam?",
+        "esperado": { "naoDeveConter": ["posso ja ver um horario"] }
+      }
+    ]
+  },
+  {
+    "id": "valor-nao-se-justifica",
+    "titulo": "Ela nunca defende o preço nem cita \"particular\" como justificativa",
+    "regras": ["valor-nao-se-defende"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "nossa, achei caro isso",
+        "esperado": {
+          "naoDeveConter": [
+            "vale a pena",
+            "investimento",
+            "como o atendimento e particular",
+            "por ser particular",
+            "atendimento diferenciado"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "sem-desconto",
+    "titulo": "Ela não negocia valor",
+    "regras": ["fatos", "nunca"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "consegue fazer por 400? sou paciente antigo",
+        "esperado": { "naoDeveConter": ["desconto", "consigo fazer por", "posso ver com o doutor"] }
+      }
+    ]
+  },
+  {
+    "id": "pix-so-depois-da-escolha",
+    "titulo": "A chave Pix não vai antes da família escolher a forma",
+    "regras": ["envio-dos-dados-de-pagamento", "fatos"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "quanto custa e como eu pago?",
+        "esperado": {
+          "naoDeveConter": ["brunofransoares@gmail.com", "link.infinitepay.io"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "nunca-os-dois-meios-juntos",
+    "titulo": "Pix e link nunca são enviados na mesma mensagem",
+    "regras": ["envio-dos-dados-de-pagamento"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quanto custa?", "esperado": {} },
+      {
+        "usuario": "me manda a chave pix e o link do cartão",
+        "esperado": { "naoDeveConterAmbos": ["brunofransoares@gmail.com", "link.infinitepay.io"] }
+      }
+    ]
+  },
+  {
+    "id": "convenio-resposta-neutra",
+    "titulo": "Pergunta direta de convênio recebe resposta curta e sem emoji",
+    "regras": ["fatos"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": true },
+    "turnos": [
+      {
+        "usuario": "vocês aceitam Bradesco Saúde?",
+        "esperado": {
+          "deveConter": ["particular"],
+          "naoDeveConter": ["😊"],
+          "maxCaracteres": 220
+        }
+      }
+    ]
+  },
+  {
+    "id": "dr-em-outro-lugar",
+    "titulo": "Perguntar onde o médico atende fora daqui não vira resposta de convênio",
+    "regras": ["fatos"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": true },
+    "turnos": [
+      {
+        "usuario": "o Dr. Bruno atende na Unimed hoje? preciso levar meu filho no pronto socorro",
+        "esperado": {
+          "deveConterAlgum": ["nao consigo te passar essa informacao", "nao tenho essa informacao"],
+          "naoDeveConter": ["o atendimento e apenas particular."]
+        }
+      }
+    ]
+  },
+  {
+    "id": "teleconsulta-so-quando-perguntam",
+    "titulo": "Teleconsulta não entra na conversa sozinha",
+    "regras": ["fatos", "continuidade"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "vocês atendem recém-nascido?",
+        "esperado": { "naoDeveConter": ["teleconsulta", "por video"] }
+      }
+    ]
+  },
+  {
+    "id": "nota-fiscal",
+    "titulo": "Nota fiscal pede os dados certos",
+    "regras": ["fatos"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": true },
+    "turnos": [
+      {
+        "usuario": "vocês emitem nota fiscal?",
+        "esperado": { "deveConter": ["cpf"], "deveConterAlgum": ["cep", "e-mail", "email"] }
+      }
+    ]
+  },
+  {
+    "id": "continuidade-nao-repete-valor",
+    "titulo": "Ela não repete o valor que já informou",
+    "regras": ["continuidade"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quanto custa?", "esperado": { "deveConter": ["550"] } },
+      { "usuario": "a consulta demora quanto tempo?", "esperado": { "naoDeveConter": ["550"] } }
+    ]
+  }
+]

@@ -1,0 +1,136 @@
+[
+  {
+    "id": "despedida-tres-ingredientes",
+    "titulo": "A despedida agradece, se oferece e deseja algo bom",
+    "regras": ["despedida", "despedida-por-contexto"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quanto custa a consulta?", "esperado": { "deveConter": ["550"] } },
+      {
+        "usuario": "entendi, obrigada!",
+        "esperado": {
+          "deveConterAlgum": ["boa tarde", "cuide-se", "fique bem"],
+          "naoDeveConter": ["por nada", "de nada."],
+          "maxCaracteres": 400
+        }
+      }
+    ]
+  },
+  {
+    "id": "despedida-sem-agendamento-nao-cobra",
+    "titulo": "Quem saiu sem agendar não recebe cobrança",
+    "regras": ["despedida-por-contexto", "recusa"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "vocês atendem por convênio?", "esperado": { "deveConter": ["particular"] } },
+      {
+        "usuario": "ah entendi, obrigada então",
+        "esperado": {
+          "naoDeveConter": ["nao quer aproveitar", "posso reservar", "ultima vaga"],
+          "deveConterAlgum": ["a disposicao", "e so me chamar", "estarei por aqui"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "despedida-boa-tarde-liberado",
+    "titulo": "Desejar boa tarde ao se despedir não conta como cumprimento",
+    "regras": ["despedida", "saudacao"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "oi, qual o endereço de vocês?", "esperado": { "deveConter": ["ranulpho"] } },
+      { "usuario": "obrigado!", "esperado": { "deveConterAlgum": ["boa tarde", "otima tarde"] } }
+    ]
+  },
+  {
+    "id": "silencio-no-segundo-agradecimento",
+    "titulo": "O segundo agradecimento seguido não gera mensagem",
+    "regras": ["silencio"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "qual o endereço?", "esperado": {} },
+      { "usuario": "obrigada!", "esperado": {} },
+      { "usuario": "👍", "esperado": { "respostaExata": "SILENCIO" } }
+    ]
+  },
+  {
+    "id": "silencio-nao-e-fim-permanente",
+    "titulo": "Depois do silêncio ela volta a responder pergunta de verdade",
+    "regras": ["silencio", "despedida"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "qual o endereço?", "esperado": {} },
+      { "usuario": "obrigada!", "esperado": {} },
+      { "usuario": "🙏", "esperado": { "respostaExata": "SILENCIO" } },
+      { "usuario": "ah, e tem estacionamento?", "esperado": { "naoDeveConter": ["silencio"] } }
+    ]
+  },
+  {
+    "id": "recusa-sem-insistencia",
+    "titulo": "Desistência é aceita sem oferecer horário em cima",
+    "regras": ["recusa"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quanto custa?", "esperado": { "deveConter": ["550"] } },
+      {
+        "usuario": "vou pensar melhor, por enquanto não vou marcar",
+        "esperado": {
+          "naoDeveConter": ["tenho quinta as", "posso reservar", "quer que eu veja um horario"],
+          "maxCaracteres": 300
+        }
+      }
+    ]
+  },
+  {
+    "id": "despedida-nao-copia-exemplo",
+    "titulo": "A despedida não é o exemplo do prompt copiado ao pé da letra",
+    "regras": ["despedida-exemplos"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "vocês atendem adolescente?", "esperado": {} },
+      {
+        "usuario": "beleza, valeu",
+        "esperado": {
+          "naoDeveConterExatamente": [
+            "Foi um prazer falar com você! 😊 Sempre que precisar, estarei por aqui.",
+            "Conte comigo! 😊 Se precisar de qualquer informação ou quiser agendar, é só mandar uma mensagem."
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "despedida-depois-de-agendar",
+    "titulo": "Quem agendou recebe despedida de quem vai receber a família",
+    "regras": ["despedida-por-contexto"],
+    "contexto": { "quando": "2026-07-27T15:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "quero marcar, é rotina", "esperado": {} },
+      { "usuario": "pode ser o primeiro", "esperado": {} },
+      { "usuario": "responsável Ana, criança Beatriz", "esperado": {} },
+      { "usuario": "pix", "esperado": { "deveConter": ["brunofransoares@gmail.com"], "naoDeveConter": ["😊"] } },
+      { "usuario": "obrigada!", "esperado": { "naoDeveConter": ["se quiser agendar"] } }
+    ]
+  },
+  {
+    "id": "sem-menu-numerado",
+    "titulo": "Nenhuma resposta vira menu numerado",
+    "regras": ["nunca", "tom"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      {
+        "usuario": "quais serviços vocês oferecem?",
+        "esperado": { "naoDeveConter": ["1 -", "1)", "digite 1", "opcao 1"] }
+      }
+    ]
+  },
+  {
+    "id": "sem-textao",
+    "titulo": "Nenhuma resposta vira textão",
+    "regras": ["tom", "nunca"],
+    "contexto": { "quando": "2026-07-27T10:00", "pacienteConhecido": false },
+    "turnos": [
+      { "usuario": "me explica tudo sobre como funciona o atendimento de vocês", "esperado": { "maxCaracteres": 700 } }
+    ]
+  }
+]
