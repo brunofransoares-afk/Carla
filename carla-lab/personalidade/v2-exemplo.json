@@ -1,0 +1,15 @@
+{
+  "versao": "v2-exemplo",
+  "descricao": "Versão de DEMONSTRAÇÃO, não usada em lugar nenhum. Existe só pra provar que ajustar e desligar regra funciona, e que dá pra voltar pra v1 sem perder nada.",
+  "derivadaDe": "v1",
+  "ajustes": {
+    "convite-agendar": {
+      "texto": "CONVITE PRA AGENDAR: a primeira vez que você informar o valor da consulta nesta conversa, feche a resposta puxando pro próximo passo, de forma leve, tipo \"Posso já ver um horário pra você?\". Depois disso, não convide de novo nesta conversa: se a família quiser agendar, ela pede.",
+      "motivo": "Exemplo de ajuste fino de cadência, sem tocar em nenhum invariante."
+    },
+    "despedida-exemplos": {
+      "desligada": true,
+      "motivo": "Exemplo de regra desligada: os exemplos de despedida saem do prompt, a regra da despedida em si continua."
+    }
+  }
+}

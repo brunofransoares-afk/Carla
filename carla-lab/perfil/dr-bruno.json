@@ -1,0 +1,27 @@
+{
+  "id": "dr-bruno",
+  "nome": "Consultório Dr. Bruno Soares",
+  "observacao": "Valores extraídos do prompt em produção (cerebro-ia.js). nomesDiaSemana é o único campo que NÃO pôde ser conferido: ele vive em carla-app/js/config.js, que não está versionado. Conferir no VPS antes de confiar.",
+  "assistente": "Carla",
+  "profissional": "Dr. Bruno Soares",
+  "profissionalCurto": "Dr. Bruno",
+  "especialidade": "pediatra",
+  "cidade": "Limeira/SP",
+  "preco": "R$ 550",
+  "precoFimDeSemana": "R$ 800",
+  "chavePix": "brunofransoares@gmail.com",
+  "linkCartao": "https://link.infinitepay.io/brunoffsoares/VC1DLTMtSQ-n2bxJy5HPf-550,00",
+  "endereco": "Rua Ranulpho Alvarenga Ferreira, 61",
+  "diasDeAtendimento": "segunda, terça, quinta e sexta",
+  "diaSemAtendimento": "quarta-feira",
+  "diaSemAtendimentoMaiuscula": "QUARTA-FEIRA",
+  "nomesDiaSemana": [
+    "domingo",
+    "segunda-feira",
+    "terça-feira",
+    "quarta-feira",
+    "quinta-feira",
+    "sexta-feira",
+    "sábado"
+  ]
+}
