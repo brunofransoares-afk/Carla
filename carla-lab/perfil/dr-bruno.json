@@ -1,7 +1,7 @@
 {
   "id": "dr-bruno",
   "nome": "Consultório Dr. Bruno Soares",
-  "observacao": "Valores extraídos do prompt em produção (cerebro-ia.js). nomesDiaSemana é o único campo que NÃO pôde ser conferido: ele vive em carla-app/js/config.js, que não está versionado. Conferir no VPS antes de confiar.",
+  "observacao": "Valores extraidos do prompt em producao (cerebro-ia.js). nomesDiaSemana conferido contra o config.js real do VPS em 28/07/2026: identico.",
   "assistente": "Carla",
   "profissional": "Dr. Bruno Soares",
   "profissionalCurto": "Dr. Bruno",
