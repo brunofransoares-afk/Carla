@@ -21,6 +21,7 @@ const ARQ_SILENCIADOS = path.join(DIR_DADOS, "contatos-silenciados.json");
 const ARQ_CONTATOS_WHATSAPP = path.join(DIR_DADOS, "contatos-whatsapp.json");
 const ARQ_PACIENTES_MANUAIS = path.join(DIR_DADOS, "pacientes-manuais.json");
 const ARQ_NAO_PACIENTES_MANUAIS = path.join(DIR_DADOS, "nao-pacientes-manuais.json");
+const ARQ_HORARIOS_EXTRAS = path.join(DIR_DADOS, "horarios-extras.json");
 
 function garantirPasta() {
   if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
@@ -54,7 +55,7 @@ function idsOcupados(now = new Date()) {
   const bloqueios = new Set(lerBloqueios());
   const dosBloqueios = bloqueios.size === 0
     ? []
-    : Agenda.gerarSlotsPossiveis(now).filter((s) => bloqueios.has(s.date)).map((s) => s.id);
+    : slotsPossiveisComExtras(now).filter((s) => bloqueios.has(s.date)).map((s) => s.id);
   return new Set([...reais, ...dosBloqueios, ...lerBloqueiosHorarios()]);
 }
 
@@ -73,14 +74,97 @@ function alternarBloqueioHorario(slotId) {
   return lista;
 }
 
+// HORÁRIOS EXTRAS — horários liberados na mão pelo painel, fora da grade padrão do
+// consultório (ex: uma sexta à tarde). Ficam guardados como {data, hora} e viram slots
+// no mesmo formato dos da grade, pra todo o resto do sistema tratar igual: a Carla pode
+// oferecer e confirmar, e o painel pode bloquear/remover.
+function lerHorariosExtras() {
+  return lerJSON(ARQ_HORARIOS_EXTRAS, []);
+}
+
+// Monta um slot no mesmo formato dos gerados pela grade padrão ({id, date, time, label}).
+// O id leva o prefixo "extra-" pra nunca colidir com um id da grade.
+function slotDeExtra({ data, hora }) {
+  const [ano, mes, dia] = data.split("-").map(Number);
+  const nomesDia = (global.CARLA_CONFIG && global.CARLA_CONFIG.nomesDiaSemana) || [];
+  const nomeDia = nomesDia[new Date(ano, mes - 1, dia).getDay()] || "";
+  const horaLabel = typeof Agenda.formatHora === "function" ? Agenda.formatHora(hora) : hora;
+  return {
+    id: `extra-${data}-${hora}`,
+    date: data,
+    time: hora,
+    label: `${nomeDia} (${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}) às ${horaLabel}`,
+    extra: true,
+  };
+}
+
+// Slots extras que ainda fazem sentido oferecer: só os que não passaram. Ordenados no
+// tempo. Não filtra ocupado/bloqueado — quem chama cuida disso (igual à grade padrão).
+function listarSlotsExtras(now = new Date()) {
+  return lerHorariosExtras()
+    .map(slotDeExtra)
+    .filter((s) => {
+      const [ano, mes, dia] = s.date.split("-").map(Number);
+      const [h, m] = s.time.split(":").map(Number);
+      return new Date(ano, mes - 1, dia, h, m) > now;
+    })
+    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+}
+
+// A grade padrão MAIS os horários extras — é o que o resto do sistema deve usar como
+// "todos os horários que existem", pra um extra poder ser oferecido e confirmado igual
+// a qualquer outro.
+function slotsPossiveisComExtras(now = new Date()) {
+  return [...Agenda.gerarSlotsPossiveis(now), ...listarSlotsExtras(now)];
+}
+
+// Extras realmente livres pra oferecer: tira os já ocupados/bloqueados e, quando pedido,
+// filtra por dia da semana, período ou data específica (mesmos critérios da grade).
+function extrasDisponiveis(now = new Date(), ocupados = new Set(), filtros = {}) {
+  const { diaPreferido = null, periodo = null, dataPreferida = null } = filtros;
+  const bloqueados = new Set(lerBloqueios());
+  return listarSlotsExtras(now).filter((s) => {
+    if (ocupados.has(s.id)) return false;
+    if (bloqueados.has(s.date)) return false;
+    if (dataPreferida && s.date !== dataPreferida) return false;
+    if (diaPreferido !== null) {
+      const [ano, mes, dia] = s.date.split("-").map(Number);
+      if (new Date(ano, mes - 1, dia).getDay() !== diaPreferido) return false;
+    }
+    if (periodo) {
+      const hora = Number(s.time.split(":")[0]);
+      if (periodo === "manha" && hora >= 12) return false;
+      if (periodo === "tarde" && hora < 12) return false;
+    }
+    return true;
+  });
+}
+
+function adicionarHorarioExtra(data, hora) {
+  const lista = lerHorariosExtras();
+  if (!lista.some((e) => e.data === data && e.hora === hora)) {
+    lista.push({ data, hora });
+  }
+  escreverJSON(ARQ_HORARIOS_EXTRAS, lista);
+  return lista;
+}
+
+function removerHorarioExtra(slotId) {
+  const lista = lerHorariosExtras().filter((e) => `extra-${e.data}-${e.hora}` !== slotId);
+  escreverJSON(ARQ_HORARIOS_EXTRAS, lista);
+  return lista;
+}
+
 // Todos os horários de um dia específico, já cruzados com agendamento real, bloqueio do
 // dia inteiro e bloqueio individual — pro painel mostrar e deixar bloquear um por um.
+// Inclui os horários extras liberados na mão pra esse dia.
 function listarHorariosDoDia(dataStr, now = new Date()) {
   const agendamentos = lerAgendamentos();
   const diaTodoBloqueado = lerBloqueios().includes(dataStr);
   const bloqueiosHorarios = new Set(lerBloqueiosHorarios());
-  const horarios = Agenda.gerarSlotsPossiveis(now)
+  const horarios = slotsPossiveisComExtras(now)
     .filter((s) => s.date === dataStr)
+    .sort((a, b) => a.time.localeCompare(b.time))
     .map((s) => {
       const agendamento = agendamentos.find((a) => a.slotId === s.id);
       return {
@@ -90,6 +174,7 @@ function listarHorariosDoDia(dataStr, now = new Date()) {
         responsavel: agendamento ? agendamento.responsavel : null,
         crianca: agendamento ? agendamento.crianca : null,
         bloqueado: diaTodoBloqueado || bloqueiosHorarios.has(s.id),
+        extra: !!s.extra,
       };
     });
   return { diaTodoBloqueado, horarios };
@@ -422,6 +507,8 @@ module.exports = {
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,
   lerBloqueiosHorarios, alternarBloqueioHorario, listarHorariosDoDia,
+  lerHorariosExtras, adicionarHorarioExtra, removerHorarioExtra,
+  listarSlotsExtras, slotsPossiveisComExtras, extrasDisponiveis,
   listarContatosRecentes, metricasConversao,
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
   registrarContatoWhatsapp, listarTodosContatos, ehPacienteConhecido,

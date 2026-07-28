@@ -104,6 +104,32 @@ consulta (a partir das 8h). Isso é 100% código, roda de forma independente da
 conversa (confere a cada 15 minutos) e nunca manda o mesmo lembrete duas vezes
 pro mesmo agendamento.
 
+## Liberar horários fora da grade (horários extras)
+
+A grade padrão de atendimento é fixa (fica em `carla-app/js/agenda.js`), mas dá
+pra liberar horários avulsos direto pelo painel, sem mexer em código — por
+exemplo, abrir uma sexta à tarde numa semana específica.
+
+No painel, clique no dia no calendário de "Bloqueio de agenda": além dos
+horários da grade, aparece o campo **"Liberar horário"**. Digite a hora e
+pronto — a Carla passa a poder oferecer e confirmar aquele horário. Os extras
+aparecem com borda dourada e um `+`, e os chips logo abaixo removem.
+
+Como o extra se comporta:
+- **Pedido urgente** ("o quanto antes"): entra na ordem do tempo, junto com os
+  da grade — se for o mais cedo, é oferecido primeiro.
+- **Pedido normal**: entra depois dos da grade, de propósito. A preferência
+  normal do consultório continua ganhando, e o extra funciona como capacidade
+  a mais: aparece quando a grade não tem vaga, ou quando pedem justamente
+  aquele dia/período.
+- Respeita tudo que já existia: bloqueio do dia inteiro, bloqueio individual
+  do horário, e some das ofertas assim que alguém marca.
+- Horário extra que já passou é ignorado sozinho.
+- Só dá pra remover um extra que **não** tem consulta marcada, pra nunca
+  deixar uma consulta órfã.
+
+Ficam guardados em `data/horarios-extras.json`.
+
 ## Aviso pro Dr. Bruno a cada agendamento novo
 
 Toda vez que a Carla confirma um agendamento, ela manda uma mensagem de
