@@ -68,7 +68,9 @@ async function avisarPortalLiberado({ telefone, email }) {
     "",
     `No primeiro acesso você cria a sua senha, usando este mesmo e-mail: ${agendamento.responsavelEmail || email}`,
     "",
-    "Se quiser, dá pra salvar o link na tela inicial do celular e usar como aplicativo.",
+    // O passo a passo muda entre iPhone e Android, e a família não vai saber qual é o
+    // "menu do navegador" se ninguém disser. Uma linha pra cada, sem virar tutorial.
+    "Se quiser deixar como aplicativo no celular: abra o link, toque no menu do navegador e escolha \"Adicionar à Tela de Início\". No iPhone o menu é o ícone de compartilhar; no Android, os três pontinhos.",
   ].join("\n");
 
   await sockAtivo.sendMessage(jid, { text: texto });
