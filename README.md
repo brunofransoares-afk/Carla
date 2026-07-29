@@ -225,3 +225,58 @@ nome. Nome ambíguo (Alex, Ariel, Darci…) não é chutado — nesse caso a fic
 substituído). Vale rodar depois de mexer neste arquivo: a integração roda em
 background e falha em silêncio de propósito, então um erro aqui não aparece
 sozinho.
+
+## Avisar a família a pedido do prontuário
+
+O prontuário do SPI manda a Carla avisar a família — o link do portal quando a
+consulta é marcada, o link do guia quando a família paga. **São dois avisos
+separados, de propósito**: um botão só faria um dos dois sair na hora errada, e
+"seu guia está liberado" para quem não pagou é mensagem falsa saindo do WhatsApp
+do consultório.
+
+O caminho: prontuário → Edge Function `carla-agendamento` → painel da Carla →
+porta interna do bot (a conexão do WhatsApp vive no processo dele). O painel
+atende duas rotas que ficam **antes da checagem de senha**, porque quem chama é
+máquina, não navegador:
+
+```
+POST /webhook/portal-liberado
+POST /webhook/guia-liberado
+X-Carla-Secret: <segredo>
+{ "telefone": "+55..." }
+```
+
+### Duas variáveis no `.env`
+
+- **`GUIA_URL`** = `https://guiapediatrico.drbrunosoares.med.br`
+  Sem ela o aviso do guia **não sai**, e isso é intencional: mandar "seu guia
+  está liberado!" sem link é pior que não mandar nada.
+
+- **`PORTAL_WEBHOOK_SECRET`** (ou `APP_CARLA_SECRET`, aceito como reserva) =
+  o mesmo valor do `CARLA_WEBHOOK_SECRET` que está nos secrets da função
+  `carla-agendamento`, no Supabase do SPI.
+
+  Sem nenhuma das duas, a porta responde **503 dizendo qual variável falta** —
+  não 401. A diferença importa: um 401 sem motivo já custou uma noite inteira de
+  investigação num login que estava certo.
+
+  Usar o mesmo valor nas duas direções significa que vazar um lado vaza o outro.
+  As duas pontas são as mesmas (SPI e Carla) e o SPI já guarda esse valor, então
+  nada a mais fica exposto — mas se um dia um terceiro passar a falar com o
+  painel, preencha o `PORTAL_WEBHOOK_SECRET` dedicado e pare de aceitar a
+  reserva.
+
+### Teste
+
+```
+node tests/painel-webhook.test.js
+```
+
+30 asserções, sem subir servidor e **sem a pasta irmã `carla-app`** — de
+propósito. As baterias que dependem dela (`portal-liberado`, `guia-liberado`,
+`dados-pendentes`) não rodam fora da VPS, e uma regra de segurança testada só na
+VPS é uma regra que na prática não é testada. Esta é a única rota do painel cuja
+autorização não é a senha, então é a que mais precisa de teste.
+
+**`npm test` não roda nada** neste repositório — o script é um `exit 1` de
+esqueleto. Rode os arquivos direto, como acima.
