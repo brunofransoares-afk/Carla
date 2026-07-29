@@ -118,6 +118,11 @@
 
   .btn-x { border: none; background: rgba(255,90,90,0.14); color: #ff9d9d; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 1; font-weight: 700; }
   .btn-x:hover { background: rgba(255,90,90,0.28); }
+  .btn-portal { border: none; background: rgba(184,137,63,0.18); color: var(--ouro-claro, #cba05a); padding: 3px 9px; border-radius: 999px; cursor: pointer; font-size: 11px; font-weight: 700; }
+  .btn-portal:hover { background: rgba(184,137,63,0.34); }
+  .btn-portal:disabled { opacity: .5; cursor: default; }
+  .portal-ok { color: #6ee7b7; font-weight: 700; }
+  .portal-na { opacity: .35; }
   th.col-x, td.col-x { width: 32px; text-align: center; }
   .btn-limpar { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 12px; padding: 5px 13px; font-size: 12px; cursor: pointer; }
   .btn-limpar:hover { background: rgba(255,255,255,0.12); }
@@ -632,6 +637,34 @@
     atualizar();
   });
 
+  // O botão só aparece pra quem tem e-mail e telefone de WhatsApp de verdade: sem e-mail
+  // a família não tem como entrar no portal, e sem telefone não há pra onde mandar. Quem
+  // já foi avisado mostra a marca, pra não mandar duas vezes sem querer.
+  function botaoPortal(a) {
+    if (a.portalAvisadoEm) return '<span class="portal-ok" title="Link do portal já enviado">✓</span>';
+    if (!a.responsavelEmail) return '<span class="portal-na" title="Sem e-mail do responsável">—</span>';
+    if (!String(a.telefone || "").startsWith("+")) return '<span class="portal-na" title="Sem telefone de WhatsApp">—</span>';
+    return `<button class="btn-portal" title="Mandar o link do portal pra família" data-telefone="${escapeHtml(a.telefone)}">enviar</button>`;
+  }
+
+  async function avisarPortal(btn) {
+    if (!confirm("Mandar o link do portal pra essa família agora?")) return;
+    btn.disabled = true;
+    btn.textContent = "...";
+    try {
+      const resposta = await fetch("/api/avisar-portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone: btn.dataset.telefone }),
+      });
+      const r = await resposta.json().catch(() => ({}));
+      if (!r.ok) alert("Não deu pra mandar: " + (r.motivo || "erro desconhecido"));
+    } catch (e) {
+      alert("Não deu pra mandar: o painel não conseguiu falar com a Carla.");
+    }
+    atualizar();
+  }
+
   async function cancelarAgendamento(slotId) {
     if (!confirm("Cancelar e apagar esse agendamento? Não dá pra desfazer.")) return;
     try {
@@ -851,7 +884,7 @@
         tabela.innerHTML = "<div class='vazio'>Nenhum agendamento ainda.</div>";
       } else {
         tabela.innerHTML = `<table>
-          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x"></th></tr></thead>
+          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x">Portal</th><th class="col-x"></th></tr></thead>
           <tbody>${agendamentos.map((a) => `
             <tr>
               <td>${formatarDataBR(a.data)}</td>
@@ -859,12 +892,16 @@
               <td>${escapeHtml(a.responsavel)}</td>
               <td>${escapeHtml(a.crianca)}</td>
               <td>${escapeHtml(a.telefone)}</td>
+              <td class="col-x">${botaoPortal(a)}</td>
               <td class="col-x"><button class="btn-x" title="Cancelar agendamento" data-slot-id="${escapeHtml(a.slotId)}">✕</button></td>
             </tr>`).join("")}</tbody>
         </table>`;
 
         tabela.querySelectorAll(".btn-x").forEach((btn) => {
           btn.addEventListener("click", () => cancelarAgendamento(btn.dataset.slotId));
+        });
+        tabela.querySelectorAll(".btn-portal").forEach((btn) => {
+          btn.addEventListener("click", () => avisarPortal(btn));
         });
       }
 

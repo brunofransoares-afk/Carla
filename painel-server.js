@@ -205,6 +205,17 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  // Botão "portal" da lista de agendamentos: o Dr. Bruno liberou o acesso no prontuário,
+  // toca aqui e a Carla manda o link pra família. Quem manda a mensagem é o processo do
+  // bot (a conexão do WhatsApp vive lá), então isto só encaminha pra porta interna dele.
+  if (req.url === "/api/avisar-portal" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = await encaminharPortalLiberado(JSON.stringify({ telefone: corpo.telefone }));
+    res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(r.texto);
+    return;
+  }
+
   if (req.url === "/api/bloqueio-toggle" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const bloqueios = corpo.data ? Storage.alternarBloqueioDia(corpo.data) : Storage.lerBloqueios();
