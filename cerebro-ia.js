@@ -388,10 +388,18 @@ async function executarFerramenta(nome, input, ctx) {
       descricao: `Responsável: ${input.responsavel}\nTelefone: ${ctx.telefone}\nAgendado pela Carla (WhatsApp)`,
     });
 
-    // Manda uma cópia pro Sistema Pediátrico Integrado também (fail-open — ver app-agenda.js).
-    // Reaproveita os mesmos dados e horários já usados acima pro Google Agenda. Não é
-    // aguardada (não atrasa a resposta pra família) — quando responder, guarda o id lá do
-    // outro sistema junto do agendamento local, pra dar pra cancelar também depois.
+    const ok = Storage.reservar({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca, telefone: ctx.telefone, googleEventId });
+    if (!ok) {
+      if (googleEventId) await GoogleAgenda.cancelarEvento(googleEventId);
+      return { sucesso: false, motivo: "Esse horário já foi reservado por outra família. Consulte novamente e ofereça outra opção." };
+    }
+
+    // Manda uma cópia pro Sistema Pediátrico Integrado (fail-open — ver app-agenda.js).
+    // DEPOIS da reserva local dar certo, de propósito: antes, se duas famílias disputassem
+    // o mesmo horário, a que perdia já tinha mandado a cópia e o evento do Google era
+    // cancelado, mas o agendamento fantasma ficava lá no outro sistema pra sempre.
+    // Continua não aguardada (não atrasa a resposta pra família) — quando responder,
+    // guarda o id do outro sistema junto do agendamento local, pra dar pra cancelar depois.
     AppAgenda.enviarAgendamento({
       pacienteNome: input.crianca,
       responsavelNome: input.responsavel,
@@ -400,12 +408,6 @@ async function executarFerramenta(nome, input, ctx) {
     }).then((appAgendamentoId) => {
       if (appAgendamentoId) Storage.definirAppAgendamentoId(slotFinal.id, appAgendamentoId);
     });
-
-    const ok = Storage.reservar({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca, telefone: ctx.telefone, googleEventId });
-    if (!ok) {
-      if (googleEventId) await GoogleAgenda.cancelarEvento(googleEventId);
-      return { sucesso: false, motivo: "Esse horário já foi reservado por outra família. Consulte novamente e ofereça outra opção." };
-    }
 
     ctx.acoesRealizadas.push({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca });
     return { sucesso: true, horarioConfirmado: slotFinal.label };
