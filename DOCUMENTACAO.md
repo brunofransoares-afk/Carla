@@ -79,9 +79,9 @@ nginx na frente, com certificado Let's Encrypt, servindo o painel em
 | `google-agenda.js` | 94 | leitura e escrita no Google Agenda |
 | `app-agenda.js` | 103 | espelhamento no Sistema Pediátrico Integrado |
 | `ecosystem.config.js` | 40 | configuração do PM2 |
+| `manifest.json`, `sw.js`, `icons/` | — | painel instalável como aplicativo |
 
 **2.997 linhas no total**, sem contar `manifest.json`, `sw.js` e os ícones.
-| `manifest.json`, `sw.js`, `icons/` | — | painel instalável como aplicativo |
 
 ### Dependências
 
