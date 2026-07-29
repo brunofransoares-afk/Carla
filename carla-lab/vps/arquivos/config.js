@@ -3,7 +3,6 @@
 
 const CARLA_CONFIG = {
   valorConsulta: 550,
-  valorPuericulturaCartao: 580,
   endereco: "Rua Ranulpho Alvarenga Ferreira, 61",
   clinica: "Clínica Rueda",
   pix: "brunofransoares@gmail.com",
@@ -42,15 +41,21 @@ const CARLA_CONFIG = {
 // Palavras-chave de emergência: sempre checadas primeiro, acima de qualquer outra coisa.
 const EMERGENCIA_PALAVRAS = [
   "falta de ar", "dificuldade para respirar", "dificuldade de respirar",
-  "nao consegue respirar", "parou de respirar", "respiracao ofegante",
-  "convulsao", "convulsionando", "convulsionou", "crise convulsiva",
-  "desmaiou", "desmaiando", "desacordado", "desacordada",
-  "nao acorda", "nao esta acordando", "nao consigo acordar",
-  "muito mole", "sem reacao", "sem forca nenhuma",
-  "labio roxo", "ficou roxo", "ficou roxa", "roxinho", "roxinha", "cianose",
-  "engasgado e nao chora", "engasgada e nao chora", "engasgo grave",
-  "febre muito alta", "febre altissima", "febre de 40", "febre 40",
+  "nao consegue respirar", "parou de respirar", "respiracao ofegante", "convulsao",
+  "convulsionando", "convulsionou", "crise convulsiva", "desmaiou", "desmaiando",
+  "desacordado", "desacordada", "nao acorda", "nao esta acordando", "nao consigo acordar",
+  "muito mole", "sem reacao", "sem forca nenhuma", "labio roxo", "ficou roxo", "ficou roxa",
+  "roxinho", "roxinha", "cianose", "engasgado e nao chora", "engasgada e nao chora",
+  "engasgo grave", "febre muito alta", "febre altissima", "febre de 40", "febre 40",
   "sangramento muito", "batendo a cabeca muito forte", "caiu e bateu a cabeca forte",
+  "sangrando muito", "sangrando sem parar", "nao para de sangrar", "muito sangue",
+  "perdendo muito sangue", "sangrou muito", "bateu a cabeca forte",
+  "bateu a cabeca muito forte", "bateu a cabeca com forca", "caiu de cabeca",
+  "bateu a cabeca e vomitou", "bateu a cabeca e desmaiou", "desmaio", "engasgando",
+  "esta engasgado", "esta engasgada", "engasgou e nao consegue", "40 de febre", "41 de febre",
+  "febre de 41", "febre 41", "nao esta respirando", "respiracao rapida", "ofegante",
+  "esta roxo", "esta roxa", "ta roxo", "ta roxa", "ta engasgado", "ta engasgada", "esta mole",
+  "ta mole",
 ];
 
 const SAUDACAO_REGEX = /^(oi+|ol[aá]|bom\s*dia|boa\s*tarde|boa\s*noite|opa|e\s*a[íi])[\s!.,?]*$/i;

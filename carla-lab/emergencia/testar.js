@@ -25,14 +25,9 @@ function dispara(texto, palavras) {
   return palavras.find((p) => n.includes(p)) || null;
 }
 
-// A lista que está rodando hoje, lida do config.js versionado.
-const atual = (() => {
-  const fonte = fs.readFileSync(path.join(__dirname, "..", "vps", "arquivos", "config.js"), "utf8");
-  const i = fonte.indexOf("const EMERGENCIA_PALAVRAS = [");
-  const j = fonte.indexOf("];", i);
-  return JSON.parse("[" + fonte.slice(i + 28, j + 1).replace(/,\s*\]$/, "]").slice(1));
-})();
-
+// "antes" = a lista que rodou em produção até 29/07/2026, guardada como registro.
+// "agora" = a lista que está no ar, lida do config.js versionado (espelho da produção).
+const anterior = require("./palavras-anteriores.js");
 const proposta = require("./palavras-propostas.js");
 
 const casos = JSON.parse(fs.readFileSync(path.join(__dirname, "frases-reais.json"), "utf8"));
@@ -54,24 +49,24 @@ function avaliar(palavras) {
   return { escaparam, falsosAlarmes, aceitos };
 }
 
-const a = avaliar(atual);
+const a = avaliar(anterior);
 const p = avaliar(proposta);
 
 const emergencias = casos.filter((c) => c.emergencia).length;
 const comuns = casos.length - emergencias;
 
 console.log(`\n${casos.length} frases: ${emergencias} emergências de verdade, ${comuns} conversas comuns\n`);
-console.log(`                        HOJE      PROPOSTA`);
+console.log(`                        ANTES     AGORA`);
 console.log(`emergência que escapa   ${String(a.escaparam.length).padStart(4)}      ${String(p.escaparam.length).padStart(4)}`);
 console.log(`alarme falso            ${String(a.falsosAlarmes.length).padStart(4)}      ${String(p.falsosAlarmes.length).padStart(4)}`);
 
 if (a.escaparam.length) {
-  console.log(`\nEmergências que HOJE passam batido:`);
+  console.log(`\nEmergências que passavam batido ANTES da correção:`);
   for (const c of a.escaparam) console.log(`  "${c.frase}"`);
 }
 
 if (p.escaparam.length) {
-  console.log(`\nAINDA passam batido com a lista proposta:`);
+  console.log(`\nAINDA passam batido:`);
   for (const c of p.escaparam) console.log(`  "${c.frase}"`);
 }
 
@@ -85,11 +80,11 @@ if (p.falsosAlarmes.length) {
   for (const c of p.falsosAlarmes) console.log(`  "${c.frase}"  -> disparou por "${c.bateu}"`);
 }
 
-console.log(`\npalavras: ${atual.length} hoje, ${proposta.length} na proposta (+${proposta.length - atual.length})`);
+console.log(`\npalavras: ${anterior.length} antes, ${proposta.length} agora (+${proposta.length - anterior.length})`);
 
 const regrediu = p.escaparam.length > a.escaparam.length || p.falsosAlarmes.length > a.falsosAlarmes.length;
 if (regrediu || p.escaparam.length > 0 || p.falsosAlarmes.length > 0) {
-  console.log(`\nA proposta ainda não está pronta.`);
+  console.log(`\nA lista em produção não está íntegra.`);
   process.exit(1);
 }
-console.log(`\nProposta aprovada: nenhuma emergência escapa e nenhum alarme falso.`);
+console.log(`\nLista em produção íntegra: nenhuma emergência escapa e nenhum alarme falso.`);
