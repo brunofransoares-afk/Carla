@@ -151,6 +151,27 @@ async function notificarNovoAgendamento(sock, acao, telefoneFamilia) {
   }
 }
 
+// Segundo aviso, quando a família passa e-mail e data de nascimento. Vem separado do
+// aviso de agendamento de propósito: esses dados chegam depois, numa mensagem seguinte, e
+// é neste momento que dá pra criar o portal da criança e liberar a cortesia do guia.
+// Inerte sem DR_BRUNO_TELEFONE. Nunca é aguardada.
+async function notificarDadosDoPaciente(sock, dados, acao, telefoneFamilia) {
+  const telefoneDrBruno = (process.env.DR_BRUNO_TELEFONE || "").trim();
+  if (!telefoneDrBruno) return;
+  if (!dados || (!dados.email && !dados.dataNascimento)) return;
+  try {
+    const jid = telefoneDrBruno.replace("+", "") + "@s.whatsapp.net";
+    const linhas = ["Dados pro portal 📁", ""];
+    if (acao && acao.crianca) linhas.push(`Criança: ${acao.crianca}`);
+    linhas.push(`Telefone: ${telefoneFamilia}`);
+    if (dados.email) linhas.push(`E-mail: ${dados.email}`);
+    if (dados.dataNascimento) linhas.push(`Nascimento: ${dados.dataNascimento}`);
+    await sock.sendMessage(jid, { text: linhas.join("\n") });
+  } catch (erro) {
+    console.error("[NOTIFICAÇÃO] Erro ao avisar os dados do paciente:", erro.message);
+  }
+}
+
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
   const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
   const now = new Date();
@@ -208,6 +229,11 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
 
   for (const cancelado of resultado.cancelamentos || []) {
     console.log(`[CANCELADO PELA IA] ${telefone} — ${cancelado.crianca} em ${cancelado.label}`);
+  }
+
+  if (resultado.dadosDoPaciente) {
+    console.log(`[DADOS DO PORTAL] ${telefone}: ${JSON.stringify(resultado.dadosDoPaciente)}`);
+    notificarDadosDoPaciente(sock, resultado.dadosDoPaciente, sessao.ultimoAgendamento, telefone);
   }
 
   if (resultado.escalar) {
