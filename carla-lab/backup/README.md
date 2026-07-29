@@ -46,14 +46,52 @@ pm2 restart ecosystem.config.js --update-env
 O passo 3 não é excesso de cuidado: restaurar um backup velho por cima do estado atual
 apaga os agendamentos feitos desde então. Com a pasta antiga guardada, dá para recuperar.
 
+## O que tem dentro do pacote
+
+Levantado no servidor em 29/07/2026:
+
+| Conteúdo | O que é |
+|---|---|
+| `agendamentos.json` + `.csv` | as consultas marcadas |
+| `contatos-whatsapp.json` | nomes e telefones das famílias |
+| `sessoes.json` | histórico das conversas |
+| `alertas.json`, `bloqueios*.json`, `pacientes-manuais.json`, `horarios-extras.json` | estado do painel |
+| `auth/` | **a sessão do WhatsApp**, mais de mil arquivos |
+
+A pasta `auth/` explica o número alto de arquivos e vale entender bem. Guardá-la é bom:
+numa restauração, a Carla volta sem precisar ler o QR Code de novo. Mas ela **é a
+credencial do WhatsApp do consultório**. Quem tiver esse pacote consegue se passar pelo
+número da clínica.
+
+Consequência prática: o backup é seguro no VPS, mas **qualquer cópia que saia do servidor
+precisa sair criptografada**, sem exceção. Não é só por causa dos dados dos pacientes; é
+também por causa da sessão.
+
 ## O que o script garante
 
 - **Escrita atômica.** Grava em `.parcial` e só renomeia no fim. Backup interrompido no
   meio nunca aparece com nome de backup bom.
-- **Verificação.** Abre o pacote e confere que os arquivos de agendamentos e contatos
-  estão lá dentro. Um backup que ninguém testou não é um backup.
+- **Verificação nomeada.** Confere item por item se `agendamentos.json`,
+  `contatos-whatsapp.json` e `sessoes.json` entraram, e imprime cada um. Sem esses três o
+  pacote não restaura o consultório, e a saída sai com código 1.
 - **Rotação com piso.** Apaga pacotes mais velhos que a janela (30 dias por padrão), mas
   nunca o mais recente. Melhor um backup velho do que nenhum.
+
+### Uma armadilha que essa verificação já pisou
+
+A primeira versão conferia com `echo "$listagem" | grep -q`. Isso **acusa falso** em
+produção: com `set -o pipefail` ligado, o `grep -q` sai na primeira ocorrência, o `echo`
+leva SIGPIPE com o resto da listagem por escrever, e o pipeline inteiro retorna erro.
+
+Só acontece quando a listagem passa do buffer de 64 KB do pipe, ou seja, exatamente
+quando existem mil arquivos de sessão, e nunca num teste pequeno. Medido:
+
+| Listagem | Resultado |
+|---|---|
+| 39 KB | acha |
+| 119 KB | falha |
+
+A verificação agora usa casamento de padrão do próprio bash, sem pipe nenhum.
 
 ## O que ele NÃO resolve
 

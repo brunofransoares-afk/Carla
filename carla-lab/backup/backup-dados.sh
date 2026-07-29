@@ -45,18 +45,43 @@ if ! tar -tzf "$tmp" > /dev/null 2>&1; then
 fi
 
 listagem="$(tar -tzf "$tmp")"
+
+# A conferência usa casamento de padrão do próprio bash, NUNCA "echo | grep -q".
+# Com pipefail ligado, grep -q sai na primeira ocorrência, o echo leva SIGPIPE com o
+# resto da listagem por escrever, e a checagem acusa falta de um arquivo que está lá.
+# Só acontece quando a listagem passa do buffer de 64 KB do pipe, ou seja, exatamente
+# em produção e nunca num teste pequeno.
+contem() {
+  case "$listagem" in *"$1"*) return 0 ;; *) return 1 ;; esac
+}
+
+# Sem estes três, o backup não serve para restaurar o consultório.
+ESSENCIAIS="agendamentos.json contatos-whatsapp.json sessoes.json"
 faltando=0
-for esperado in agendamentos contatos; do
-  if ! echo "$listagem" | grep -q "$esperado"; then
-    echo "[backup] AVISO: não encontrei nenhum arquivo de '$esperado' no pacote"
+for esperado in $ESSENCIAIS; do
+  if contem "$esperado"; then
+    echo "[backup]   ok      $esperado"
+  else
+    echo "[backup]   FALTOU  $esperado"
     faltando=1
   fi
 done
 
+# A pasta auth/ é a sessão do WhatsApp. Guardá-la faz a restauração dispensar ler o QR
+# Code de novo, e é também o motivo de o pacote ter mais de mil arquivos.
+if contem "auth/"; then
+  echo "[backup]   ok      auth/ (sessão do WhatsApp)"
+else
+  echo "[backup]   AVISO   auth/ ausente: restaurar vai exigir ler o QR Code de novo"
+fi
+
 mv "$tmp" "$pacote"
 tamanho="$(du -h "$pacote" | cut -f1)"
-arquivos="$(echo "$listagem" | wc -l)"
-echo "[backup] $(date '+%Y-%m-%d %H:%M') ok: $pacote ($tamanho, $arquivos arquivos)"
+total="$(printf '%s\n' "$listagem" | wc -l)"
+sessao="$(printf '%s\n' "$listagem" | grep -c '/auth/' || true)"
+dados=$((total - sessao))
+echo "[backup] $(date '+%Y-%m-%d %H:%M') ok: $pacote"
+echo "[backup] $tamanho · $dados arquivo(s) de dados + $sessao de sessão do WhatsApp"
 
 # Rotação: remove pacotes mais velhos que a janela, sempre preservando o mais recente
 # mesmo que ele já tenha passado da idade (melhor um backup velho do que nenhum).
