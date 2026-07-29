@@ -179,8 +179,44 @@ Precisa de três variáveis no `.env`:
 
 Sem as três configuradas, esse envio fica completamente inerte — a Carla
 segue confirmando e gravando o agendamento normalmente aqui e no Google
-Agenda, só não manda nada pro outro sistema.
+Agenda, só não manda nada pro outro sistema. **Quando falta alguma, aparece um
+aviso no `pm2 logs carla-bot`** dizendo qual: antes ele saía calado, e a cópia
+podia estar desligada por meses sem ninguém notar.
 
 Essa chamada é **fail-open**: se falhar (serviço fora do ar, chave errada,
 timeout), só fica registrado no log — nunca desfaz nem atrasa o agendamento
 de verdade, que já está confirmado antes dessa chamada acontecer.
+
+### E-mail do responsável e nascimento da criança
+
+A família responde esses dois dados **depois** que a consulta já está marcada,
+numa mensagem seguinte. Quando isso acontece, a Carla também manda pro outro
+sistema — e é isso que cria a **ficha do paciente** no prontuário e monta o
+**acesso do responsável ao portal da criança**.
+
+Precisa de uma variável a mais:
+- `APP_CARLA_SECRET` — o mesmo valor do `CARLA_WEBHOOK_SECRET` que está nos
+  secrets do Supabase daquele projeto
+
+Esse envio **não usa a `service_role`**: ele fala com uma Edge Function que
+autentica só por esse segredo. É uma diferença que importa: a `service_role` lê
+e escreve o prontuário inteiro de qualquer paciente; esse segredo só marca e
+completa consulta. Se a VPS da Carla for comprometida um dia, a distância entre
+os dois cenários é grande.
+
+Do outro lado, o acesso ao portal nasce **desligado**: o e-mail chegou digitado
+no WhatsApp, sem verificação, e um dígito errado que caia numa caixa real daria
+a um estranho acesso de leitura ao cartão de vacinas, ao crescimento e aos
+documentos daquela criança. Quem libera é o Dr. Bruno, com um toque na Agenda
+do SPI.
+
+O sexo da criança **não é perguntado**: o outro sistema infere pelo primeiro
+nome. Nome ambíguo (Alex, Ariel, Darci…) não é chutado — nesse caso a ficha não
+é criada e o log avisa o motivo.
+
+### Teste
+
+`node tests/app-agenda.test.js` — 31 verificações, sem rede (o `fetch` é
+substituído). Vale rodar depois de mexer neste arquivo: a integração roda em
+background e falha em silêncio de propósito, então um erro aqui não aparece
+sozinho.
