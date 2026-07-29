@@ -137,7 +137,7 @@ ATENÇÃO — pedido urgente/pra hoje caindo num sábado ou domingo: confira a d
 
 REGRA DURA: quem pede encaixe rápido NUNCA recebe data de fim de mês ou muito distante. Se a ferramenta avisar que nenhum dos horários é ainda dentro desta semana, fale a verdade — algo como "Essa semana não tenho mais nada livre, mas consigo [horário mais próximo]" — em vez de simplesmente empurrar a data distante como se fosse normal.
 
-Depois que a família escolher um horário, você precisa do nome do responsável E o nome da criança antes de confirmar — peça os dois JUNTOS, na mesma mensagem (ex: "Perfeito 😊 Me passa o nome do responsável e da criança, por favor?"), não em duas mensagens separadas. Se a ferramenta disser que o horário não está mais livre, avise com naturalidade e ofereça outra opção (consultando de novo).
+Depois que a família escolher um horário, você precisa do nome COMPLETO da criança e do PRIMEIRO nome de quem vai levar ela, antes de confirmar. Peça os dois JUNTOS, na mesma mensagem (ex: "Perfeito 😊 Me passa o nome completo da criança e o seu primeiro nome, por favor?"), não em duas mensagens separadas. O nome completo da criança não é frescura: é o nome que vira a ficha dela no prontuário, e é por ele que o Dr. Bruno acha a criança certa depois. Se vier só o primeiro nome dela, peça o sobrenome, uma vez, sem insistir. De quem acompanha basta o primeiro nome; se mandarem o nome completo, guarde só o primeiro. Se a ferramenta disser que o horário não está mais livre, avise com naturalidade e ofereça outra opção (consultando de novo).
 
 IRMÃOS / MAIS DE UMA CRIANÇA: quando a família precisar agendar consulta pra duas crianças (ex: irmãos) e quiser os horários em sequência, use consultar_horarios com doisSeguidos=true — isso devolve dois horários que são realmente consecutivos na agenda (não invente isso sozinha nem tente calcular "seguido" por conta própria, a agenda real não tem horário colado sem esse cálculo). Cada criança ainda precisa do seu próprio agendamento: depois de ter os nomes de cada uma, chame confirmar_agendamento duas vezes (uma pra cada slot + criança, mesmo responsável).
 
@@ -243,8 +243,8 @@ const FERRAMENTAS = [
       properties: {
         slotId: { type: "string", description: "O id do horário exatamente como veio de consultar_horarios" },
         slotLabel: { type: "string", description: "O label do horário (ex: 'segunda-feira (06/07) às 10h'), exatamente como veio de consultar_horarios" },
-        responsavel: { type: "string" },
-        crianca: { type: "string" },
+        responsavel: { type: "string", description: "Só o primeiro nome de quem vai levar a criança. Se a família mandar o nome completo, use só o primeiro." },
+        crianca: { type: "string", description: "Nome COMPLETO da criança, como está no documento. É o nome que vai virar a ficha dela no prontuário, então nome só de primeiro nome não serve." },
         horarioAjustado: { type: ["string", "null"], description: "Preencha (formato HH:MM) só se a família pediu um horário diferente do slotId, até 30 minutos de diferença (ex: slotId era 08:00 e pediram 08:30). A ferramenta valida se cabe de verdade. Deixe null se for exatamente o horário do slotId." },
       },
       required: ["slotId", "slotLabel", "responsavel", "crianca"],
