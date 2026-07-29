@@ -278,7 +278,12 @@ function marcarLembreteEnviado(slotId, tipo) {
 
 // Guarda e-mail do responsável e data de nascimento da criança no agendamento mais
 // recente desse telefone. É o que vai alimentar a criação do portal da criança no
-// Sistema Pediátrico Integrado. Devolve false se não houver agendamento pra ligar.
+// Sistema Pediátrico Integrado.
+//
+// Devolve o AGENDAMENTO (não só `true`) porque quem chama precisa do appAgendamentoId pra
+// mandar esses dados pro prontuário, e é aqui que se sabe em qual agendamento eles
+// entraram. Continua devolvendo `false` quando não há agendamento pra ligar, então um
+// `if (!guardado)` do lado de quem chama segue valendo.
 function registrarDadosDoPaciente(telefone, { email = null, dataNascimento = null } = {}) {
   const lista = lerAgendamentos();
   // O mais recente primeiro: uma família pode ter marcado pra dois filhos, e os dados
@@ -289,7 +294,7 @@ function registrarDadosDoPaciente(telefone, { email = null, dataNascimento = nul
   if (dataNascimento) item.criancaDataNascimento = dataNascimento;
   escreverJSON(ARQ_AGENDAMENTOS, lista);
   reescreverCSV(lista);
-  return true;
+  return item;
 }
 
 // Cancela (apaga) um agendamento pelo slotId. Retorna o registro removido (inclui

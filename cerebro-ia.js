@@ -467,6 +467,21 @@ async function executarFerramenta(nome, input, ctx) {
     }
 
     ctx.dadosDoPacienteRegistrados = { email: emailValido ? email : null, dataNascimento: dataValida ? data : null };
+
+    // Manda pro Sistema Pediátrico Integrado (fail-open — ver app-agenda.js). É a ação
+    // `completar` de lá, não um INSERT: ela cria a ficha do paciente no prontuário e monta
+    // o acesso do responsável ao portal DESLIGADO, esperando o toque do Dr. Bruno. Sem esta
+    // chamada os dados param aqui (JSON + CSV + WhatsApp) e o cadastro continua na mão.
+    //
+    // Não é aguardada, igual ao envio do agendamento: a família não espera por isso. E o
+    // appAgendamentoId vem do registro que o Storage acabou de devolver — é o id do
+    // agendamento correspondente do outro lado, guardado quando o espelho respondeu.
+    AppAgenda.completarDadosDoPaciente({
+      appAgendamentoId: guardado.appAgendamentoId,
+      email: ctx.dadosDoPacienteRegistrados.email,
+      dataNascimento: ctx.dadosDoPacienteRegistrados.dataNascimento,
+    });
+
     return { sucesso: true, guardado: ctx.dadosDoPacienteRegistrados };
   }
 
