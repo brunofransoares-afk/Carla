@@ -9,15 +9,15 @@
 # pacote em outro lugar. Pode rodar com a Carla no ar, sem parar nada.
 #
 # Instalação no servidor (uma vez):
-#   chmod +x /root/carla/carla-lab/backup/backup-dados.sh
+#   chmod +x /root/carla/carla-whatsapp-bot/carla-lab/backup/backup-dados.sh
 #   crontab -e
-#   0 3 * * *  /root/carla/carla-lab/backup/backup-dados.sh >> /root/carla/logs/backup.log 2>&1
+#   0 3 * * *  /root/carla/carla-whatsapp-bot/carla-lab/backup/backup-dados.sh >> /root/carla/carla-whatsapp-bot/logs/backup.log 2>&1
 #
 # Restauração: veja README.md nesta mesma pasta.
 
 set -euo pipefail
 
-ORIGEM="${CARLA_DATA_DIR:-/root/carla/data}"
+ORIGEM="${CARLA_DATA_DIR:-/root/carla/carla-whatsapp-bot/data}"
 DESTINO="${CARLA_BACKUP_DIR:-/root/backups/carla}"
 MANTER_DIAS="${CARLA_BACKUP_MANTER:-30}"
 

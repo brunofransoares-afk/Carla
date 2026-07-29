@@ -11,15 +11,15 @@ problemas diferentes, e este é o do backup.
 ## Instalação (uma vez, no servidor)
 
 ```bash
-chmod +x /root/carla/carla-lab/backup/backup-dados.sh
+chmod +x /root/carla/carla-whatsapp-bot/carla-lab/backup/backup-dados.sh
 mkdir -p /root/backups/carla
 
 # roda uma vez na mão, pra ver funcionando
-/root/carla/carla-lab/backup/backup-dados.sh
+/root/carla/carla-whatsapp-bot/carla-lab/backup/backup-dados.sh
 
 # depois, todo dia às 3h da manhã
 crontab -e
-0 3 * * *  /root/carla/carla-lab/backup/backup-dados.sh >> /root/carla/logs/backup.log 2>&1
+0 3 * * *  /root/carla/carla-whatsapp-bot/carla-lab/backup/backup-dados.sh >> /root/carla/carla-whatsapp-bot/logs/backup.log 2>&1
 ```
 
 Não precisa parar o bot. O script só lê a pasta `data/` e escreve o pacote em outro lugar.
@@ -34,10 +34,10 @@ ls -lt /root/backups/carla/
 tar -tzf /root/backups/carla/carla-dados-2026-07-28_0300.tar.gz
 
 # 3. guardar o estado atual (nunca sobrescreva sem uma saída)
-mv /root/carla/data /root/carla/data.antes-da-restauracao
+mv /root/carla/carla-whatsapp-bot/data /root/carla/carla-whatsapp-bot/data.antes-da-restauracao
 
 # 4. restaurar
-tar -xzf /root/backups/carla/carla-dados-2026-07-28_0300.tar.gz -C /root/carla/
+tar -xzf /root/backups/carla/carla-dados-2026-07-28_0300.tar.gz -C /root/carla/carla-whatsapp-bot/
 
 # 5. reiniciar
 pm2 restart ecosystem.config.js --update-env

@@ -13,7 +13,7 @@ Isso significa quatro separações, e as quatro precisam estar certas antes de s
 
 | O quê | Produção | Staging |
 |---|---|---|
-| Pasta | `/root/carla` | `/root/carla-staging` |
+| Pasta | `/root/carla/carla-whatsapp-bot` | `/root/carla-staging` |
 | Número de WhatsApp | número do consultório | **um chip só seu** |
 | Google Agenda | agenda real do médico | calendário de teste |
 | Aviso de agendamento | celular do Dr. Bruno | seu número de teste |
@@ -26,12 +26,12 @@ a Carla real para de responder. Confira duas vezes antes de ler o QR Code.
 
 ```bash
 # 1. cópia separada do código, no branch do laboratório
-git clone /root/carla /root/carla-staging
+git clone /root/carla/carla-whatsapp-bot /root/carla-staging
 cd /root/carla-staging
 git fetch origin carla/lab && git checkout carla/lab
 
 # 2. o carla-app precisa existir ao lado, igual em produção
-cp -r /root/carla-app /root/carla-app-staging
+cp -r /root/carla/carla-app /root/carla-app-staging
 ln -s /root/carla-app-staging /root/carla-staging/../carla-app  # ajuste conforme seu layout
 
 # 3. dados vazios: staging NUNCA parte dos dados reais de pacientes
@@ -64,14 +64,14 @@ código, não por configuração que alguém possa esquecer.
 Então para rodar a suíte basta um clone separado, sem credencial:
 
 ```bash
-git clone /root/carla /root/carla-testes
+git clone /root/carla/carla-whatsapp-bot /root/carla-testes
 cd /root/carla-testes
 git remote set-url origin <url-do-github>
 git fetch origin carla/lab && git checkout carla/lab
 npm install
 
 # o carla-app precisa estar ao lado, igual em produção
-cp -r /root/carla-app /root/carla-testes-app
+cp -r /root/carla/carla-app /root/carla-testes-app
 # (ajuste o caminho conforme o layout do servidor)
 
 mkdir -p data logs   # agenda vazia, nunca os dados reais

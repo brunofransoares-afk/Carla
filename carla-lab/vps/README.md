@@ -22,7 +22,7 @@ ao repositório.
 
 ## Como versionar
 
-**NUNCA troque o branch dentro de `/root/carla`.** Essa é a pasta de onde o PM2 roda a
+**NUNCA troque o branch dentro de `/root/carla/carla-whatsapp-bot`.** Essa é a pasta de onde o PM2 roda a
 Carla de verdade, e o `auto-deploy.sh` espera encontrá-la em `main`. Deixar o checkout de
 produção apontando para outro branch é uma armadilha: qualquer push futuro naquele branch
 passaria a cair na pasta de produção.
@@ -55,7 +55,7 @@ servidor. Isso é `cat`: leitura pura, nada é alterado, a Carla nem percebe.
 Use um **clone separado**, nunca a pasta de produção:
 
 ```bash
-git clone /root/carla /root/carla-lab-tmp
+git clone /root/carla/carla-whatsapp-bot /root/carla-lab-tmp
 cd /root/carla-lab-tmp
 git remote set-url origin <url-do-github>
 git fetch origin carla/lab && git checkout carla/lab
@@ -71,7 +71,7 @@ git push origin carla/lab
 cd / && rm -rf /root/carla-lab-tmp
 ```
 
-Em qualquer um dos caminhos, `/root/carla` continua em `main`, intocada.
+Em qualquer um dos caminhos, `/root/carla/carla-whatsapp-bot` continua em `main`, intocada.
 
 ## O contrato que esses arquivos precisam cumprir
 
@@ -106,8 +106,27 @@ significa perder a detecção de emergência.
 
 Formato de slot, confirmado pelo uso em `storage-node.js`: `{ id, date, time, label }`.
 
+## Layout real do VPS
+
+Confirmado em 29/07/2026. Vale registrar porque as primeiras instruções deste laboratório
+supunham que `/root/carla` fosse o repositório, e não é:
+
+```
+/root/carla/                       pasta guarda-chuva, NÃO é repositório Git
+├── auto-deploy.sh                 cron de deploy, roda a cada 3 minutos
+├── deploy-cron.log
+├── carla-app/                     app do navegador (config.js, agenda.js)
+└── carla-whatsapp-bot/            ← O REPOSITÓRIO GIT
+    ├── server.js, cerebro-ia.js, storage-node.js, painel-server.js
+    ├── data/                      dados dos pacientes (fora do Git)
+    └── carla-lab/                 este laboratório
+```
+
+Isso explica o `require(path.join(__dirname, "..", "carla-app", ...))` do código: o
+`carla-app` é irmão da pasta do repositório, não filho dela.
+
 ## Estado
 
-**Pendente de você.** É o único item da Fase 0 que depende de acesso ao servidor. Enquanto
-não for feito, a Fase 0 não está concluída, mesmo com todo o resto pronto: o backup cobre
-os dados, e este item cobre o código que faz a Carla existir.
+**Concluído em 29/07/2026.** Os dois arquivos estão em `arquivos/`, conferidos:
+`config.js` exporta os 15 símbolos esperados e `agenda.js` as 8 funções, gerando a grade
+correta de 16 horários por semana.
