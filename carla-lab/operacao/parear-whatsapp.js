@@ -54,6 +54,7 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
+  Browsers,
 } = requireDoRepo("@whiskeysockets/baileys");
 
 // O logger do Baileys despeja JSON a cada evento e enterraria o código de pareamento no
@@ -75,7 +76,11 @@ async function parear() {
     printQRInTerminal: false,
     syncFullHistory: false,   // pareamento não precisa puxar histórico; o bot puxa depois
     logger: silencioso,
-    browser: ["Carla", "Chrome", "1.0.0"],
+    // Identificação de navegador PADRÃO, não inventada. O pareamento por código só é
+    // aceito com uma das identificações que o WhatsApp conhece; um nome próprio faz o
+    // código ser gerado e depois recusado na hora de digitar, que foi o que aconteceu
+    // em 29/07/2026 com browser: ["Carla", "Chrome", "1.0.0"].
+    browser: Browsers.ubuntu("Chrome"),
   });
 
   sock.ev.on("creds.update", saveCreds);
@@ -83,7 +88,9 @@ async function parear() {
   // Código de pareamento: só pode ser pedido uma vez, e só se ainda não estiver registrado.
   if (!usarQr && !sock.authState.creds.registered && !codigoJaPedido) {
     codigoJaPedido = true;
-    await esperar(3000); // o socket precisa estar de pé antes de pedir
+    // Espera o socket ficar realmente pronto. Pedir cedo demais gera um código que o
+    // servidor não honra depois.
+    await esperar(6000);
     try {
       const codigo = await sock.requestPairingCode(numero);
       const formatado = codigo.match(/.{1,4}/g).join("-");
