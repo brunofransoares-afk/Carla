@@ -46,7 +46,7 @@ function pareceEmergencia(texto) {
   return (global.EMERGENCIA_PALAVRAS || []).some((p) => textoNorm.includes(p));
 }
 
-function montarSystemPrompt(now, pacienteConhecido = false) {
+function montarSystemPrompt(now, pacienteConhecido = false, portalJaLiberado = false) {
   const c = global.CARLA_CONFIG || {};
   const diaSemana = (c.nomesDiaSemana || [])[now.getDay()] || "";
   const dataFormatada = `${diaSemana}, ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}, ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -105,7 +105,9 @@ NUNCA prometa que o plano vai reembolsar: isso depende do plano dela, você não
 - Portal da criança: é o lugar onde fica a vida de saúde daquela criança, dos dois lados. A família sobe foto dos exames, da carteira de vacinação e da tabela de peso e altura; os exames ficam guardados ali e dá pra comparar os antigos com os novos, em vez de procurar papel em gaveta. O Dr. Bruno, do lado dele, coloca lá as receitas e os documentos que passar, e a família recebe aviso quando chega coisa nova. O sistema lê os números das fotos e o Dr. Bruno confere, e a partir daí saem as curvas de crescimento e a lista de vacinas que ainda faltam. NUNCA diga que as curvas "se montam sozinhas": a família precisa subir os dados, e o Dr. Bruno confere antes de entrar. Esse assunto é mais útil pra quem fala de rotina, puericultura, recém-nascido ou vacina do que pra quem tem uma queixa aguda; use quando encaixar no caso, não em toda conversa.
 - COMO FALAR DO PORTAL: a família nunca ouviu falar disso. A palavra "portal" sozinha não quer dizer nada pra ela, e "curvas de crescimento" é termo de consultório. Então NUNCA cite o portal sem dizer, na mesma frase, o que é e o que ela faz ali: um espaço só da criança, onde ELA guarda os exames, a carteira de vacinação e o peso e altura, onde o Dr. Bruno deixa as receitas e os documentos dele, e onde ela acompanha o crescimento e as vacinas que faltam. Prefira as palavras do dia a dia ("o espaço da [criança]", "acompanhar o peso e a altura") à palavra técnica. Se ela perguntar mais, aí sim pode detalhar.
 - Portal como aplicativo: dá pra deixar o portal na tela inicial do celular e usar como se fosse um aplicativo. Se perguntarem como, responda curto: abrir o link, tocar no menu do navegador e escolher "Adicionar à Tela de Início" — no iPhone o menu é o ícone de compartilhar, no Android são os três pontinhos. Não vire tutorial nem invente passo que não está aqui.
-- Acesso ao portal: quem libera é o Dr. Bruno, com o e-mail que a família passar, e ele faz isso perto da consulta. Você NÃO tem o link pra enviar e NÃO libera acesso nenhum. Se perguntarem quando chega ou como entra, diga só que o Dr. Bruno libera com aquele e-mail e a família recebe o acesso — nunca mande link, nunca diga que já está liberado, nunca prometa prazo ("hoje", "em alguns minutos", "até amanhã").
+${portalJaLiberado
+  ? `- Acesso ao portal: JÁ ESTÁ LIBERADO pra esta família, e o link do portal já foi enviado pra ela nesta conversa. NUNCA diga que o Dr. Bruno vai liberar depois, nem "mais perto da consulta", nem qualquer coisa no futuro — isso já aconteceu. Se perguntarem como entrar, diga que é só abrir o link que ela recebeu e criar a senha no primeiro acesso, com o e-mail que ela passou. Se ela disser que não achou o link, você pode repetir o endereço.`
+  : `- Acesso ao portal: quem libera é o Dr. Bruno, com o e-mail que a família passar, e ele faz isso perto da consulta. Você NÃO tem o link pra enviar e NÃO libera acesso nenhum. Se perguntarem quando chega ou como entra, diga só que o Dr. Bruno libera com aquele e-mail e a família recebe o acesso — nunca mande link, nunca diga que já está liberado, nunca prometa prazo ("hoje", "em alguns minutos", "até amanhã").`}
 - Planos de acompanhamento: sim, o Dr. Bruno tem. Ele apresenta o formato na própria consulta e depois envia um PDF com a programação. Se perguntarem, responda só isso — não detalhe preço nem fique vendendo o plano.
 - Emite nota fiscal quando solicitado — nesse caso peça: nome completo, CPF, CEP, número da residência e e-mail.
 - Fim de semana (sábado/domingo): o Dr. Bruno pode eventualmente atender, com valor diferenciado de R$ 800, sujeito à disponibilidade dele. Você NÃO decide isso sozinha — ver regra ATENDIMENTO DE FIM DE SEMANA abaixo.
@@ -517,6 +519,12 @@ async function executarFerramenta(nome, input, ctx) {
       return { sucesso: true, guardadoParaDepois: true };
     }
 
+    // Já era exatamente isso que estava guardado. Sucesso pra você, mas sem avisar o
+    // Dr. Bruno de novo: ele não precisa do mesmo recado duas vezes.
+    if (guardado.semNovidade) {
+      return { sucesso: true, jaEstavaGuardado: true };
+    }
+
     ctx.dadosDoPacienteRegistrados = { email: emailValido ? email : null, dataNascimento: dataValida ? data : null };
 
     // Manda pro Sistema Pediátrico Integrado (fail-open — ver app-agenda.js). É a ação
@@ -632,7 +640,7 @@ async function chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx,
 // Ponto de entrada principal: recebe o texto novo + histórico da conversa, devolve a
 // resposta pronta pra mandar, o histórico atualizado, e sinaliza se uma reserva de verdade
 // foi feita ou se a IA pediu escalonamento pra atendimento humano.
-async function responder({ telefone, texto, historico, now, idsOcupados, agendamentoAtual = null, pacienteConhecido = false }) {
+async function responder({ telefone, texto, historico, now, idsOcupados, agendamentoAtual = null, pacienteConhecido = false, portalJaLiberado = false }) {
   const api = obterCliente();
   if (!api) {
     return {
@@ -644,7 +652,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     };
   }
 
-  const system = montarSystemPrompt(now, pacienteConhecido);
+  const system = montarSystemPrompt(now, pacienteConhecido, portalJaLiberado);
   const mensagensIniciais = [
     ...historico.map((h) => ({ role: h.role, content: h.content })),
     { role: "user", content: texto },
