@@ -30,13 +30,21 @@ function configurado() {
   return ok;
 }
 
-// A ação `completar` do prontuário NÃO usa a service role: é uma Edge Function que
-// autentica pelo segredo combinado. Por isso a configuração dela é outra.
+// A ação `completar` fala com uma Edge Function, que aceita DOIS jeitos de autenticar:
+// o segredo combinado (APP_CARLA_SECRET) ou a service role que já está aqui.
+//
+// O segredo é o caminho preferido — ele é o que vai permitir, um dia, tirar a service
+// role deste servidor, que é onde está o ganho de segurança de verdade. Mas exigir o
+// segredo HOJE não protegeria nada: a chave mais poderosa já está neste mesmo `.env`, e
+// é com ela que o enviarAgendamento escreve na tabela. Então a integração funciona com o
+// que já existe, e o segredo continua disponível para quando der pra fazer a troca certa.
 function configuradoFuncao() {
-  const ok = !!(process.env.APP_SUPABASE_URL && process.env.APP_CARLA_SECRET);
+  const ok = !!(process.env.APP_SUPABASE_URL &&
+    (process.env.APP_CARLA_SECRET || process.env.APP_SERVICE_ROLE_KEY));
   if (!ok) {
     avisarUmaVez("funcao",
-      "Envio de e-mail/nascimento pro prontuário DESLIGADO: faltam APP_SUPABASE_URL ou APP_CARLA_SECRET.");
+      "Envio de e-mail/nascimento pro prontuário DESLIGADO: falta APP_SUPABASE_URL, " +
+      "ou nenhum meio de autenticar (APP_CARLA_SECRET ou APP_SERVICE_ROLE_KEY).");
   }
   return ok;
 }
@@ -53,12 +61,14 @@ function headersRest() {
   };
 }
 
-// Cabeçalhos da Edge Function: só o segredo combinado, nenhuma chave de banco.
+// Cabeçalhos da Edge Function. Prefere o segredo combinado; se ele não estiver no `.env`,
+// usa a service role que já está aqui (a função aceita os dois). A ordem importa: no dia
+// em que o segredo for criado, a chamada passa a usar ele sozinha, sem mexer em código.
 function headersFuncao() {
-  return {
-    "X-Carla-Secret": process.env.APP_CARLA_SECRET,
-    "Content-Type": "application/json",
-  };
+  const h = { "Content-Type": "application/json" };
+  if (process.env.APP_CARLA_SECRET) h["X-Carla-Secret"] = process.env.APP_CARLA_SECRET;
+  else h.Authorization = `Bearer ${process.env.APP_SERVICE_ROLE_KEY}`;
+  return h;
 }
 
 // Faz a requisição e devolve o corpo já parseado como JSON (ou null se a resposta vier vazia).

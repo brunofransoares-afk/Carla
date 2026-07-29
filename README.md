@@ -194,15 +194,20 @@ numa mensagem seguinte. Quando isso acontece, a Carla também manda pro outro
 sistema — e é isso que cria a **ficha do paciente** no prontuário e monta o
 **acesso do responsável ao portal da criança**.
 
-Precisa de uma variável a mais:
+**Não precisa de variável nova.** Esse envio fala com uma Edge Function, que aceita
+duas formas de autenticar: o segredo combinado ou a `service_role` que já está
+neste `.env`. Sem o segredo, ele usa a `service_role` e funciona.
+
+Opcionalmente, quando der:
 - `APP_CARLA_SECRET` — o mesmo valor do `CARLA_WEBHOOK_SECRET` que está nos
   secrets do Supabase daquele projeto
 
-Esse envio **não usa a `service_role`**: ele fala com uma Edge Function que
-autentica só por esse segredo. É uma diferença que importa: a `service_role` lê
-e escreve o prontuário inteiro de qualquer paciente; esse segredo só marca e
-completa consulta. Se a VPS da Carla for comprometida um dia, a distância entre
-os dois cenários é grande.
+Se essa variável existir, ela passa a ser usada em vez da `service_role`, sem
+mexer em código. Vale fazer um dia porque a `service_role` lê e escreve o
+prontuário inteiro de qualquer paciente, enquanto esse segredo só marca e
+completa consulta — mas só faz diferença de verdade quando a `service_role` sair
+deste servidor de vez (o `enviarAgendamento` ainda depende dela). Enquanto ela
+estiver aqui, exigir o segredo não protegeria nada.
 
 Do outro lado, o acesso ao portal nasce **desligado**: o e-mail chegou digitado
 no WhatsApp, sem verificação, e um dígito errado que caia numa caixa real daria
@@ -216,7 +221,7 @@ nome. Nome ambíguo (Alex, Ariel, Darci…) não é chutado — nesse caso a fic
 
 ### Teste
 
-`node tests/app-agenda.test.js` — 31 verificações, sem rede (o `fetch` é
+`node tests/app-agenda.test.js` — 35 verificações, sem rede (o `fetch` é
 substituído). Vale rodar depois de mexer neste arquivo: a integração roda em
 background e falha em silêncio de propósito, então um erro aqui não aparece
 sozinho.
