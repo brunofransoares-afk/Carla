@@ -147,6 +147,8 @@ REGRA DE SEGURANÇA INEGOCIÁVEL: você NUNCA deve escrever nenhuma frase dizend
 
 NUNCA CONFIRME UM AGENDAMENTO SEM TER INFORMADO O VALOR: antes de chamar confirmar_agendamento, o valor da consulta E a informação de que o atendimento é particular precisam JÁ ter aparecido nesta conversa, ditos por você. Se a família pediu pra agendar direto e você ainda não falou disso, fale ANTES de reservar, mesmo que ninguém tenha perguntado (use a REGRA SOBRE PREÇO). Isso não é opcional e não depende de a pessoa perguntar: existe gente que conhece o Dr. Bruno do hospital e assume que o atendimento é por convênio. Ninguém pode descobrir que é particular depois de já ter horário marcado.
 
+E-MAIL OU DATA DE NASCIMENTO CHEGAM QUANDO CHEGAM: no minuto em que a família mandar um e-mail ou uma data de nascimento da criança, em QUALQUER ponto da conversa, chame registrar_dados_do_paciente na mesma hora. Muitas vezes isso vem adiantado, junto com os nomes, antes de existir horário marcado — e está certo assim: a ferramenta guarda o dado e ele entra sozinho no agendamento quando você reservar. Você NUNCA responde "anotado", "anotei", "já guardei" ou parecido sem ter chamado a ferramenta antes: dizer que anotou sem anotar é o pior tipo de mentira que você pode contar, porque a família confia e não repete o dado depois.
+
 NUNCA DEIXE UMA PROMESSA SOLTA SEM AÇÃO: se os nomes que a família mandou vierem estranhos, incompletos ou confusos (erro de digitação, autocorretor bagunçando, não ficar claro qual é o responsável e qual é a criança), NUNCA responda só algo tipo "só um instante" ou "deixa eu confirmar certinho" sem fazer nada de verdade na mesma resposta. Ou você já chama confirmar_agendamento (se estiver claro o suficiente), ou você pergunta diretamente, ali mesmo, qual nome é do responsável e qual é da criança (ex: "Só confirmando, o responsável é Nehaon e a criança é Negunha, certo?"). Uma frase de espera sem pergunta nem ação de verdade junto deixa a família esperando uma resposta que nunca vem sozinha — nada dispara depois disso além de uma nova mensagem dela.
 
 Depois de confirmado de verdade pela ferramenta, responda algo como:
@@ -157,6 +159,8 @@ Deixei reservado para você: [horário].
 Endereço: Rua Ranulpho Alvarenga Ferreira, 61
 
 Me manda seu e-mail e a data de nascimento da [criança]? É pra criar o espaço dela no sistema do Dr. Bruno: é ali que você guarda a carteira de vacinação, os exames e o peso e altura, e acompanha o crescimento e as vacinas que ainda faltam."
+
+SÓ PEÇA O QUE VOCÊ AINDA NÃO TEM: se a família já mandou o e-mail, a data de nascimento, ou os dois, em qualquer momento anterior da conversa, NÃO peça de novo. Peça só o que falta, ou não peça nada e siga direto pra forma de pagamento. Repetir um pedido que ela já atendeu passa a impressão de que você não leu o que ela escreveu.
 
 NÃO pergunte a forma de pagamento nessa mesma mensagem — espere a família responder os dados. Quando ela responder, chame registrar_dados_do_paciente com o que ela mandou e só ENTÃO pergunte "Como prefere pagar: Pix ou cartão?".
 
@@ -423,6 +427,9 @@ async function executarFerramenta(nome, input, ctx) {
       descricao: `Responsável: ${input.responsavel}\nTelefone: ${ctx.telefone}\nAgendado pela Carla (WhatsApp)`,
     });
 
+    // Devolve o agendamento criado, não só true: se a família adiantou e-mail ou data de
+    // nascimento antes de ter horário, esses dados foram colados aqui e precisam seguir
+    // pro prontuário na mesma tacada (senão a ficha da criança não é criada).
     const ok = Storage.reservar({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca, telefone: ctx.telefone, googleEventId });
     if (!ok) {
       if (googleEventId) await GoogleAgenda.cancelarEvento(googleEventId);
@@ -439,10 +446,18 @@ async function executarFerramenta(nome, input, ctx) {
       pacienteNome: input.crianca,
       responsavelNome: input.responsavel,
       telefone: ctx.telefone,
+      dataNascimento: ok.criancaDataNascimento || null,
       inicio, fim,
     }).then((appAgendamentoId) => {
       if (appAgendamentoId) Storage.definirAppAgendamentoId(slotFinal.id, appAgendamentoId);
     });
+
+    // Se a família tinha adiantado os dados, o Dr. Bruno é avisado agora — antes esse
+    // aviso só saía quando ela respondia depois da confirmação, e quem adiantou nunca
+    // respondia de novo.
+    if (ok.responsavelEmail || ok.criancaDataNascimento) {
+      ctx.dadosDoPacienteRegistrados = { email: ok.responsavelEmail || null, dataNascimento: ok.criancaDataNascimento || null };
+    }
 
     ctx.acoesRealizadas.push({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca });
     return { sucesso: true, horarioConfirmado: slotFinal.label };
@@ -478,6 +493,12 @@ async function executarFerramenta(nome, input, ctx) {
     });
     if (!guardado) {
       return { sucesso: false, motivo: "Não achei um agendamento nesse telefone pra ligar esses dados." };
+    }
+
+    // Ainda não existe agendamento: o dado ficou guardado e entra sozinho na hora da
+    // reserva. Pra você é sucesso — pode dizer que anotou, porque desta vez anotou mesmo.
+    if (guardado.pendente) {
+      return { sucesso: true, guardadoParaDepois: true };
     }
 
     ctx.dadosDoPacienteRegistrados = { email: emailValido ? email : null, dataNascimento: dataValida ? data : null };

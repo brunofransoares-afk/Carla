@@ -22,6 +22,7 @@ const ARQ_CONTATOS_WHATSAPP = path.join(DIR_DADOS, "contatos-whatsapp.json");
 const ARQ_PACIENTES_MANUAIS = path.join(DIR_DADOS, "pacientes-manuais.json");
 const ARQ_NAO_PACIENTES_MANUAIS = path.join(DIR_DADOS, "nao-pacientes-manuais.json");
 const ARQ_HORARIOS_EXTRAS = path.join(DIR_DADOS, "horarios-extras.json");
+const ARQ_DADOS_PENDENTES = path.join(DIR_DADOS, "dados-pendentes.json");
 
 function garantirPasta() {
   if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
@@ -219,11 +220,41 @@ function reescreverCSV(lista) {
   fs.writeFileSync(ARQ_AGENDAMENTOS_CSV, "﻿" + csv, "utf8");
 }
 
-// Retorna false se o horário já tiver sido reservado por outra família (nunca deixa duplicar).
+// E-mail do responsável e data de nascimento da criança que a família mandou ANTES de
+// existir um agendamento pra ligar. Acontece o tempo todo: a Carla pede o nome do
+// responsável e da criança, e a família emenda a data de nascimento na mesma mensagem,
+// antes de escolher horário. Sem este bolso o dado sumia — e a Carla ainda respondia
+// "anotado". Fica guardado por telefone até a reserva acontecer, e é consumido lá.
+function guardarDadosPendentes(telefone, { email = null, dataNascimento = null } = {}) {
+  const todos = lerJSON(ARQ_DADOS_PENDENTES, {});
+  const atual = todos[telefone] || {};
+  if (email) atual.email = email;
+  if (dataNascimento) atual.dataNascimento = dataNascimento;
+  atual.registradoEm = new Date().toISOString();
+  todos[telefone] = atual;
+  escreverJSON(ARQ_DADOS_PENDENTES, todos);
+}
+
+function lerDadosPendentes(telefone) {
+  return lerJSON(ARQ_DADOS_PENDENTES, {})[telefone] || null;
+}
+
+function limparDadosPendentes(telefone) {
+  const todos = lerJSON(ARQ_DADOS_PENDENTES, {});
+  if (!todos[telefone]) return;
+  delete todos[telefone];
+  escreverJSON(ARQ_DADOS_PENDENTES, todos);
+}
+
+// Retorna false se o horário já tiver sido reservado por outra família (nunca deixa
+// duplicar). Quando dá certo devolve o agendamento criado, porque quem chama precisa
+// saber se veio e-mail/nascimento junto (do bolso de pendentes) pra mandar pro prontuário.
 function reservar({ slot, responsavel, crianca, telefone, googleEventId = null }) {
   const lista = lerAgendamentos();
   if (lista.some((a) => a.slotId === slot.id)) return false;
-  lista.push({
+  // O que a família adiantou antes de ter horário entra aqui, no agendamento certo.
+  const pendentes = lerDadosPendentes(telefone);
+  const item = {
     slotId: slot.id,
     data: slot.date,
     horario: slot.time,
@@ -235,10 +266,14 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null }
     lembretes: { semanaAntes: false, diaDaConsulta: false },
     googleEventId,
     appAgendamentoId: null,
-  });
+    responsavelEmail: (pendentes && pendentes.email) || null,
+    criancaDataNascimento: (pendentes && pendentes.dataNascimento) || null,
+  };
+  lista.push(item);
   escreverJSON(ARQ_AGENDAMENTOS, lista);
   reescreverCSV(lista);
-  return true;
+  if (pendentes) limparDadosPendentes(telefone);
+  return item;
 }
 
 // Preenche o id do registro criado no Sistema Pediátrico Integrado depois que o envio (fora
@@ -289,7 +324,13 @@ function registrarDadosDoPaciente(telefone, { email = null, dataNascimento = nul
   // O mais recente primeiro: uma família pode ter marcado pra dois filhos, e os dados
   // pertencem ao agendamento que acabou de ser feito.
   const item = [...lista].reverse().find((a) => a.telefone === telefone);
-  if (!item) return false;
+  // Sem agendamento ainda: guarda no bolso de pendentes em vez de perder o dado. O
+  // `pendente: true` avisa quem chamou que não há o que mandar pro prontuário AGORA —
+  // isso acontece na reserva, quando o agendamento finalmente existe.
+  if (!item) {
+    guardarDadosPendentes(telefone, { email, dataNascimento });
+    return { pendente: true };
+  }
   if (email) item.responsavelEmail = email;
   if (dataNascimento) item.criancaDataNascimento = dataNascimento;
   escreverJSON(ARQ_AGENDAMENTOS, lista);
@@ -527,7 +568,7 @@ function dessilenciarContato(telefone) {
 }
 
 module.exports = {
-  registrarDadosDoPaciente,
+  registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
