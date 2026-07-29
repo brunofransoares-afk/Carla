@@ -63,7 +63,7 @@ function configurar() {
   eq(c.method, "POST", "1: método POST");
   eq(c.headers["X-Carla-Secret"], "segredo-combinado", "1: manda o segredo combinado");
   ok(!c.headers.apikey && !c.headers.Authorization,
-    "1: NÃO manda a service role (é a chave que lê o prontuário inteiro)");
+    "1: com o segredo presente, NÃO manda a service role");
   const corpo = JSON.parse(c.body);
   eq(corpo.acao, "completar", "1: acao completar");
   eq(corpo.agendamento_id, "ag-123", "1: id do agendamento do outro lado");
@@ -98,14 +98,27 @@ function configurar() {
   ok(avisos.some((a) => /appAgendamentoId/.test(a)),
     "4: AVISA no log — sem isso o dado desaparece calado");
 
-  // --------------------------- 5. variável faltando: avisa UMA vez
+  // ------------- 5. sem o segredo, usa a service role que já está no servidor
+  // Não exigir o segredo é uma decisão consciente: a service role JÁ está neste `.env` e
+  // já vai pra rede em cada agendamento. Exigir uma variável nova não protegeria nada e
+  // travaria a integração num passo manual no servidor.
   limpar();
   delete process.env.APP_CARLA_SECRET;
   await AppAgenda.completarDadosDoPaciente({ appAgendamentoId: "ag-1", email: "ana@exemplo.com" });
+  eq(chamadas.length, 1, "5: sem o segredo, ainda chama");
+  eq(chamadas[0].headers.Authorization, "Bearer service-role",
+    "5: cai para a service role no Bearer");
+  ok(!chamadas[0].headers["X-Carla-Secret"], "5: e não manda header de segredo vazio");
+  eq(avisos.length, 0, "5: isso é caminho previsto, não avisa nada");
+
+  // sem NENHUM dos dois: aí sim está desligado, e avisa uma vez só
+  limpar();
+  delete process.env.APP_SERVICE_ROLE_KEY;
+  await AppAgenda.completarDadosDoPaciente({ appAgendamentoId: "ag-1", email: "ana@exemplo.com" });
   await AppAgenda.completarDadosDoPaciente({ appAgendamentoId: "ag-2", email: "b@exemplo.com" });
   await AppAgenda.completarDadosDoPaciente({ appAgendamentoId: "ag-3", email: "c@exemplo.com" });
-  eq(chamadas.length, 0, "5: sem segredo não chama");
-  eq(avisos.filter((a) => /APP_CARLA_SECRET/.test(a)).length, 1,
+  eq(chamadas.length, 0, "5: sem nenhum meio de autenticar, não chama");
+  eq(avisos.filter((a) => /APP_CARLA_SECRET|APP_SERVICE_ROLE_KEY/.test(a)).length, 1,
     "5: avisa UMA vez, não uma por mensagem (senão entope o log)");
   configurar();
 
