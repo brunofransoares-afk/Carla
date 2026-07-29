@@ -147,8 +147,15 @@ async function parear() {
 }
 
 console.log(`\nPasta de sessão: ${DIR_AUTH}`);
+
+// Pareamento SEMPRE começa do zero. Credencial pela metade, sobrada de uma tentativa
+// anterior, faz o WhatsApp fechar a conexão antes mesmo de gerar o código, com a
+// mensagem inútil "Connection Closed". Avisar não bastava: quem está com o consultório
+// fora do ar não deveria precisar limpar isso à mão.
 if (fs.existsSync(DIR_AUTH) && fs.readdirSync(DIR_AUTH).length > 0) {
-  console.log("AVISO: a pasta já tem arquivos. Se o pareamento falhar, mova-a e rode de novo.\n");
+  const guardada = `${DIR_AUTH}.anterior-${Date.now()}`;
+  fs.renameSync(DIR_AUTH, guardada);
+  console.log(`Sessão anterior movida para: ${path.basename(guardada)}`);
 }
 parear().catch((erro) => {
   console.error("\nErro:", erro.message, "\n");
