@@ -112,10 +112,12 @@ const PASTA_ICONES = path.join(__dirname, "icons");
 // de virar um jeito de qualquer um da internet fazer a Carla mandar mensagem.
 const PORTA_INTERNA_BOT = 3357;
 
-function encaminharPortalLiberado(corpo) {
+// Um encaminhador para os dois avisos (portal e guia): só o caminho muda, e duplicar
+// significaria consertar timeout, erro de conexão e Content-Length em dois lugares.
+function encaminharAoBot(caminho, corpo) {
   return new Promise((resolve) => {
     const req = http.request({
-      hostname: "127.0.0.1", port: PORTA_INTERNA_BOT, path: "/interno/portal-liberado",
+      hostname: "127.0.0.1", port: PORTA_INTERNA_BOT, path: caminho,
       method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(corpo) },
       timeout: 15000,
     }, (resposta) => {
@@ -141,7 +143,7 @@ const servidor = http.createServer(async (req, res) => {
     let corpo = "";
     req.on("data", (p) => { corpo += p; });
     req.on("end", async () => {
-      const r = await encaminharPortalLiberado(corpo || "{}");
+      const r = await encaminharAoBot("/interno/portal-liberado", corpo || "{}");
       res.writeHead(r.status, { "Content-Type": "application/json" });
       res.end(r.texto);
     });
@@ -210,8 +212,19 @@ const servidor = http.createServer(async (req, res) => {
   // bot (a conexão do WhatsApp vive lá), então isto só encaminha pra porta interna dele.
   if (req.url === "/api/avisar-portal" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
-    const r = await encaminharPortalLiberado(JSON.stringify({ telefone: corpo.telefone }));
+    const r = await encaminharAoBot("/interno/portal-liberado", JSON.stringify({ telefone: corpo.telefone }));
     res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(r.texto);
+    return;
+  }
+
+  // Botão "guia" da lista: o Dr. Bruno já liberou o acesso no prontuário, toca aqui e a
+  // Carla manda o link. Mesma porta interna do portal — a conexão do WhatsApp vive no
+  // processo do bot, não aqui.
+  if (req.url === "/api/avisar-guia" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = await encaminharAoBot("/interno/guia-liberado", JSON.stringify({ telefone: corpo.telefone }));
+    res.writeHead(r.status, { "Content-Type": "application/json" });
     res.end(r.texto);
     return;
   }
