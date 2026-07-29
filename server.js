@@ -57,9 +57,12 @@ async function avisarPortalLiberado({ telefone, email }) {
 
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
   const texto = [
-    `Oi! O Dr. Bruno liberou o portal da ${agendamento.crianca} 😊`,
+    // Sem "dela"/"dele" e sem "da"/"do": este texto é fixo e o sistema não sabe o sexo da
+    // criança (quem infere isso é o prontuário, pelo primeiro nome, e nem sempre acerta).
+    // Escrito no neutro, serve pros dois e nunca sai errado na cara da família.
+    `Oi! O Dr. Bruno liberou o portal de ${agendamento.crianca} 😊`,
     "",
-    "É onde fica tudo dela num lugar só: você guarda os exames, a carteira de vacinação e o peso e altura, e compara os exames antigos com os novos. As receitas e os documentos que o Dr. Bruno passar chegam por lá também, e você acompanha o crescimento e as vacinas que ainda faltam.",
+    "É onde fica tudo num lugar só: você guarda os exames, a carteira de vacinação e o peso e altura, e compara os exames antigos com os novos. As receitas e os documentos que o Dr. Bruno passar chegam por lá também, e você acompanha o crescimento e as vacinas que ainda faltam.",
     "",
     endereco,
     "",
