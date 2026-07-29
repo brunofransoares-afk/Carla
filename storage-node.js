@@ -205,10 +205,14 @@ function formatarDataBR(isoDate) {
 
 function reescreverCSV(lista) {
   const linhas = [
-    ["Nome do responsável", "Nome da criança", "Telefone", "Data da consulta", "Horário", "Registrado em"],
+    // As duas últimas colunas costumam vir vazias: só são preenchidas quando a família
+    // passa os dados depois da confirmação, e passar é opcional. Ficam no fim de
+    // propósito, pra ordem das colunas antigas não mudar pra quem já usa esse arquivo.
+    ["Nome do responsável", "Nome da criança", "Telefone", "Data da consulta", "Horário", "Registrado em", "E-mail do responsável", "Nascimento da criança"],
     ...lista.map((a) => [
       a.responsavel, a.crianca, a.telefone, formatarDataBR(a.data), a.horario,
       new Date(a.registradoEm).toLocaleString("pt-BR"),
+      a.responsavelEmail || "", a.criancaDataNascimento ? formatarDataBR(a.criancaDataNascimento) : "",
     ]),
   ];
   const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
@@ -270,6 +274,22 @@ function marcarLembreteEnviado(slotId, tipo) {
   if (!item) return;
   item.lembretes = { semanaAntes: false, diaDaConsulta: false, ...(item.lembretes || {}), [tipo]: true };
   escreverJSON(ARQ_AGENDAMENTOS, lista);
+}
+
+// Guarda e-mail do responsável e data de nascimento da criança no agendamento mais
+// recente desse telefone. É o que vai alimentar a criação do portal da criança no
+// Sistema Pediátrico Integrado. Devolve false se não houver agendamento pra ligar.
+function registrarDadosDoPaciente(telefone, { email = null, dataNascimento = null } = {}) {
+  const lista = lerAgendamentos();
+  // O mais recente primeiro: uma família pode ter marcado pra dois filhos, e os dados
+  // pertencem ao agendamento que acabou de ser feito.
+  const item = [...lista].reverse().find((a) => a.telefone === telefone);
+  if (!item) return false;
+  if (email) item.responsavelEmail = email;
+  if (dataNascimento) item.criancaDataNascimento = dataNascimento;
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  reescreverCSV(lista);
+  return true;
 }
 
 // Cancela (apaga) um agendamento pelo slotId. Retorna o registro removido (inclui
@@ -502,6 +522,7 @@ function dessilenciarContato(telefone) {
 }
 
 module.exports = {
+  registrarDadosDoPaciente,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,

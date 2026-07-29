@@ -221,6 +221,18 @@ const FERRAMENTAS = [
     },
   },
   {
+    name: "registrar_dados_do_paciente",
+    description: "Guarda o e-mail do responsável e a data de nascimento da criança, depois de um agendamento confirmado. É o que permite montar o portal da criança. Use assim que a família responder esses dados. Se ela mandar só um dos dois, mande só esse.",
+    input_schema: {
+      type: "object",
+      properties: {
+        email: { type: ["string", "null"], description: "E-mail do responsável, exatamente como ele escreveu. null se não informou." },
+        dataNascimento: { type: ["string", "null"], description: "Data de nascimento da criança no formato AAAA-MM-DD. Converta do jeito que a família escreveu (ex: '12/11/2025' vira '2025-11-12'). null se não informou." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "cancelar_agendamento",
     description: "Cancela de verdade uma consulta já marcada, ou (com apenasConsultar=true) só confere se ainda existe, sem cancelar nada. Só enxerga consultas do telefone desta conversa — nunca de outro número. Se não passar slotId e houver mais de uma consulta nesse telefone, a ferramenta devolve a lista pra você perguntar qual.",
     input_schema: {
@@ -413,6 +425,42 @@ async function executarFerramenta(nome, input, ctx) {
     return { sucesso: true, horarioConfirmado: slotFinal.label };
   }
 
+  if (nome === "registrar_dados_do_paciente") {
+    // Validação no código, nunca no modelo: e-mail e data são dados que vão virar o
+    // portal de uma criança, e um e-mail errado dá acesso ao prontuário dela pra outra
+    // pessoa. Se vier torto, a ferramenta recusa e a Carla pede de novo.
+    const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : null;
+    const data = typeof input.dataNascimento === "string" ? input.dataNascimento.trim() : null;
+
+    const emailValido = !!email && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+    const dataValida = !!data && /^\d{4}-\d{2}-\d{2}$/.test(data) && !Number.isNaN(new Date(data + "T00:00:00").getTime());
+
+    if (email && !emailValido) {
+      return { sucesso: false, motivo: "Esse e-mail parece incompleto. Confirme com a família e chame de novo." };
+    }
+    if (data && !dataValida) {
+      return { sucesso: false, motivo: "Data de nascimento inválida. Precisa ser AAAA-MM-DD e uma data real. Confirme com a família." };
+    }
+    // Criança nascida no futuro é erro de digitação (ex: ano trocado), não um bebê.
+    if (dataValida && new Date(data + "T00:00:00") > ctx.now) {
+      return { sucesso: false, motivo: "Essa data de nascimento está no futuro. Confirme o ano com a família." };
+    }
+    if (!emailValido && !dataValida) {
+      return { sucesso: false, motivo: "Nenhum dado válido informado." };
+    }
+
+    const guardado = Storage.registrarDadosDoPaciente(ctx.telefone, {
+      email: emailValido ? email : null,
+      dataNascimento: dataValida ? data : null,
+    });
+    if (!guardado) {
+      return { sucesso: false, motivo: "Não achei um agendamento nesse telefone pra ligar esses dados." };
+    }
+
+    ctx.dadosDoPacienteRegistrados = { email: emailValido ? email : null, dataNascimento: dataValida ? data : null };
+    return { sucesso: true, guardado: ctx.dadosDoPacienteRegistrados };
+  }
+
   if (nome === "cancelar_agendamento") {
     const doTelefone = Storage.lerAgendamentos().filter((a) => a.telefone === ctx.telefone);
     if (doTelefone.length === 0) {
@@ -527,7 +575,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     { role: "user", content: texto },
   ];
 
-  const ctx = { now, idsOcupados, telefone, acoesRealizadas: [], cancelamentosRealizados: [], escalar: null, escalarTipo: null, agendamentoAtual };
+  const ctx = { now, idsOcupados, telefone, acoesRealizadas: [], cancelamentosRealizados: [], escalar: null, escalarTipo: null, agendamentoAtual, dadosDoPacienteRegistrados: null };
   let respostaTexto;
   try {
     respostaTexto = await chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx });
@@ -572,6 +620,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     cancelamentos: ctx.cancelamentosRealizados,
     escalar: ctx.escalar,
     escalarTipo: ctx.escalarTipo,
+    dadosDoPaciente: ctx.dadosDoPacienteRegistrados,
   };
 }
 
