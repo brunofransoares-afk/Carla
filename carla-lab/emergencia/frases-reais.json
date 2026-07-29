@@ -1,0 +1,194 @@
+[
+  {
+    "frase": "socorro meu filho está convulsionando",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "ele teve uma convulsão agora",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "meu bebê não está respirando direito",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "ela está com falta de ar",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "ele desmaiou aqui em casa",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "o lábio dele ficou roxo",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "está com febre de 40",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "ele não acorda de jeito nenhum",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "ele tá muito mole, sem reação",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "está sangrando muito",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "ele sangrou muito o nariz e não para",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "não para de sangrar",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "tem muito sangue, socorro",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "ele bateu a cabeça muito forte",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "caiu do sofá e bateu a cabeça com força",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "ele caiu de cabeça no chão",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "ela teve um desmaio",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "ele está engasgando",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "socorro ele tá engasgado",
+    "emergencia": true,
+    "nota": "NÃO disparava"
+  },
+  {
+    "frase": "ele não consegue parar de vomitar e está mole",
+    "emergencia": true,
+    "nota": "pega pelo 'mole'"
+  },
+  {
+    "frase": "ela está tendo uma crise, não consigo acordar ela",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "meu filho está roxo",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "a respiração dele tá muito rápida e ofegante",
+    "emergencia": true,
+    "nota": "já funcionava"
+  },
+  {
+    "frase": "ele está com 40 de febre e tremendo",
+    "emergencia": true,
+    "nota": "NÃO disparava, faltava '40 de febre'"
+  },
+  {
+    "frase": "meu filho está com tosse há cinco dias",
+    "emergencia": false,
+    "nota": "consulta normal"
+  },
+  {
+    "frase": "ela está com febre desde ontem, uns 38",
+    "emergencia": false,
+    "nota": "consulta normal"
+  },
+  {
+    "frase": "queria marcar uma consulta de rotina",
+    "emergencia": false,
+    "nota": "agendamento"
+  },
+  {
+    "frase": "quanto custa a consulta?",
+    "emergencia": false,
+    "nota": "pergunta comum"
+  },
+  {
+    "frase": "ele bateu a cabecinha de leve na quina da mesa mas está bem",
+    "emergencia": false,
+    "nota": "não é forte, não deve disparar"
+  },
+  {
+    "frase": "engasgou com água no almoço mas já passou",
+    "emergencia": false,
+    "nota": "já passou, não deve disparar"
+  },
+  {
+    "frase": "ele tá com dor de ouvido",
+    "emergencia": false,
+    "nota": "consulta normal"
+  },
+  {
+    "frase": "apareceram manchinhas vermelhas na barriga",
+    "emergencia": false,
+    "nota": "consulta normal"
+  },
+  {
+    "frase": "vocês atendem sábado?",
+    "emergencia": false,
+    "nota": "pergunta comum"
+  },
+  {
+    "frase": "ele vomitou uma vez de manhã",
+    "emergencia": false,
+    "nota": "consulta normal"
+  },
+  {
+    "frase": "meu filho tá muito manhoso hoje",
+    "emergencia": false,
+    "nota": "não é 'muito mole'"
+  },
+  {
+    "frase": "ela caiu da bicicleta e ralou o joelho",
+    "emergencia": false,
+    "nota": "queda sem cabeça, não deve disparar"
+  },
+  {
+    "frase": "o cocô dele tá mole hoje, é normal?",
+    "emergencia": false,
+    "alarmeFalsoAceito": true,
+    "nota": "troca assumida: 'ta mole' pega criança mole e também cocô mole"
+  },
+  {
+    "frase": "ele bateu o braço na mesa e ficou roxo",
+    "emergencia": false,
+    "alarmeFalsoAceito": true,
+    "nota": "troca assumida, JÁ existe hoje: 'ficou roxo' pega cianose e hematoma"
+  }
+]
