@@ -13,6 +13,7 @@ const { exec } = require("child_process");
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
 const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
+const PainelWebhook = require(path.join(__dirname, "painel-webhook.js"));
 
 const PORTA = 3355;
 const NOME_APP_BOT = "carla-bot";
@@ -133,18 +134,22 @@ function encaminharAoBot(caminho, corpo) {
 }
 
 const servidor = http.createServer(async (req, res) => {
-  if (req.method === "POST" && req.url === "/webhook/portal-liberado") {
-    const segredo = (process.env.PORTAL_WEBHOOK_SECRET || "").trim();
-    if (!segredo || req.headers["x-carla-secret"] !== segredo) {
-      res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: false, motivo: "não autorizado" }));
-      return;
-    }
+  // Porta de máquina (prontuário -> Carla). A decisão de quem entra vive em
+  // painel-webhook.js, que é módulo puro e testado; aqui só sobra o encanamento.
+  const decisao = PainelWebhook.decidir({
+    url: req.url, method: req.method, headers: req.headers, env: process.env,
+  });
+  if (decisao.tipo === "recusar") {
+    res.writeHead(decisao.status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(decisao.corpo));
+    return;
+  }
+  if (decisao.tipo === "encaminhar") {
     let corpo = "";
     req.on("data", (p) => { corpo += p; });
     req.on("end", async () => {
-      const r = await encaminharAoBot("/interno/portal-liberado", corpo || "{}");
-      res.writeHead(r.status, { "Content-Type": "application/json" });
+      const r = await encaminharAoBot(decisao.caminho, corpo || "{}");
+      res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
       res.end(r.texto);
     });
     return;
