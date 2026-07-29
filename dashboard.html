@@ -647,6 +647,36 @@
     return `<button class="btn-portal" title="Mandar o link do portal pra família" data-telefone="${escapeHtml(a.telefone)}">enviar</button>`;
   }
 
+  // Mesmo critério do portal, e a mesma marca de "já enviado". A trava do e-mail importa
+  // mais aqui: sem e-mail a família não tem como criar a senha do guia, e a mensagem
+  // prometeria um acesso que ela não consegue usar.
+  function botaoGuia(a) {
+    if (a.guiaAvisadoEm) return '<span class="portal-ok" title="Link do guia já enviado">✓</span>';
+    if (!a.responsavelEmail) return '<span class="portal-na" title="Sem e-mail do responsável">—</span>';
+    if (!String(a.telefone || "").startsWith("+")) return '<span class="portal-na" title="Sem telefone de WhatsApp">—</span>';
+    return `<button class="btn-portal btn-guia" title="Mandar o link do guia pra família (libere o acesso no prontuário antes)" data-telefone="${escapeHtml(a.telefone)}">enviar</button>`;
+  }
+
+  async function avisarGuia(btn) {
+    // O aviso do prontuário está na confirmação de propósito: mandar o link antes de
+    // liberar o acesso faz a família abrir, não conseguir entrar, e desistir.
+    if (!confirm("Mandar o link do guia pra essa família agora?\n\nConfirme que você já liberou o acesso dela no prontuário — senão ela abre o link e não consegue entrar.")) return;
+    btn.disabled = true;
+    btn.textContent = "...";
+    try {
+      const resposta = await fetch("/api/avisar-guia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone: btn.dataset.telefone }),
+      });
+      const r = await resposta.json().catch(() => ({}));
+      if (!r.ok) alert("Não deu pra mandar: " + (r.motivo || "erro desconhecido"));
+    } catch (e) {
+      alert("Não deu pra mandar: o painel não conseguiu falar com a Carla.");
+    }
+    atualizar();
+  }
+
   async function avisarPortal(btn) {
     if (!confirm("Mandar o link do portal pra essa família agora?")) return;
     btn.disabled = true;
@@ -884,7 +914,7 @@
         tabela.innerHTML = "<div class='vazio'>Nenhum agendamento ainda.</div>";
       } else {
         tabela.innerHTML = `<table>
-          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x">Portal</th><th class="col-x"></th></tr></thead>
+          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th class="col-x"></th></tr></thead>
           <tbody>${agendamentos.map((a) => `
             <tr>
               <td>${formatarDataBR(a.data)}</td>
@@ -893,6 +923,7 @@
               <td>${escapeHtml(a.crianca)}</td>
               <td>${escapeHtml(a.telefone)}</td>
               <td class="col-x">${botaoPortal(a)}</td>
+              <td class="col-x">${botaoGuia(a)}</td>
               <td class="col-x"><button class="btn-x" title="Cancelar agendamento" data-slot-id="${escapeHtml(a.slotId)}">✕</button></td>
             </tr>`).join("")}</tbody>
         </table>`;
@@ -900,8 +931,13 @@
         tabela.querySelectorAll(".btn-x").forEach((btn) => {
           btn.addEventListener("click", () => cancelarAgendamento(btn.dataset.slotId));
         });
-        tabela.querySelectorAll(".btn-portal").forEach((btn) => {
+        // :not(.btn-guia) porque o botão do guia reaproveita a classe .btn-portal só pelo
+        // estilo — sem isso ele ganharia o listener do portal e mandaria a mensagem errada.
+        tabela.querySelectorAll(".btn-portal:not(.btn-guia)").forEach((btn) => {
           btn.addEventListener("click", () => avisarPortal(btn));
+        });
+        tabela.querySelectorAll(".btn-guia").forEach((btn) => {
+          btn.addEventListener("click", () => avisarGuia(btn));
         });
       }
 

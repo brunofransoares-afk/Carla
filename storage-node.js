@@ -369,6 +369,18 @@ function marcarPortalAvisado(slotId) {
   return true;
 }
 
+// Mesma coisa para o guia. Marca separada da do portal de propósito: são dois envios
+// independentes, e a família pode receber um sem o outro (o portal é do consultório, o
+// guia é um produto). Uma marca só faria o segundo botão sumir junto com o primeiro.
+function marcarGuiaAvisado(slotId) {
+  const lista = lerAgendamentos();
+  const item = lista.find((a) => a.slotId === slotId);
+  if (!item) return false;
+  item.guiaAvisadoEm = new Date().toISOString();
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  return true;
+}
+
 // Cancela (apaga) um agendamento pelo slotId. Retorna o registro removido (inclui
 // googleEventId, se tiver, pra quem chamar poder cancelar o evento na agenda também),
 // ou null se não encontrar.
@@ -600,7 +612,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,

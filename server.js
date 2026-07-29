@@ -38,6 +38,53 @@ const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
 //
 // Inerte sem PORTAL_URL: sem o endereço não há o que mandar, e mandar meia mensagem
 // ("seu portal está liberado!" sem link) seria pior que não mandar nada.
+// Avisa a família que o guia foi liberado. Espelha o avisarPortalLiberado de propósito —
+// mesmas travas, mesma ordem — porque as duas mensagens falham do mesmo jeito.
+//
+// UMA DIFERENÇA QUE IMPORTA: o guia é um produto pago. Esta mensagem só sai por um toque do
+// Dr. Bruno, DEPOIS de ele já ter liberado o acesso no prontuário. A Carla nunca oferece o
+// guia por conta própria e nunca manda este link sozinha — a instrução dela no cerebro-ia
+// diz isso explicitamente.
+async function avisarGuiaLiberado({ telefone, email }) {
+  const endereco = (process.env.GUIA_URL || "").trim();
+  if (!endereco) return { ok: false, motivo: "GUIA_URL não configurada" };
+  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp" };
+
+  const agendamento = telefone
+    ? [...Storage.lerAgendamentos()].reverse().find((a) => a.telefone === telefone)
+    : Storage.acharAgendamentoPorEmail(email);
+  if (!agendamento) return { ok: false, motivo: "Não achei agendamento pra esse telefone/e-mail" };
+  if (agendamento.guiaAvisadoEm) return { ok: true, jaAvisado: true };
+
+  if (!String(agendamento.telefone || "").startsWith("+")) {
+    return { ok: false, motivo: "Agendamento sem telefone de WhatsApp válido" };
+  }
+  // Sem e-mail a família não tem como criar a senha, e a mensagem prometeria um acesso que
+  // ela não consegue usar. Melhor recusar e o painel dizer por quê.
+  const emailFinal = String(agendamento.responsavelEmail || email || "").trim();
+  if (!emailFinal) return { ok: false, motivo: "Agendamento sem e-mail do responsável" };
+
+  const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
+  const texto = [
+    // Neutro quanto ao sexo da criança, igual à mensagem do portal: este texto é fixo e o
+    // sistema não sabe o sexo (quem presume é o prontuário, pelo primeiro nome, e erra).
+    `Oi! O Dr. Bruno liberou pra você o Guia Completo de Pediatria 😊`,
+    "",
+    "É um guia pra consultar em casa, escrito por ele: febre, tosse, alergia, sono, alimentação, o que fazer e quando procurar ajuda. Fica disponível pra você a qualquer hora.",
+    "",
+    endereco,
+    "",
+    `No primeiro acesso você cria a sua senha, usando este mesmo e-mail: ${emailFinal}`,
+    "",
+    "Você vai receber um e-mail com o link pra criar a senha. Se não achar, olhe no lixo eletrônico.",
+  ].join("\n");
+
+  await sockAtivo.sendMessage(jid, { text: texto });
+  Storage.marcarGuiaAvisado(agendamento.slotId);
+  console.log(`[GUIA] Avisei ${agendamento.telefone} sobre o guia de ${agendamento.crianca}`);
+  return { ok: true };
+}
+
 async function avisarPortalLiberado({ telefone, email }) {
   const endereco = (process.env.PORTAL_URL || "").trim();
   if (!endereco) return { ok: false, motivo: "PORTAL_URL não configurada" };
@@ -84,6 +131,24 @@ function iniciarTravaInstancia() {
     // Além da trava, esta porta é a caixa de entrada interna do bot: o painel repassa
     // pra cá o que precisa da conexão do WhatsApp. Só escuta em 127.0.0.1 (ver listen
     // no fim desta função), então nada da internet chega aqui direto.
+    if (req.method === "POST" && req.url === "/interno/guia-liberado") {
+      let corpo = "";
+      req.on("data", (p) => { corpo += p; });
+      req.on("end", async () => {
+        let dados = {};
+        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+        try {
+          const r = await avisarGuiaLiberado({ telefone: dados.telefone, email: dados.email });
+          res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(r));
+        } catch (erro) {
+          console.error("[GUIA] Erro ao avisar:", erro.message);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, motivo: erro.message }));
+        }
+      });
+      return;
+    }
     if (req.method === "POST" && req.url === "/interno/portal-liberado") {
       let corpo = "";
       req.on("data", (p) => { corpo += p; });
@@ -292,6 +357,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // consulta" DEPOIS de ela mesma ter mandado o link. O prompt é montado antes de ela
     // ver o histórico, então quem sabe disso é o código, não ela.
     portalJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.portalAvisadoEm),
+    guiaJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.guiaAvisadoEm),
   });
 
   sessao.historico = resultado.historico;
