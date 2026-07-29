@@ -84,6 +84,21 @@ const slot = (id, time) => ({ id, date: "2026-08-20", time, label: "20/08 às " 
   eq(r.criancaDataNascimento, "2020-05-05", "6. data gravada");
 }
 
+// ---------------------------------------------- 6b. mesmo dado de novo nao e novidade
+// A Carla relia a conversa, achava o e-mail que ELA MESMA tinha escrito e chamava a
+// ferramenta outra vez. Cada chamada disparava um WhatsApp pro Dr. Bruno com o mesmo
+// recado. Repetido tem que morrer aqui, sem depender do modelo lembrar.
+{
+  const r = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com", dataNascimento: "2020-05-05" });
+  ok(r && r.semNovidade === true, "6b. os dois iguais devolvem semNovidade");
+  const r2 = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com" });
+  ok(r2 && r2.semNovidade === true, "6b. so o e-mail, igual, também é semNovidade");
+  const r3 = Storage.registrarDadosDoPaciente(TEL, { email: "novo@exemplo.com" });
+  ok(r3 && !r3.semNovidade, "6b. e-mail diferente NÃO é semNovidade");
+  eq(r3.responsavelEmail, "novo@exemplo.com", "6b. e o novo e-mail foi gravado");
+  eq(r3.criancaDataNascimento, "2020-05-05", "6b. sem apagar a data que já estava lá");
+}
+
 // ---------------------------------------------- 7. o CSV mostra o que foi adiantado
 {
   const csv = fs.readFileSync(path.join(RAIZ, "data", "agendamentos.csv"), "utf8").replace(/^﻿/, "");

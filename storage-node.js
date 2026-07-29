@@ -331,8 +331,17 @@ function registrarDadosDoPaciente(telefone, { email = null, dataNascimento = nul
     guardarDadosPendentes(telefone, { email, dataNascimento });
     return { pendente: true };
   }
-  if (email) item.responsavelEmail = email;
-  if (dataNascimento) item.criancaDataNascimento = dataNascimento;
+  // Nada de novo: a Carla reviu a conversa, achou o e-mail que ELA MESMA escreveu numa
+  // mensagem anterior e chamou a ferramenta de novo com o mesmo dado. Gravar de novo não
+  // faz mal, mas quem chama dispara um WhatsApp pro Dr. Bruno a cada gravação — e ele
+  // recebia o mesmo aviso duas vezes. Aqui a repetição morre, no código, sem depender do
+  // modelo perceber que já tinha feito isso.
+  const emailNovo = !!email && email !== item.responsavelEmail;
+  const dataNova = !!dataNascimento && dataNascimento !== item.criancaDataNascimento;
+  if (!emailNovo && !dataNova) return { semNovidade: true, agendamento: item };
+
+  if (emailNovo) item.responsavelEmail = email;
+  if (dataNova) item.criancaDataNascimento = dataNascimento;
   escreverJSON(ARQ_AGENDAMENTOS, lista);
   reescreverCSV(lista);
   return item;

@@ -288,6 +288,10 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     telefone, texto, historico: sessao.historico || [], now, idsOcupados,
     agendamentoAtual: sessao.ultimoAgendamento || null,
     pacienteConhecido: Storage.ehPacienteConhecido(telefone),
+    // Sem isso a Carla continua dizendo que o Dr. Bruno "vai liberar mais perto da
+    // consulta" DEPOIS de ela mesma ter mandado o link. O prompt é montado antes de ela
+    // ver o histórico, então quem sabe disso é o código, não ela.
+    portalJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.portalAvisadoEm),
   });
 
   sessao.historico = resultado.historico;
