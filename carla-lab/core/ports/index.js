@@ -225,21 +225,38 @@ const PORTA_CANAL = {
     },
     conectar: { aridade: 0, devolve: "promessa", contrato: "Idempotente." },
   },
+  // NOTA DELIBERADA: não existe adapter canal-baileys nesta fase, e isso não é esquecimento.
+  // O código do WhatsApp não é um módulo: está solto dentro do server.js, misturado com
+  // debounce, deduplicação e lembretes. Escrever o adapter agora significaria reescrever
+  // código de WhatsApp sem nenhuma forma de testá-lo, para depois reescrever de novo na
+  // Fase 3, quando o server.js passar a usar o Core. O adapter real sai de lá, de uma vez.
+  // Até isso, canal-memoria cobre os testes.
 };
 
 const PORTA_LLM = {
   nome: "LLM",
-  descricao: "O modelo que conduz a conversa.",
+  descricao: "O modelo que conduz a conversa. UMA chamada, não o laço inteiro.",
   metodos: {
-    conversar: {
+    gerar: {
       aridade: 1,
-      argumentos: "({ system, mensagens, ferramentas, aoChamarFerramenta })",
-      devolve: "{ texto, ferramentasChamadas }",
+      argumentos: "({ system, mensagens, ferramentas })",
+      devolve: "{ texto, ferramentasChamadas, parouPara }",
       contrato:
-        "ferramentasChamadas é a lista do que a IA acionou, com argumentos. É o que hoje " +
-        "não existe e por isso deixa parte da suíte de regressão sem como verificar. " +
-        "Passa a existir porque a chamada atravessa esta porta.",
+        "Uma única ida ao modelo. O laço (executar ferramenta, devolver resultado, pedir " +
+        "de novo) é do Core, não do adapter: é comportamento, e comportamento igual em " +
+        "todo provedor. parouPara vale 'texto' quando a resposta está pronta e " +
+        "'ferramenta' quando o modelo quer acionar algo. " +
+        "ferramentasChamadas é a lista do que ele pediu, com argumentos, e é justamente " +
+        "o que hoje não existe: por isso parte da suíte de regressão fica sem como " +
+        "verificar se a Carla consultou a agenda de verdade.",
     },
+  },
+  // Formato neutro de mensagem, para que trocar de provedor não vaze pro Core.
+  // O adapter traduz nos dois sentidos.
+  formatoDeMensagem: {
+    "{ de: 'familia', texto }": "o que a família escreveu",
+    "{ de: 'carla', texto, ferramentas? }": "o que a Carla respondeu, e o que ela quis acionar",
+    "{ de: 'ferramenta', id, resultado }": "o que a ferramenta devolveu, ligado pelo id",
   },
 };
 
