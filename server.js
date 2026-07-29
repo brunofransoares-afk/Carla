@@ -31,8 +31,74 @@ const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
 // de pé mesmo com o bot desligado). Aqui só sobrou a trava de instância única: se essa
 // porta já estiver ocupada, é sinal de que já existe uma Carla rodando, então encerra
 // em vez de deixar duas instâncias brigarem pela mesma conexão do WhatsApp.
+// Avisa a família que o portal da criança foi liberado, com o link. Só o bot pode fazer
+// isso: a conexão do WhatsApp vive aqui, o painel é outro processo e não tem acesso a ela.
+// Por isso a rota interna abaixo existe — é o painel repassando pra cá o toque que o
+// Dr. Bruno deu no prontuário.
+//
+// Inerte sem PORTAL_URL: sem o endereço não há o que mandar, e mandar meia mensagem
+// ("seu portal está liberado!" sem link) seria pior que não mandar nada.
+async function avisarPortalLiberado({ telefone, email }) {
+  const endereco = (process.env.PORTAL_URL || "").trim();
+  if (!endereco) return { ok: false, motivo: "PORTAL_URL não configurada" };
+  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp" };
+
+  const agendamento = telefone
+    ? [...Storage.lerAgendamentos()].reverse().find((a) => a.telefone === telefone)
+    : Storage.acharAgendamentoPorEmail(email);
+  if (!agendamento) return { ok: false, motivo: "Não achei agendamento pra esse telefone/e-mail" };
+  if (agendamento.portalAvisadoEm) return { ok: true, jaAvisado: true };
+
+  // Só telefone em formato internacional recebe mensagem — igual aos lembretes. Os
+  // placeholders tipo "(a confirmar)" de agendamento feito na mão não são um WhatsApp.
+  if (!String(agendamento.telefone || "").startsWith("+")) {
+    return { ok: false, motivo: "Agendamento sem telefone de WhatsApp válido" };
+  }
+
+  const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
+  const texto = [
+    `Oi! O Dr. Bruno liberou o espaço da ${agendamento.crianca} no sistema 😊`,
+    "",
+    "É ali que você guarda a carteira de vacinação, os exames e o peso e altura dela, e acompanha o crescimento e as vacinas que ainda faltam.",
+    "",
+    endereco,
+    "",
+    `No primeiro acesso você cria a sua senha, usando este mesmo e-mail: ${agendamento.responsavelEmail || email}`,
+    "",
+    "Se quiser, dá pra salvar o link na tela inicial do celular e usar como aplicativo.",
+  ].join("\n");
+
+  await sockAtivo.sendMessage(jid, { text: texto });
+  Storage.marcarPortalAvisado(agendamento.slotId);
+  console.log(`[PORTAL] Avisei ${agendamento.telefone} sobre o portal de ${agendamento.crianca}`);
+  return { ok: true };
+}
+
 function iniciarTravaInstancia() {
-  const servidor = http.createServer((req, res) => res.end("ok"));
+  const servidor = http.createServer((req, res) => {
+    // Além da trava, esta porta é a caixa de entrada interna do bot: o painel repassa
+    // pra cá o que precisa da conexão do WhatsApp. Só escuta em 127.0.0.1 (ver listen
+    // no fim desta função), então nada da internet chega aqui direto.
+    if (req.method === "POST" && req.url === "/interno/portal-liberado") {
+      let corpo = "";
+      req.on("data", (p) => { corpo += p; });
+      req.on("end", async () => {
+        let dados = {};
+        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+        try {
+          const r = await avisarPortalLiberado({ telefone: dados.telefone, email: dados.email });
+          res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(r));
+        } catch (erro) {
+          console.error("[PORTAL] Erro ao avisar:", erro.message);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, motivo: erro.message }));
+        }
+      });
+      return;
+    }
+    res.end("ok");
+  });
 
   servidor.on("error", (erro) => {
     if (erro.code === "EADDRINUSE") {
