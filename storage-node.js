@@ -338,6 +338,28 @@ function registrarDadosDoPaciente(telefone, { email = null, dataNascimento = nul
   return item;
 }
 
+// Acha o agendamento mais recente de um e-mail de responsável. É como o prontuário
+// identifica a família quando avisa que o portal foi liberado: lá ele conhece o e-mail,
+// não o telefone do WhatsApp. Comparação em minúsculas e sem espaços dos dois lados,
+// porque o e-mail foi digitado à mão numa conversa.
+function acharAgendamentoPorEmail(email) {
+  const alvo = String(email || "").trim().toLowerCase();
+  if (!alvo) return null;
+  const lista = lerAgendamentos();
+  return [...lista].reverse().find((a) => String(a.responsavelEmail || "").trim().toLowerCase() === alvo) || null;
+}
+
+// Marca que a família já foi avisada do portal, pra um segundo toque no botão do
+// prontuário não render uma segunda mensagem igual pra ela.
+function marcarPortalAvisado(slotId) {
+  const lista = lerAgendamentos();
+  const item = lista.find((a) => a.slotId === slotId);
+  if (!item) return false;
+  item.portalAvisadoEm = new Date().toISOString();
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  return true;
+}
+
 // Cancela (apaga) um agendamento pelo slotId. Retorna o registro removido (inclui
 // googleEventId, se tiver, pra quem chamar poder cancelar o evento na agenda também),
 // ou null se não encontrar.
@@ -569,6 +591,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
+  acharAgendamentoPorEmail, marcarPortalAvisado,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,

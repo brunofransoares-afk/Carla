@@ -101,7 +101,53 @@ function autenticado(req) {
 const html = fs.readFileSync(path.join(__dirname, "dashboard.html"));
 const PASTA_ICONES = path.join(__dirname, "icons");
 
+// Repassa pro bot o aviso de que o Dr. Bruno liberou o portal de uma criança no
+// prontuário. Vem antes da checagem de senha de propósito: quem chama é máquina, não
+// navegador, e ela se identifica pelo segredo combinado, não pela senha do painel.
+//
+// O painel não consegue mandar WhatsApp (a conexão vive no processo do bot), então aqui
+// ele só encaminha pra porta interna do bot, que escuta só em 127.0.0.1.
+//
+// Inerte sem PORTAL_WEBHOOK_SECRET: sem segredo configurado a rota recusa tudo, em vez
+// de virar um jeito de qualquer um da internet fazer a Carla mandar mensagem.
+const PORTA_INTERNA_BOT = 3357;
+
+function encaminharPortalLiberado(corpo) {
+  return new Promise((resolve) => {
+    const req = http.request({
+      hostname: "127.0.0.1", port: PORTA_INTERNA_BOT, path: "/interno/portal-liberado",
+      method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(corpo) },
+      timeout: 15000,
+    }, (resposta) => {
+      let texto = "";
+      resposta.on("data", (p) => { texto += p; });
+      resposta.on("end", () => resolve({ status: resposta.statusCode, texto }));
+    });
+    req.on("timeout", () => req.destroy(new Error("Timeout")));
+    req.on("error", (erro) => resolve({ status: 503, texto: JSON.stringify({ ok: false, motivo: "Carla fora do ar: " + erro.message }) }));
+    req.write(corpo);
+    req.end();
+  });
+}
+
 const servidor = http.createServer(async (req, res) => {
+  if (req.method === "POST" && req.url === "/webhook/portal-liberado") {
+    const segredo = (process.env.PORTAL_WEBHOOK_SECRET || "").trim();
+    if (!segredo || req.headers["x-carla-secret"] !== segredo) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, motivo: "não autorizado" }));
+      return;
+    }
+    let corpo = "";
+    req.on("data", (p) => { corpo += p; });
+    req.on("end", async () => {
+      const r = await encaminharPortalLiberado(corpo || "{}");
+      res.writeHead(r.status, { "Content-Type": "application/json" });
+      res.end(r.texto);
+    });
+    return;
+  }
+
   if (!autenticado(req)) {
     res.writeHead(401, { "WWW-Authenticate": 'Basic realm="Painel da Carla"' });
     res.end("Senha necessária.");
