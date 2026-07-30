@@ -550,7 +550,22 @@ function ehPacienteConhecido(telefone) {
   if (lerNaoPacientesManuais().includes(telefone)) return false;
   const contato = lerContatosWhatsappMapa()[telefone];
   if (contato && contato.nomeSalvo) return true;
-  return lerPacientesManuais().includes(telefone);
+  if (lerPacientesManuais().includes(telefone)) return true;
+  // Quem marcou consulta com a Carla não é desconhecido, mesmo que o número não esteja
+  // salvo na agenda do celular. Sem isto ela se reapresenta ("Aqui é a Carla, secretária
+  // do Dr. Bruno...") pra família que ela mesma atendeu ontem — e chegou a fazer isso 27
+  // minutos depois de mandar o lembrete da consulta daquele dia.
+  return lerAgendamentos().some((a) => a.telefone === telefone);
+}
+
+// A consulta mais próxima que ainda vai acontecer nesse telefone (a de hoje conta o dia
+// todo). É o que permite a Carla responder "a consulta do Pedro é hoje às 9h30" em vez de
+// perguntar como pode ajudar, pra quem ela lembrou de manhã.
+function proximaConsultaDoTelefone(telefone, now = new Date()) {
+  const hoje = Agenda.toDateStr(now);
+  return lerAgendamentos()
+    .filter((a) => a.telefone === telefone && a.data >= hoje)
+    .sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario))[0] || null;
 }
 
 // Lista única pro painel: todo contato que a Carla já viu no WhatsApp (mais quem foi marcado
@@ -630,7 +645,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, historicoExpirou,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, historicoExpirou, proximaConsultaDoTelefone,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
