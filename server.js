@@ -21,6 +21,7 @@ require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
 const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"));
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const CerebroIA = require(path.join(__dirname, "cerebro-ia.js"));
+const AvisoEmail = require(path.join(__dirname, "avisos-email.js"));
 
 const ATRASO_RESPOSTA_MS = 3000;
 const PORTA_TRAVA = 3357;
@@ -36,22 +37,19 @@ const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
 // diz isso explicitamente.
 async function avisarGuiaLiberado({ telefone, email }) {
   const endereco = (process.env.GUIA_URL || "").trim();
-  if (!endereco) return { ok: false, motivo: "GUIA_URL não configurada" };
-  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp" };
-
   const agendamento = telefone
     ? [...Storage.lerAgendamentos()].reverse().find((a) => a.telefone === telefone)
     : Storage.acharAgendamentoPorEmail(email);
-  if (!agendamento) return { ok: false, motivo: "Não achei agendamento pra esse telefone/e-mail" };
-  if (agendamento.guiaAvisadoEm) return { ok: true, jaAvisado: true };
+  // "Já avisado" vem ANTES das travas: repetir é o defeito a evitar, e não faz sentido
+  // recusar por falta de e-mail um aviso que já saiu.
+  if (agendamento && agendamento.guiaAvisadoEm) return { ok: true, jaAvisado: true };
 
-  if (!String(agendamento.telefone || "").startsWith("+")) {
-    return { ok: false, motivo: "Agendamento sem telefone de WhatsApp válido" };
-  }
-  // Sem e-mail a família não tem como criar a senha, e a mensagem prometeria um acesso que
-  // ela não consegue usar. Melhor recusar e o painel dizer por quê.
-  const emailFinal = String(agendamento.responsavelEmail || email || "").trim();
-  if (!emailFinal) return { ok: false, motivo: "Agendamento sem e-mail do responsável" };
+  // Travas em avisos-email.js, testáveis fora daqui. Sem e-mail a família não tem como
+  // criar a senha, e a mensagem prometeria um acesso que ela não consegue usar.
+  const porta = AvisoEmail.checarAviso({ endereco: endereco, nomeDaVariavel: "GUIA_URL",
+    conectado: !!sockAtivo, agendamento: agendamento, email: email });
+  if (!porta.ok) return porta;
+  const emailFinal = porta.email;
 
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
   const texto = [
@@ -90,20 +88,18 @@ async function avisarGuiaLiberado({ telefone, email }) {
 // ("seu portal está liberado!" sem link) seria pior que não mandar nada.
 async function avisarPortalLiberado({ telefone, email }) {
   const endereco = (process.env.PORTAL_URL || "").trim();
-  if (!endereco) return { ok: false, motivo: "PORTAL_URL não configurada" };
-  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp" };
-
   const agendamento = telefone
     ? [...Storage.lerAgendamentos()].reverse().find((a) => a.telefone === telefone)
     : Storage.acharAgendamentoPorEmail(email);
-  if (!agendamento) return { ok: false, motivo: "Não achei agendamento pra esse telefone/e-mail" };
-  if (agendamento.portalAvisadoEm) return { ok: true, jaAvisado: true };
+  if (agendamento && agendamento.portalAvisadoEm) return { ok: true, jaAvisado: true };
 
-  // Só telefone em formato internacional recebe mensagem — igual aos lembretes. Os
-  // placeholders tipo "(a confirmar)" de agendamento feito na mão não são um WhatsApp.
-  if (!String(agendamento.telefone || "").startsWith("+")) {
-    return { ok: false, motivo: "Agendamento sem telefone de WhatsApp válido" };
-  }
+  // As mesmas travas do guia — e uma delas é NOVA aqui: a falta de e-mail. O portal não
+  // checava, e o texto interpola o endereço direto, então sem e-mail a família recebia a
+  // linha "usando este mesmo e-mail: undefined". Ela tenta, não consegue, e conclui que o
+  // portal não funciona.
+  const porta = AvisoEmail.checarAviso({ endereco: endereco, nomeDaVariavel: "PORTAL_URL",
+    conectado: !!sockAtivo, agendamento: agendamento, email: email });
+  if (!porta.ok) return porta;
 
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
   const texto = [
@@ -116,7 +112,7 @@ async function avisarPortalLiberado({ telefone, email }) {
     "",
     endereco,
     "",
-    `No primeiro acesso você cria a sua senha, usando este mesmo e-mail: ${agendamento.responsavelEmail || email}`,
+    `No primeiro acesso você cria a sua senha, usando este mesmo e-mail: ${porta.email}`,
     "",
     // O passo a passo muda entre iPhone e Android, e a família não vai saber qual é o
     // "menu do navegador" se ninguém disser. Uma linha pra cada, sem virar tutorial.
