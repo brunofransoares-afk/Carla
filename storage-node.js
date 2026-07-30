@@ -418,6 +418,24 @@ function obterSessao(telefone) {
   return sessoes[telefone] || null;
 }
 
+// Quanto tempo de silêncio faz uma conversa deixar de ser "a mesma conversa". Pausa de
+// verdade num atendimento é de minutos; quem volta horas depois está começando outro
+// assunto, e continuar de onde parou dá erro grave — ver historicoExpirou.
+const CONVERSA_EXPIRA_MS = 4 * 60 * 60 * 1000; // 4 horas
+
+// O histórico guardava as últimas 24 mensagens SEM olhar quando foram. Uma família que
+// falou às 14h e voltou às 21h recebia a Carla continuando o assunto da tarde: ela
+// retomou um "Pix ou cartão?" pendente de outra consulta e, pior, confirmou agendamento
+// com o nome da criança ERRADA, lido do histórico velho em vez da conversa de agora.
+// Devolve true quando o histórico precisa ser descartado antes de responder.
+function historicoExpirou(sessao, now = new Date()) {
+  if (!sessao || !sessao.historico || !sessao.historico.length) return false;
+  if (!sessao.ultimaAtividade) return false;
+  const ultima = new Date(sessao.ultimaAtividade).getTime();
+  if (Number.isNaN(ultima)) return false;
+  return now.getTime() - ultima > CONVERSA_EXPIRA_MS;
+}
+
 function salvarSessao(telefone, sessao) {
   const sessoes = lerSessoes();
   sessoes[telefone] = sessao;
@@ -612,7 +630,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, historicoExpirou,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
