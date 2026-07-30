@@ -16,6 +16,7 @@ const Storage = require(path.join(__dirname, "storage-node.js"));
 const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
 const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
 const { anotarOferta } = require(path.join(__dirname, "oferta-de-horarios.js"));
+const Ordem = require(path.join(__dirname, "ordem-dos-horarios.js"));
 
 // Sonnet em vez de Haiku aqui de propósito: esse módulo conduz a conversa inteira e
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
@@ -396,13 +397,13 @@ async function executarFerramenta(nome, input, ctx) {
     const dataPreferida = input.data || null;
     // Pega mais candidatos do que o necessário (6, não 2) porque alguns podem cair fora
     // depois de checar o Google Agenda — só ficam os 2 primeiros que passarem nas duas checagens.
-    // Os horários extras entram DEPOIS dos da grade, de propósito: a preferência normal do
-    // consultório continua ganhando, e o extra funciona como capacidade a mais — aparece
-    // quando a grade não tem vaga suficiente, ou quando pedem justamente aquele dia/período.
-    const candidatos = [
-      ...Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida, count: 6 }),
-      ...Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida }),
-    ];
+    // A ordem entre grade e extras é decidida em ordem-dos-horarios.js: horário aberto no
+    // painel é horário de verdade e concorre igual, senão nunca chega a ser oferecido.
+    const candidatos = Ordem.ordenarCandidatos(
+      Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida, count: 6 }),
+      Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida }),
+      { diaPreferido, periodo, dataPreferida },
+    );
     const livres = [];
     for (const c of candidatos) {
       if (livres.length >= 2) break;
