@@ -27,13 +27,6 @@ const PORTA_TRAVA = 3357;
 const HORA_LEMBRETES = 8; // manda os lembretes automáticos a partir das 8h
 const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
 
-// Avisa a família que o portal da criança foi liberado, com o link. Só o bot pode fazer
-// isso: a conexão do WhatsApp vive aqui, o painel é outro processo e não tem acesso a ela.
-// Por isso a rota interna abaixo existe — é o painel repassando pra cá o toque que o
-// Dr. Bruno deu no prontuário.
-//
-// Inerte sem PORTAL_URL: sem o endereço não há o que mandar, e mandar meia mensagem
-// ("seu portal está liberado!" sem link) seria pior que não mandar nada.
 // Avisa a família que o guia foi liberado. Espelha o avisarPortalLiberado de propósito —
 // mesmas travas, mesma ordem — porque as duas mensagens falham do mesmo jeito.
 //
@@ -62,17 +55,24 @@ async function avisarGuiaLiberado({ telefone, email }) {
 
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
   const texto = [
-    // Neutro quanto ao sexo da criança, igual à mensagem do portal: este texto é fixo e o
-    // sistema não sabe o sexo (quem presume é o prontuário, pelo primeiro nome, e erra).
-    `Oi! O Dr. Bruno liberou pra você o Guia Completo de Pediatria 😊`,
+    // Texto do Dr. Bruno, palavra por palavra. Fala com a MÃE, não com a criança: o guia é
+    // dela, então aqui não entra nome nem sexo de ninguém.
+    "Oi! 😊 O Dr. Bruno liberou pra você o Guia Completo de Pediatria, escrito por ele pras famílias que atende.",
     "",
-    "É um guia pra consultar em casa, escrito por ele: febre, tosse, alergia, sono, alimentação, o que fazer e quando procurar ajuda. Fica disponível pra você a qualquer hora.",
+    "São 16 áreas e mais de 100 capítulos, do recém-nascido ao adolescente: febre, tosse, alergia, sono, alimentação, vacinas, pele, desenvolvimento, segurança e primeiros socorros.",
     "",
-    endereco,
+    "Tem também checador de sintomas (você marca o que está vendo e ele diz se dá pra cuidar em casa ou se é hora de procurar ajuda), um assistente pra tirar dúvidas com base só no conteúdo dele, e vídeos reais, como o desengasgo passo a passo.",
     "",
-    `No primeiro acesso você cria a sua senha, usando este mesmo e-mail: ${emailFinal}`,
+    "Instala como app no celular e funciona até sem internet. É seu, não expira. Não substitui a consulta: serve pra você entender e reconhecer a hora certa de procurar ajuda.",
     "",
-    "Você vai receber um e-mail com o link pra criar a senha. Se não achar, olhe no lixo eletrônico.",
+    `👉 ${endereco}`,
+    "",
+    `No primeiro acesso você cria sua senha com este e-mail: ${emailFinal}`,
+    "O link chega por e-mail. Se não achar, olhe no lixo eletrônico. 💛",
+    "",
+    // Mesma dica da mensagem do portal: o guia também instala na tela inicial, e quem não
+    // sabe fazer isso é justamente quem mais ganha com ela.
+    "Se quiser deixar como aplicativo no celular: abra o link, toque no menu do navegador e escolha \"Adicionar à Tela de Início\". No iPhone o menu é o ícone de compartilhar; no Android, os três pontinhos.",
   ].join("\n");
 
   await sockAtivo.sendMessage(jid, { text: texto });
@@ -81,6 +81,13 @@ async function avisarGuiaLiberado({ telefone, email }) {
   return { ok: true };
 }
 
+// Avisa a família que o portal da criança foi liberado, com o link. Só o bot pode fazer
+// isso: a conexão do WhatsApp vive aqui, o painel é outro processo e não tem acesso a ela.
+// Por isso a rota interna existe — é o painel repassando pra cá o toque que o Dr. Bruno
+// deu no prontuário.
+//
+// Inerte sem PORTAL_URL: sem o endereço não há o que mandar, e mandar meia mensagem
+// ("seu portal está liberado!" sem link) seria pior que não mandar nada.
 async function avisarPortalLiberado({ telefone, email }) {
   const endereco = (process.env.PORTAL_URL || "").trim();
   if (!endereco) return { ok: false, motivo: "PORTAL_URL não configurada" };
