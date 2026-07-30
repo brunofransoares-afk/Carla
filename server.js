@@ -312,6 +312,14 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
   const now = new Date();
 
+  // Depois de horas de silêncio, o que a família disser é assunto novo. Sem isso a Carla
+  // continuava a conversa da tarde à noite: retomou um "Pix ou cartão?" de outra consulta
+  // e confirmou agendamento com o nome da criança errada, lido do histórico velho.
+  if (Storage.historicoExpirou(sessao, now)) {
+    console.log(`[SESSÃO] ${telefone}: silêncio longo desde ${sessao.ultimaAtividade} — conversa recomeça do zero`);
+    sessao.historico = [];
+  }
+
   // 1) Emergência sempre primeiro, sempre determinística — nunca passa pela IA.
   if (CerebroIA.pareceEmergencia(texto)) {
     Storage.registrarAlertaUrgencia({ telefone, mensagem: texto, tipo: "emergencia" });
