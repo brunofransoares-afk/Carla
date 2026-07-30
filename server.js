@@ -27,10 +27,6 @@ const PORTA_TRAVA = 3357;
 const HORA_LEMBRETES = 8; // manda os lembretes automáticos a partir das 8h
 const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
 
-// Não serve mais o painel (isso agora é o processo separado painel-server.js, que fica
-// de pé mesmo com o bot desligado). Aqui só sobrou a trava de instância única: se essa
-// porta já estiver ocupada, é sinal de que já existe uma Carla rodando, então encerra
-// em vez de deixar duas instâncias brigarem pela mesma conexão do WhatsApp.
 // Avisa a família que o portal da criança foi liberado, com o link. Só o bot pode fazer
 // isso: a conexão do WhatsApp vive aqui, o painel é outro processo e não tem acesso a ela.
 // Por isso a rota interna abaixo existe — é o painel repassando pra cá o toque que o
@@ -126,6 +122,10 @@ async function avisarPortalLiberado({ telefone, email }) {
   return { ok: true };
 }
 
+// Não serve mais o painel (isso agora é o processo separado painel-server.js, que fica
+// de pé mesmo com o bot desligado). Aqui sobrou a trava de instância única: se essa porta
+// já estiver ocupada, é sinal de que já existe uma Carla rodando, então encerra em vez de
+// deixar duas instâncias brigarem pela mesma conexão do WhatsApp.
 function iniciarTravaInstancia() {
   const servidor = http.createServer((req, res) => {
     // Além da trava, esta porta é a caixa de entrada interna do bot: o painel repassa
@@ -318,6 +318,9 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   if (Storage.historicoExpirou(sessao, now)) {
     console.log(`[SESSÃO] ${telefone}: silêncio longo desde ${sessao.ultimaAtividade} — conversa recomeça do zero`);
     sessao.historico = [];
+    // Os horários oferecidos morrem com a conversa: eram de outro assunto, e a agenda
+    // pode ter mudado desde então.
+    sessao.horariosOferecidos = [];
   }
 
   // 1) Emergência sempre primeiro, sempre determinística — nunca passa pela IA.
@@ -366,9 +369,13 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // ver o histórico, então quem sabe disso é o código, não ela.
     portalJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.portalAvisadoEm),
     guiaJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.guiaAvisadoEm),
+    // Os horários que ela já ofereceu nesta conversa. É o que a trava do
+    // confirmar_agendamento usa pra recusar horário que ela não mostrou pra família.
+    horariosOferecidos: sessao.horariosOferecidos || [],
   });
 
   sessao.historico = resultado.historico;
+  sessao.horariosOferecidos = resultado.horariosOferecidos || [];
 
   for (const acao of resultado.acoes || []) {
     console.log(`[AGENDADO] ${acao.responsavel} / ${acao.crianca} em ${acao.slot.label}`);
