@@ -15,6 +15,7 @@ const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
 const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
+const { anotarOferta } = require(path.join(__dirname, "oferta-de-horarios.js"));
 
 // Sonnet em vez de Haiku aqui de propósito: esse módulo conduz a conversa inteira e
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
@@ -334,7 +335,7 @@ async function executarFerramenta(nome, input, ctx) {
       if (!par) return { horarios: [], aviso: "Não encontrei dois horários seguidos livres dentro do horizonte de agenda visível. Ofereça consultar horários normais em vez disso." };
       const resultado = { horarios: par.map((s) => ({ slotId: s.id, label: s.label })), aviso: "Esses dois horários são realmente consecutivos (mesmo período, um logo após o outro)." };
       if (ctx.agendamentoAtual) resultado.atencao = `Você JÁ TEM uma consulta confirmada nesta conversa: ${ctx.agendamentoAtual.crianca}, ${ctx.agendamentoAtual.label}. Isso é uma lembrança de mais cedo nesta conversa, pode estar desatualizada (ex: cancelada por outro caminho) — se não for claramente relevante agora, não mencione; se a família duvidar, confira com cancelar_agendamento apenasConsultar=true.`;
-      return resultado;
+      return anotarOferta(ctx, resultado);
     }
     if (input.urgente) {
       // Ignora a preferência padrão do consultório (segunda de manhã/terça de tarde) e pega
@@ -375,7 +376,7 @@ async function executarFerramenta(nome, input, ctx) {
       if (ctx.agendamentoAtual) {
         resultadoUrgente.atencao = `Você JÁ TEM uma consulta confirmada nesta conversa: ${ctx.agendamentoAtual.crianca}, ${ctx.agendamentoAtual.label}. Isso é uma lembrança de mais cedo nesta conversa, pode estar desatualizada (ex: cancelada por outro caminho) — se não for claramente relevante agora, não mencione; se a família duvidar, confira com cancelar_agendamento apenasConsultar=true.`;
       }
-      return resultadoUrgente;
+      return anotarOferta(ctx, resultadoUrgente);
     }
 
     const diaPreferido = DIA_NOME_PARA_NUMERO[input.dia] || null;
@@ -404,7 +405,7 @@ async function executarFerramenta(nome, input, ctx) {
     if (ctx.agendamentoAtual) {
       resultado.atencao = `Você JÁ TEM uma consulta confirmada nesta conversa: ${ctx.agendamentoAtual.crianca}, ${ctx.agendamentoAtual.label}. Isso é uma lembrança de mais cedo nesta conversa, pode estar desatualizada (ex: cancelada por outro caminho) — se não for claramente relevante agora, não mencione. Só volte a usar horários se for pra agendar uma consulta ADICIONAL de verdade (outro filho, por exemplo). Se a pergunta da família era sobre outra coisa (forma de pagamento, endereço etc), ignore esses horários e responda o que foi perguntado. Se a família duvidar que essa consulta ainda existe, confira com cancelar_agendamento apenasConsultar=true antes de responder.`;
     }
-    return resultado;
+    return anotarOferta(ctx, resultado);
   }
 
   if (nome === "confirmar_agendamento") {
@@ -415,6 +416,16 @@ async function executarFerramenta(nome, input, ctx) {
     const slotReal = Storage.slotsPossiveisComExtras(ctx.now).find((s) => s.id === input.slotId);
     if (!slotReal) {
       return { sucesso: false, motivo: "Esse horário não corresponde a um horário real da agenda. Se essa consulta já foi confirmada antes nesta conversa, não chame essa ferramenta de novo — apenas continue a conversa normalmente (ex: informando a forma de pagamento)." };
+    }
+
+    // SÓ MARCA O QUE FOI OFERECIDO. A checagem acima garante que o horário existe; esta
+    // garante que ele saiu de uma consulta de verdade nesta conversa. Sem ela a IA podia
+    // chutar um horário, dizer pra família, e a reserva passava se o chute calhasse de ser
+    // um horário existente e livre — foi o que aconteceu quando ela ofereceu "quinta (13/08)
+    // às 8h" com um slotId inventado ("quinta-13/08-08:00"). Naquele caso o formato torto
+    // denunciou; um chute bem formado teria marcado sem ninguém notar.
+    if (!ctx.horariosOferecidos.has(input.slotId)) {
+      return { sucesso: false, motivo: "Você não ofereceu esse horário nesta conversa, então não pode marcá-lo. Chame consultar_horarios primeiro (dá pra filtrar por data), e ofereça à família apenas os horários que a ferramenta devolver. Nunca escreva um horário que não veio dela." };
     }
     const idsAtuais = Storage.idsOcupados();
     if (idsAtuais.has(input.slotId)) {
@@ -645,7 +656,7 @@ async function chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx,
 // Ponto de entrada principal: recebe o texto novo + histórico da conversa, devolve a
 // resposta pronta pra mandar, o histórico atualizado, e sinaliza se uma reserva de verdade
 // foi feita ou se a IA pediu escalonamento pra atendimento humano.
-async function responder({ telefone, texto, historico, now, idsOcupados, agendamentoAtual = null, pacienteConhecido = false, portalJaLiberado = false, guiaJaLiberado = false }) {
+async function responder({ telefone, texto, historico, now, idsOcupados, agendamentoAtual = null, pacienteConhecido = false, portalJaLiberado = false, guiaJaLiberado = false, horariosOferecidos = [] }) {
   const api = obterCliente();
   if (!api) {
     return {
@@ -663,7 +674,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     { role: "user", content: texto },
   ];
 
-  const ctx = { now, idsOcupados, telefone, acoesRealizadas: [], cancelamentosRealizados: [], escalar: null, escalarTipo: null, agendamentoAtual, dadosDoPacienteRegistrados: null };
+  const ctx = { now, idsOcupados, telefone, acoesRealizadas: [], cancelamentosRealizados: [], escalar: null, escalarTipo: null, agendamentoAtual, dadosDoPacienteRegistrados: null, horariosOferecidos: new Set(horariosOferecidos) };
   let respostaTexto;
   try {
     respostaTexto = await chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx });
@@ -709,6 +720,9 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     escalar: ctx.escalar,
     escalarTipo: ctx.escalarTipo,
     dadosDoPaciente: ctx.dadosDoPacienteRegistrados,
+    // Os últimos 20 horários oferecidos seguem pra próxima mensagem: a família escolhe
+    // depois, e sem essa lista a trava do confirmar_agendamento recusaria a escolha dela.
+    horariosOferecidos: [...ctx.horariosOferecidos].slice(-20),
   };
 }
 
