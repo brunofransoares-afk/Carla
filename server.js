@@ -372,6 +372,13 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // Os horários que ela já ofereceu nesta conversa. É o que a trava do
     // confirmar_agendamento usa pra recusar horário que ela não mostrou pra família.
     horariosOferecidos: sessao.horariosOferecidos || [],
+    // A consulta que ainda vai acontecer nesse telefone, lida da agenda de verdade. Sem
+    // isso a Carla trata quem tem consulta hoje como contato novo, porque o histórico da
+    // conversa de ontem já expirou.
+    consultaProxima: (() => {
+      const c = Storage.proximaConsultaDoTelefone(telefone, now);
+      return c ? { crianca: c.crianca, diaLabel: c.diaLabel, ehHoje: c.data === Agenda.toDateStr(now) } : null;
+    })(),
   });
 
   sessao.historico = resultado.historico;
