@@ -21,6 +21,7 @@ require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
 const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"));
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const CerebroIA = require(path.join(__dirname, "cerebro-ia.js"));
+const Avisos = require(path.join(__dirname, "avisos-texto.js"));
 
 const ATRASO_RESPOSTA_MS = 3000;
 const PORTA_TRAVA = 3357;
@@ -36,44 +37,19 @@ const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
 // diz isso explicitamente.
 async function avisarGuiaLiberado({ telefone, email }) {
   const endereco = (process.env.GUIA_URL || "").trim();
-  if (!endereco) return { ok: false, motivo: "GUIA_URL não configurada" };
-  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp" };
-
   const agendamento = telefone
     ? [...Storage.lerAgendamentos()].reverse().find((a) => a.telefone === telefone)
     : Storage.acharAgendamentoPorEmail(email);
-  if (!agendamento) return { ok: false, motivo: "Não achei agendamento pra esse telefone/e-mail" };
-  if (agendamento.guiaAvisadoEm) return { ok: true, jaAvisado: true };
+  // Já avisado vem ANTES das travas: repetir é o defeito a evitar, e não faz sentido
+  // recusar por falta de e-mail uma mensagem que já foi enviada.
+  if (agendamento && agendamento.guiaAvisadoEm) return { ok: true, jaAvisado: true };
 
-  if (!String(agendamento.telefone || "").startsWith("+")) {
-    return { ok: false, motivo: "Agendamento sem telefone de WhatsApp válido" };
-  }
-  // Sem e-mail a família não tem como criar a senha, e a mensagem prometeria um acesso que
-  // ela não consegue usar. Melhor recusar e o painel dizer por quê.
-  const emailFinal = String(agendamento.responsavelEmail || email || "").trim();
-  if (!emailFinal) return { ok: false, motivo: "Agendamento sem e-mail do responsável" };
+  const porta = Avisos.checarAviso({ endereco: endereco, nomeDaVariavel: "GUIA_URL",
+    conectado: !!sockAtivo, agendamento: agendamento, email: email });
+  if (!porta.ok) return porta;
 
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
-  const texto = [
-    // Texto do Dr. Bruno, palavra por palavra. Fala com a MÃE, não com a criança: o guia é
-    // dela, então aqui não entra nome nem sexo de ninguém.
-    "Oi! 😊 O Dr. Bruno liberou pra você o Guia Completo de Pediatria, escrito por ele pras famílias que atende.",
-    "",
-    "São 16 áreas e mais de 100 capítulos, do recém-nascido ao adolescente: febre, tosse, alergia, sono, alimentação, vacinas, pele, desenvolvimento, segurança e primeiros socorros.",
-    "",
-    "Tem também checador de sintomas (você marca o que está vendo e ele diz se dá pra cuidar em casa ou se é hora de procurar ajuda), um assistente pra tirar dúvidas com base só no conteúdo dele, e vídeos reais, como o desengasgo passo a passo.",
-    "",
-    "Instala como app no celular e funciona até sem internet. É seu, não expira. Não substitui a consulta: serve pra você entender e reconhecer a hora certa de procurar ajuda.",
-    "",
-    `👉 ${endereco}`,
-    "",
-    `No primeiro acesso você cria sua senha com este e-mail: ${emailFinal}`,
-    "O link chega por e-mail. Se não achar, olhe no lixo eletrônico. 💛",
-    "",
-    // Mesma dica da mensagem do portal: o guia também instala na tela inicial, e quem não
-    // sabe fazer isso é justamente quem mais ganha com ela.
-    "Se quiser deixar como aplicativo no celular: abra o link, toque no menu do navegador e escolha \"Adicionar à Tela de Início\". No iPhone o menu é o ícone de compartilhar; no Android, os três pontinhos.",
-  ].join("\n");
+  const texto = Avisos.textoGuia({ endereco: endereco, email: porta.email });
 
   await sockAtivo.sendMessage(jid, { text: texto });
   Storage.marcarGuiaAvisado(agendamento.slotId);
@@ -90,38 +66,22 @@ async function avisarGuiaLiberado({ telefone, email }) {
 // ("seu portal está liberado!" sem link) seria pior que não mandar nada.
 async function avisarPortalLiberado({ telefone, email }) {
   const endereco = (process.env.PORTAL_URL || "").trim();
-  if (!endereco) return { ok: false, motivo: "PORTAL_URL não configurada" };
-  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp" };
-
   const agendamento = telefone
     ? [...Storage.lerAgendamentos()].reverse().find((a) => a.telefone === telefone)
     : Storage.acharAgendamentoPorEmail(email);
-  if (!agendamento) return { ok: false, motivo: "Não achei agendamento pra esse telefone/e-mail" };
-  if (agendamento.portalAvisadoEm) return { ok: true, jaAvisado: true };
+  if (agendamento && agendamento.portalAvisadoEm) return { ok: true, jaAvisado: true };
 
-  // Só telefone em formato internacional recebe mensagem — igual aos lembretes. Os
-  // placeholders tipo "(a confirmar)" de agendamento feito na mão não são um WhatsApp.
-  if (!String(agendamento.telefone || "").startsWith("+")) {
-    return { ok: false, motivo: "Agendamento sem telefone de WhatsApp válido" };
-  }
+  // Mesmas travas do guia, e uma delas é NOVA aqui: a falta de e-mail. Antes o portal não
+  // checava, e o texto interpola o endereço direto — sem e-mail a família recebia a linha
+  // "usando este mesmo e-mail: undefined". Prometer acesso com endereço em branco é pior
+  // que não mandar: quem lê tenta, não consegue, e conclui que o portal não funciona.
+  const porta = Avisos.checarAviso({ endereco: endereco, nomeDaVariavel: "PORTAL_URL",
+    conectado: !!sockAtivo, agendamento: agendamento, email: email });
+  if (!porta.ok) return porta;
 
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
-  const texto = [
-    // Sem "dela"/"dele" e sem "da"/"do": este texto é fixo e o sistema não sabe o sexo da
-    // criança (quem infere isso é o prontuário, pelo primeiro nome, e nem sempre acerta).
-    // Escrito no neutro, serve pros dois e nunca sai errado na cara da família.
-    `Oi! O Dr. Bruno liberou o portal de ${agendamento.crianca} 😊`,
-    "",
-    "É onde fica tudo num lugar só: você guarda os exames, a carteira de vacinação e o peso e altura, e compara os exames antigos com os novos. As receitas e os documentos que o Dr. Bruno passar chegam por lá também, e você acompanha o crescimento e as vacinas que ainda faltam.",
-    "",
-    endereco,
-    "",
-    `No primeiro acesso você cria a sua senha, usando este mesmo e-mail: ${agendamento.responsavelEmail || email}`,
-    "",
-    // O passo a passo muda entre iPhone e Android, e a família não vai saber qual é o
-    // "menu do navegador" se ninguém disser. Uma linha pra cada, sem virar tutorial.
-    "Se quiser deixar como aplicativo no celular: abra o link, toque no menu do navegador e escolha \"Adicionar à Tela de Início\". No iPhone o menu é o ícone de compartilhar; no Android, os três pontinhos.",
-  ].join("\n");
+  const texto = Avisos.textoPortal({ endereco: endereco, crianca: agendamento.crianca,
+    email: porta.email });
 
   await sockAtivo.sendMessage(jid, { text: texto });
   Storage.marcarPortalAvisado(agendamento.slotId);
