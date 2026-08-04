@@ -300,6 +300,16 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  // Marcar/desmarcar pago. Uma rota só, com o estado desejado no corpo, porque o botão é
+  // um interruptor: o clique errado na lista precisa poder ser desfeito no clique seguinte.
+  if (req.url === "/api/pagamento-toggle" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const ok = corpo.slotId ? Storage.marcarPagamento(corpo.slotId, !!corpo.pago) : false;
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok }));
+    return;
+  }
+
   if (req.url === "/api/marcar-paciente" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const telefone = corpo.telefone ? normalizarTelefoneManual(corpo.telefone) : null;

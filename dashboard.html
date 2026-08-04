@@ -123,6 +123,9 @@
   .btn-portal:disabled { opacity: .5; cursor: default; }
   .portal-ok { color: #6ee7b7; font-weight: 700; }
   .portal-na { opacity: .35; }
+  .btn-pago { border: 0; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; padding: 4px 8px; }
+  .btn-pago.sim { background: #1f7a3d; color: #fff; }
+  .btn-pago.nao { background: #7a1f1f; color: #fff; }
   th.col-x, td.col-x { width: 32px; text-align: center; }
   .btn-limpar { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 12px; padding: 5px 13px; font-size: 12px; cursor: pointer; }
   .btn-limpar:hover { background: rgba(255,255,255,0.12); }
@@ -647,6 +650,15 @@
     return `<button class="btn-portal" title="Mandar o link do portal pra família" data-telefone="${escapeHtml(a.telefone)}">enviar</button>`;
   }
 
+  // Pago é interruptor, não marca definitiva: o Dr. Bruno confere o extrato e clica. Sem
+  // integração de pagamento, ele é a única fonte de verdade — e o clique errado na lista
+  // do celular precisa poder ser desfeito no clique seguinte, então o ✓ também é botão.
+  function botaoPago(a) {
+    const pago = !!a.pago;
+    const titulo = pago ? "Pago. Clique pra desmarcar" : "Ainda não pagou. Clique pra marcar como pago";
+    return `<button class="btn-pago ${pago ? "sim" : "nao"}" title="${titulo}" data-slot-id="${escapeHtml(a.slotId)}" data-pago="${pago ? "1" : "0"}">${pago ? "✓" : "R$"}</button>`;
+  }
+
   // Mesmo critério do portal, e a mesma marca de "já enviado". A trava do e-mail importa
   // mais aqui: sem e-mail a família não tem como criar a senha do guia, e a mensagem
   // prometeria um acesso que ela não consegue usar.
@@ -691,6 +703,25 @@
       if (!r.ok) alert("Não deu pra mandar: " + (r.motivo || "erro desconhecido"));
     } catch (e) {
       alert("Não deu pra mandar: o painel não conseguiu falar com a Carla.");
+    }
+    atualizar();
+  }
+
+  // Sem confirmação de propósito, diferente do cancelar: marcar pago não apaga nada e o
+  // próprio botão desfaz. Um "tem certeza?" a cada conferência de extrato só atrapalha.
+  async function alternarPago(btn) {
+    const novo = btn.dataset.pago !== "1";
+    btn.disabled = true;
+    try {
+      await fetch("/api/pagamento-toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slotId: btn.dataset.slotId, pago: novo }),
+      });
+    } catch (e) {
+      btn.disabled = false;
+      alert("Não consegui salvar. Tenta de novo.");
+      return;
     }
     atualizar();
   }
@@ -914,7 +945,7 @@
         tabela.innerHTML = "<div class='vazio'>Nenhum agendamento ainda.</div>";
       } else {
         tabela.innerHTML = `<table>
-          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th class="col-x"></th></tr></thead>
+          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x">Pago</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th class="col-x"></th></tr></thead>
           <tbody>${agendamentos.map((a) => `
             <tr>
               <td>${formatarDataBR(a.data)}</td>
@@ -922,6 +953,7 @@
               <td>${escapeHtml(a.responsavel)}</td>
               <td>${escapeHtml(a.crianca)}</td>
               <td>${escapeHtml(a.telefone)}</td>
+              <td class="col-x">${botaoPago(a)}</td>
               <td class="col-x">${botaoPortal(a)}</td>
               <td class="col-x">${botaoGuia(a)}</td>
               <td class="col-x"><button class="btn-x" title="Cancelar agendamento" data-slot-id="${escapeHtml(a.slotId)}">✕</button></td>
@@ -930,6 +962,9 @@
 
         tabela.querySelectorAll(".btn-x").forEach((btn) => {
           btn.addEventListener("click", () => cancelarAgendamento(btn.dataset.slotId));
+        });
+        tabela.querySelectorAll(".btn-pago").forEach((btn) => {
+          btn.addEventListener("click", () => alternarPago(btn));
         });
         // :not(.btn-guia) porque o botão do guia reaproveita a classe .btn-portal só pelo
         // estilo — sem isso ele ganharia o listener do portal e mandaria a mensagem errada.

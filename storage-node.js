@@ -209,11 +209,12 @@ function reescreverCSV(lista) {
     // As duas últimas colunas costumam vir vazias: só são preenchidas quando a família
     // passa os dados depois da confirmação, e passar é opcional. Ficam no fim de
     // propósito, pra ordem das colunas antigas não mudar pra quem já usa esse arquivo.
-    ["Nome do responsável", "Nome da criança", "Telefone", "Data da consulta", "Horário", "Registrado em", "E-mail do responsável", "Nascimento da criança"],
+    ["Nome do responsável", "Nome da criança", "Telefone", "Data da consulta", "Horário", "Registrado em", "E-mail do responsável", "Nascimento da criança", "Pago"],
     ...lista.map((a) => [
       a.responsavel, a.crianca, a.telefone, formatarDataBR(a.data), a.horario,
       new Date(a.registradoEm).toLocaleString("pt-BR"),
       a.responsavelEmail || "", a.criancaDataNascimento ? formatarDataBR(a.criancaDataNascimento) : "",
+      a.pago ? "sim" : "não",
     ]),
   ];
   const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
@@ -268,6 +269,10 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null }
     appAgendamentoId: null,
     responsavelEmail: (pendentes && pendentes.email) || null,
     criancaDataNascimento: (pendentes && pendentes.dataNascimento) || null,
+    // Reservar não confirma mais nada: quem confirma é o pagamento (ver
+    // prazo-de-pagamento.js). Nasce false e só o Dr. Bruno vira, pelo painel, porque não
+    // existe integração que avise que o Pix caiu.
+    pago: false,
   };
   lista.push(item);
   escreverJSON(ARQ_AGENDAMENTOS, lista);
@@ -360,6 +365,21 @@ function acharAgendamentoPorEmail(email) {
 
 // Marca que a família já foi avisada do portal, pra um segundo toque no botão do
 // prontuário não render uma segunda mensagem igual pra ela.
+// Liga e desliga o "pago" de um agendamento. Só o Dr. Bruno mexe nisso, pelo painel: não
+// existe integração que avise quando o Pix cai, então a única fonte de verdade é ele
+// olhando o extrato. Desligar tem que funcionar igual a ligar, porque errar a linha do
+// clique é o tipo de coisa que acontece no celular.
+function marcarPagamento(slotId, pago) {
+  const lista = lerAgendamentos();
+  const item = lista.find((a) => a.slotId === slotId);
+  if (!item) return false;
+  item.pago = !!pago;
+  item.pagoEm = item.pago ? new Date().toISOString() : null;
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  reescreverCSV(lista);
+  return true;
+}
+
 function marcarPortalAvisado(slotId) {
   const lista = lerAgendamentos();
   const item = lista.find((a) => a.slotId === slotId);
@@ -645,7 +665,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, historicoExpirou, proximaConsultaDoTelefone,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, historicoExpirou, proximaConsultaDoTelefone,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
