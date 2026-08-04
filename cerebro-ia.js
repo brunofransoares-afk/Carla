@@ -20,11 +20,7 @@ const Ordem = require(path.join(__dirname, "ordem-dos-horarios.js"));
 const ComandoDeSilencio = require(path.join(__dirname, "comando-de-silencio.js"));
 const Prazo = require(path.join(__dirname, "prazo-de-pagamento.js"));
 const InfinitePay = require(path.join(__dirname, "infinitepay.js"));
-
-// R$ 550,00. Em centavos porque é assim que a InfinitePay cobra, e converter no meio do
-// caminho é como se erra por fator 100. O valor de fim de semana (R$ 800) não entra aqui:
-// fim de semana a Carla não fecha sozinha, escala pro Dr. Bruno.
-const PRECO_CONSULTA_CENTAVOS = Number(process.env.PRECO_CONSULTA_CENTAVOS || 55000);
+const Preco = require(path.join(__dirname, "preco-da-consulta.js"));
 
 // Sonnet em vez de Haiku aqui de propósito: esse módulo conduz a conversa inteira e
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
@@ -206,6 +202,8 @@ NUNCA DEIXE UMA PROMESSA SOLTA SEM AÇÃO: se os nomes que a família mandou vie
 PAGAMENTO ANTES DA CONSULTA, SEM EXCEÇÃO: o Dr. Bruno não atende mais ninguém que não tenha pago antes. Reservar o horário NÃO confirma a consulta, quem confirma é o pagamento. Isso vale pra todo mundo, paciente novo ou antigo, e não é negociável nem por você nem pela família.
 
 Você NUNCA diz "está confirmado", "está tudo certo" ou "te espero lá" enquanto o pagamento não tiver sido feito. A palavra certa é SEPARADO ou GUARDADO: "deixei separado pra você", "esse horário fica guardado até o pagamento". E você NUNCA oferece pagar no dia, na hora, na recepção ou em dinheiro: essas opções não existem mais.
+
+O VALOR TAMBÉM VEM DA FERRAMENTA: quando confirmar_agendamento devolver valorDaConsulta, é esse o valor daquela consulta. Se vier avisoValor junto, o horário é de fim de semana e vale mais que o normal: diga o valor que veio, com naturalidade, sem se desculpar e sem explicar taxa. Nunca repita R$ 550 de cabeça depois de a ferramenta ter dito outro número.
 
 O PRAZO VEM DA FERRAMENTA, NUNCA DA SUA CABEÇA: quando confirmar_agendamento devolver sucesso, ele vem junto em prazoPagamento (ex: "até amanhã de manhã", "até quarta-feira (05/08)"). Use essa frase como ela veio. Se vier pagarAgora=true, o prazo já passou: aí o pagamento é na hora, e sem ele o horário não fica separado. Nunca calcule prazo você mesma nem invente data, mesmo que pareça fácil de deduzir do horário da consulta.
 
@@ -572,8 +570,15 @@ async function executarFerramenta(nome, input, ctx) {
     // caminho antigo (chave Pix e link fixo) e a família continua com o horário separado.
     // Perder a cobrança automática é chato; perder a consulta é prejuízo.
     if (InfinitePay.estaLigado()) {
+      // O valor sai do dia do horário, não de uma constante: um extra aberto num sábado é o
+      // Dr. Bruno dizendo que vai atender naquele sábado, e ali a consulta vale R$ 800.
+      const preco = Preco.precoDaConsulta(slotFinal);
+      resposta.valorDaConsulta = preco.reais;
+      if (preco.fimDeSemana) {
+        resposta.avisoValor = `Esse horário é de FIM DE SEMANA, então a consulta é ${preco.reais}, não o valor normal. Diga esse valor à família.`;
+      }
       const cobranca = await InfinitePay.criarCobranca({
-        valorCentavos: PRECO_CONSULTA_CENTAVOS,
+        valorCentavos: preco.centavos,
         descricao: `Consulta - ${input.crianca} - ${slotFinal.label}`,
         orderNsu: slotFinal.id,
       });
