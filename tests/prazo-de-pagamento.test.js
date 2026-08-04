@@ -158,7 +158,7 @@ const em = (data, hora) => {
 
   const storage = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8");
   ok(/pago: false/.test(storage), "10. todo agendamento novo nasce como não pago");
-  ok(/function marcarPagamento\(slotId, pago\)/.test(storage),
+  ok(/function marcarPagamento\(slotId, pago/.test(storage),
     "10. e existe como o Dr. Bruno virar isso pelo painel");
 }
 
