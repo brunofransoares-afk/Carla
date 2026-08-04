@@ -64,6 +64,32 @@ async function avisarGuiaLiberado({ telefone, email }) {
 //
 // Inerte sem PORTAL_URL: sem o endereço não há o que mandar, e mandar meia mensagem
 // ("seu portal está liberado!" sem link) seria pior que não mandar nada.
+// A mensagem que a família recebe quando o pagamento entra. É o único momento em que a
+// Carla pode usar a palavra "confirmada": até aqui o horário estava só separado.
+//
+// Não passa pela IA de propósito. É texto fixo, escrito uma vez, sobre um fato que o
+// sistema conhece com certeza. Botar a IA pra redigir isso seria dar a ela a chance de
+// escrever "confirmado" errado, ou de inventar detalhe, justamente na mensagem que a
+// família vai guardar pra saber quando e onde é a consulta.
+async function avisarPagamentoConfirmado(slotId) {
+  if (!slotId) return { ok: false, motivo: "Sem slotId." };
+  const a = Storage.acharAgendamentoPorSlot(slotId);
+  if (!a) return { ok: false, motivo: `Não achei agendamento com slotId ${slotId}.` };
+  // A InfinitePay reenvia o aviso quando não recebe 200. Sem esta trava a família receberia
+  // a mesma confirmação duas vezes.
+  if (a.pagamentoAvisadoEm) return { ok: true, jaAvisado: true };
+  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp." };
+  if (!String(a.telefone || "").startsWith("+")) return { ok: false, motivo: "Sem telefone de WhatsApp." };
+
+  const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
+  const texto = `Pagamento recebido! 😊\n\nA consulta do ${a.crianca} está confirmada para ${a.diaLabel}.\n\nEndereço: Rua Ranulpho Alvarenga Ferreira, 61\n\nQualquer coisa até lá, é só me chamar por aqui.`;
+
+  await sockAtivo.sendMessage(jid, { text: texto });
+  Storage.marcarPagamentoAvisado(slotId);
+  console.log(`[PAGAMENTO] Avisei ${a.telefone} que a consulta de ${a.crianca} está confirmada`);
+  return { ok: true };
+}
+
 async function avisarPortalLiberado({ telefone, email }) {
   const endereco = (process.env.PORTAL_URL || "").trim();
   const agendamento = telefone
@@ -110,6 +136,26 @@ function iniciarTravaInstancia() {
           res.end(JSON.stringify(r));
         } catch (erro) {
           console.error("[GUIA] Erro ao avisar:", erro.message);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, motivo: erro.message }));
+        }
+      });
+      return;
+    }
+    // O pagamento caiu. Quem recebe o aviso da InfinitePay é o painel, mas quem tem a
+    // conexão do WhatsApp é este processo — então o painel encaminha pra cá.
+    if (req.method === "POST" && req.url === "/interno/pagamento-confirmado") {
+      let corpo = "";
+      req.on("data", (p) => { corpo += p; });
+      req.on("end", async () => {
+        let dados = {};
+        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+        try {
+          const r = await avisarPagamentoConfirmado(dados.slotId);
+          res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(r));
+        } catch (erro) {
+          console.error("[PAGAMENTO] Erro ao avisar a família:", erro.message);
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ ok: false, motivo: erro.message }));
         }
