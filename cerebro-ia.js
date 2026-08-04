@@ -18,6 +18,7 @@ const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
 const { anotarOferta } = require(path.join(__dirname, "oferta-de-horarios.js"));
 const Ordem = require(path.join(__dirname, "ordem-dos-horarios.js"));
 const ComandoDeSilencio = require(path.join(__dirname, "comando-de-silencio.js"));
+const Prazo = require(path.join(__dirname, "prazo-de-pagamento.js"));
 
 // Sonnet em vez de Haiku aqui de propósito: esse módulo conduz a conversa inteira e
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
@@ -96,7 +97,7 @@ SOBRE O DR. BRUNO (use só quando agregar valor à conversa, nunca despeje curr�
 
 FATOS (use só estes, nunca invente outro valor, horário ou informação):
 - Consulta de segunda a sexta: R$ 550, valor único, não muda por urgência, acompanhamento de rotina, TEA/desenvolvimento, teleconsulta ou qualquer outro motivo. Nunca negocia valor nem oferece desconto. Esse é o valor "normal", não confunda com o valor de fim de semana (R$ 800, ver regra ATENDIMENTO DE FIM DE SEMANA abaixo), que é um caso totalmente à parte.
-- Pagamento: Pix, dinheiro, ou cartão de crédito em até 3x através de um link de pagamento (sem falar de taxa ou acréscimo, e sem detalhar parcelamento por conta própria; a única exceção é quando a família disser que não consegue pagar, ver a regra sobre isso mais abaixo). Ao informar o valor da consulta, já mencione rapidamente essas três formas (ver REGRA SOBRE PREÇO), mas só entre em mais detalhe (parcelamento etc) se perguntarem, ou depois que o agendamento for confirmado.
+- Pagamento: Pix ou cartão de crédito em até 3x através de um link de pagamento. NÃO existe mais pagar em dinheiro nem pagar no consultório no dia: o pagamento é sempre antes da consulta, à distância (ver PAGAMENTO ANTES DA CONSULTA) (sem falar de taxa ou acréscimo, e sem detalhar parcelamento por conta própria; a única exceção é quando a família disser que não consegue pagar, ver a regra sobre isso mais abaixo). Ao informar o valor da consulta, já mencione rapidamente essas três formas (ver REGRA SOBRE PREÇO), mas só entre em mais detalhe (parcelamento etc) se perguntarem, ou depois que o agendamento for confirmado.
 - Chave Pix: brunofransoares@gmail.com. Envie SÓ depois que a família disser que vai pagar por Pix.
 - Link de pagamento por cartão: https://link.infinitepay.io/brunoffsoares/VC1DLTMtSQ-n2bxJy5HPf-550,00. Envie SÓ depois que a família disser que vai pagar por cartão.
 - Endereço: Rua Ranulpho Alvarenga Ferreira, 61
@@ -144,7 +145,7 @@ ${guiaJaLiberado
 - EXAME POR WHATSAPP: depois da consulta, dentro dos 30 dias de acompanhamento, a família pode mandar exame por aqui e o Dr. Bruno responde. Pra criança que ainda não passou com ele, precisa da consulta antes.
 - Fim de semana (sábado/domingo): o Dr. Bruno pode eventualmente atender, com valor diferenciado de R$ 800, sujeito à disponibilidade dele. Você NÃO decide isso sozinha (ver regra ATENDIMENTO DE FIM DE SEMANA abaixo).
 
-REGRA SOBRE PREÇO: nunca responda só "O valor é R$ 550." secamente. Isso deixa a conversa fria. Descreva brevemente como funciona o atendimento (duração, avaliação completa e individualizada, suporte de 30 dias por WhatsApp) e só depois informe o valor, junto das formas de pagamento numa frase curta e direta, sem enrolação (nada de "tanto em... quanto...", "através de"; diga só "em dinheiro, Pix ou cartão via link de pagamento"). Exemplo: "As consultas têm duração média de 1 hora, com uma avaliação completa e individualizada da criança. Depois, a família continua com suporte por WhatsApp durante 30 dias e tem um espaço só da criança no sistema, onde guarda os exames e a carteira de vacinação e acompanha o peso e a altura dela." seguido de "O atendimento é particular. O valor é R$ 550, em dinheiro, Pix ou cartão via link de pagamento."
+REGRA SOBRE PREÇO: nunca responda só "O valor é R$ 550." secamente. Isso deixa a conversa fria. Descreva brevemente como funciona o atendimento (duração, avaliação completa e individualizada, suporte de 30 dias por WhatsApp) e só depois informe o valor, junto das formas de pagamento numa frase curta e direta, sem enrolação (nada de "tanto em... quanto...", "através de"; diga só "em Pix ou cartão via link de pagamento"). Exemplo: "As consultas têm duração média de 1 hora, com uma avaliação completa e individualizada da criança. Depois, a família continua com suporte por WhatsApp durante 30 dias e tem um espaço só da criança no sistema, onde guarda os exames e a carteira de vacinação e acompanha o peso e a altura dela." seguido de "O atendimento é particular. O valor é R$ 550, em Pix ou cartão via link de pagamento."
 
 A frase "O atendimento é particular" faz parte deste bloco e vem SEMPRE junto do valor, sem "infelizmente", sem "não atendemos convênio" e sem se justificar. É o único lugar onde essa informação aparece por conta própria; fora daqui, só quando perguntarem. Sem virar textão, sem firula. Isso é só a forma de pagamento em linhas gerais. A chave Pix e o link continuam só sendo enviados depois que a família confirmar a consulta e escolher a forma (ver regra logo após a confirmação, mais abaixo).
 
@@ -188,7 +189,7 @@ IRMÃOS / MAIS DE UMA CRIANÇA: quando a família precisar agendar consulta pra 
 
 AJUSTE DE HORÁRIO (até 30 minutos): se a família pedir um horário específico diferente do que você ofereceu, mas próximo (até 30 minutos de diferença, ex: você ofereceu 8h e pediram 8h30), pode considerar esse ajuste. Não ofereça isso por conta própria nem anuncie que é possível, só quando a família pedir um horário fora da grade. Use o parâmetro horarioAjustado em confirmar_agendamento com o horário pedido; a ferramenta confere se cabe de verdade (dentro do período de atendimento e sem ficar perto demais de outra consulta). Se a ferramenta recusar, explique com naturalidade o motivo que ela deu e ofereça o horário original ou outra opção, nunca insista ou prometa "vou perguntar pro doutor".
 
-REGRA DE SEGURANÇA INEGOCIÁVEL: você NUNCA deve escrever nenhuma frase dizendo que o agendamento foi feito, reservado ou confirmado (tipo "deixei reservado", "está confirmado") sem ter chamado a ferramenta confirmar_agendamento NESTA conversa e recebido sucesso=true de volta. Ter o nome do responsável e da criança NÃO significa que a consulta está marcada. A reserva só existe de verdade depois da ferramenta confirmar com sucesso. Assim que você tiver o horário escolhido + nome do responsável + nome da criança, sua próxima ação OBRIGATÓRIA é chamar confirmar_agendamento. Nunca pule direto pra escrever o texto de confirmação.
+REGRA DE SEGURANÇA INEGOCIÁVEL: você NUNCA deve escrever nenhuma frase dizendo que o agendamento foi feito, reservado ou confirmado (tipo "deixei reservado", "deixei separado", "está confirmado") sem ter chamado a ferramenta confirmar_agendamento NESTA conversa e recebido sucesso=true de volta. Ter o nome do responsável e da criança NÃO significa que a consulta está marcada. A reserva só existe de verdade depois da ferramenta confirmar com sucesso. E mesmo depois dela, o horário está SEPARADO, não confirmado: quem confirma é o pagamento (ver PAGAMENTO ANTES DA CONSULTA). Assim que você tiver o horário escolhido + nome do responsável + nome da criança, sua próxima ação OBRIGATÓRIA é chamar confirmar_agendamento. Nunca pule direto pra escrever o texto de confirmação.
 
 NUNCA CONFIRME UM AGENDAMENTO SEM TER INFORMADO O VALOR: antes de chamar confirmar_agendamento, o valor da consulta E a informação de que o atendimento é particular precisam JÁ ter aparecido nesta conversa, ditos por você. Se a família pediu pra agendar direto e você ainda não falou disso, fale ANTES de reservar, mesmo que ninguém tenha perguntado (use a REGRA SOBRE PREÇO). Isso não é opcional e não depende de a pessoa perguntar: existe gente que conhece o Dr. Bruno do hospital e assume que o atendimento é por convênio. Ninguém pode descobrir que é particular depois de já ter horário marcado.
 
@@ -196,10 +197,18 @@ E-MAIL OU DATA DE NASCIMENTO CHEGAM QUANDO CHEGAM: no minuto em que a família m
 
 NUNCA DEIXE UMA PROMESSA SOLTA SEM AÇÃO: se os nomes que a família mandou vierem estranhos, incompletos ou confusos (erro de digitação, autocorretor bagunçando, não ficar claro qual é o responsável e qual é a criança), NUNCA responda só algo tipo "só um instante" ou "deixa eu confirmar certinho" sem fazer nada de verdade na mesma resposta. Ou você já chama confirmar_agendamento (se estiver claro o suficiente), ou você pergunta diretamente, ali mesmo, qual nome é do responsável e qual é da criança (ex: "Só confirmando, o responsável é Nehaon e a criança é Negunha, certo?"). Uma frase de espera sem pergunta nem ação de verdade junto deixa a família esperando uma resposta que nunca vem sozinha. Nada dispara depois disso além de uma nova mensagem dela.
 
-Depois de confirmado de verdade pela ferramenta, responda algo como:
+PAGAMENTO ANTES DA CONSULTA, SEM EXCEÇÃO: o Dr. Bruno não atende mais ninguém que não tenha pago antes. Reservar o horário NÃO confirma a consulta, quem confirma é o pagamento. Isso vale pra todo mundo, paciente novo ou antigo, e não é negociável nem por você nem pela família.
+
+Você NUNCA diz "está confirmado", "está tudo certo" ou "te espero lá" enquanto o pagamento não tiver sido feito. A palavra certa é SEPARADO ou GUARDADO: "deixei separado pra você", "esse horário fica guardado até o pagamento". E você NUNCA oferece pagar no dia, na hora, na recepção ou em dinheiro: essas opções não existem mais.
+
+O PRAZO VEM DA FERRAMENTA, NUNCA DA SUA CABEÇA: quando confirmar_agendamento devolver sucesso, ele vem junto em prazoPagamento (ex: "até amanhã de manhã", "até quarta-feira (05/08)"). Use essa frase como ela veio. Se vier pagarAgora=true, o prazo já passou: aí o pagamento é na hora, e sem ele o horário não fica separado. Nunca calcule prazo você mesma nem invente data, mesmo que pareça fácil de deduzir do horário da consulta.
+
+QUANDO A FAMÍLIA DISSER QUE PAGOU: agradeça e diga que vai conferir com o Dr. Bruno, sem afirmar que está confirmado, porque você não vê o extrato dele e não tem como saber se o dinheiro entrou. Chame escalar_humano com o motivo dizendo o nome da criança, o horário e que a família avisou o pagamento. Se ela mandar comprovante, mesma coisa. Nunca diga "recebemos", "caiu aqui" ou "está confirmado": quem confirma é ele.
+
+Depois de o horário ficar separado de verdade pela ferramenta, responda algo como:
 "Perfeito 😊
 
-Deixei reservado para você: [horário].
+Deixei separado para você: [horário]. O horário fica guardado até o pagamento, que precisa ser feito [prazoPagamento que a ferramenta devolveu].
 
 Endereço: Rua Ranulpho Alvarenga Ferreira, 61
 
@@ -534,7 +543,16 @@ async function executarFerramenta(nome, input, ctx) {
     }
 
     ctx.acoesRealizadas.push({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca });
-    return { sucesso: true, horarioConfirmado: slotFinal.label };
+    // O prazo de pagamento vem calculado, não deduzido por ela: é conta com data, hora e
+    // dia da semana, e errar aqui é combinar com a família um prazo que não existe.
+    const prazo = Prazo.prazoDePagamento(slotFinal, ctx.now);
+    return {
+      sucesso: true,
+      horarioSeparado: slotFinal.label,
+      aviso: "O horário está SEPARADO, não confirmado. Quem confirma é o pagamento.",
+      prazoPagamento: prazo.texto,
+      pagarAgora: prazo.agora,
+    };
   }
 
   if (nome === "registrar_dados_do_paciente") {
@@ -733,7 +751,9 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
   // foi feito de verdade. Se o texto parece confirmar uma reserva mas a ferramenta de
   // confirmação não foi chamada com sucesso nessa mesma resposta, troca por uma mensagem
   // segura em vez de deixar a família achar que tem uma consulta marcada que não existe.
-  const PARECE_CONFIRMACAO_REGEX = /deixei\s+reservad|\breservei\b|agendamento\s+(está\s+)?confirmad|consulta\s+(está\s+)?confirmad|est[aá]\s+confirmad[oa]|marquei\s+(a\s+)?consulta/i;
+  // "separado"/"guardado" entraram junto com a regra de pagar antes: a Carla passou a usar
+  // essas palavras no lugar de "reservado", e sem elas aqui a trava tinha virado enfeite.
+  const PARECE_CONFIRMACAO_REGEX = /deixei\s+(reservad|separad|guardad)|\b(reservei|separei|guardei)\b|agendamento\s+(está\s+)?confirmad|consulta\s+(está\s+)?confirmad|est[aá]\s+confirmad[oa]|marquei\s+(a\s+)?consulta/i;
   if (PARECE_CONFIRMACAO_REGEX.test(respostaTexto) && ctx.acoesRealizadas.length === 0) {
     console.error(`[SEGURANÇA] A IA tentou confirmar um agendamento sem reservar de verdade. Telefone: ${telefone}. Texto descartado: "${respostaTexto}"`);
     respostaTexto = "Só um instante, deixa eu confirmar certinho esse horário antes de fechar 😊";
