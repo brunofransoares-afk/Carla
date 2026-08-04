@@ -655,8 +655,19 @@
   // do celular precisa poder ser desfeito no clique seguinte, então o ✓ também é botão.
   function botaoPago(a) {
     const pago = !!a.pago;
-    const titulo = pago ? "Pago. Clique pra desmarcar" : "Ainda não pagou. Clique pra marcar como pago";
-    return `<button class="btn-pago ${pago ? "sim" : "nao"}" title="${titulo}" data-slot-id="${escapeHtml(a.slotId)}" data-pago="${pago ? "1" : "0"}">${pago ? "✓" : "R$"}</button>`;
+    // Quando a conferência automática achou o pagamento, o título diz como foi pago e
+    // quanto entrou — assim dá pra bater com o extrato sem sair do painel.
+    const p = a.pagamento;
+    const detalhe = pago && p
+      ? `Pago por ${p.forma === "pix" ? "Pix" : p.forma === "credit_card" ? "cartão" : p.forma || "?"}, R$ ${((p.valorCentavos || 0) / 100).toFixed(2)}${p.parcelas > 1 ? ` em ${p.parcelas}x` : ""}. Clique pra desmarcar`
+      : pago ? "Pago. Clique pra desmarcar" : "Ainda não pagou. Clique pra marcar como pago";
+    return `<button class="btn-pago ${pago ? "sim" : "nao"}" title="${escapeHtml(detalhe)}" data-slot-id="${escapeHtml(a.slotId)}" data-pago="${pago ? "1" : "0"}">${pago ? "✓" : "R$"}</button>`;
+  }
+
+  // O link da cobrança, pra reenviar pra família sem ter que criar outro.
+  function linkCobranca(a) {
+    if (!a.cobranca || !a.cobranca.url) return '<span class="portal-na" title="Sem cobrança gerada">—</span>';
+    return `<a class="btn-portal" href="${escapeHtml(a.cobranca.url)}" target="_blank" rel="noopener" title="Abrir a cobrança dessa consulta">abrir</a>`;
   }
 
   // Mesmo critério do portal, e a mesma marca de "já enviado". A trava do e-mail importa
@@ -945,7 +956,7 @@
         tabela.innerHTML = "<div class='vazio'>Nenhum agendamento ainda.</div>";
       } else {
         tabela.innerHTML = `<table>
-          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x">Pago</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th class="col-x"></th></tr></thead>
+          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x">Pago</th><th class="col-x">Cobrança</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th class="col-x"></th></tr></thead>
           <tbody>${agendamentos.map((a) => `
             <tr>
               <td>${formatarDataBR(a.data)}</td>
@@ -954,6 +965,7 @@
               <td>${escapeHtml(a.crianca)}</td>
               <td>${escapeHtml(a.telefone)}</td>
               <td class="col-x">${botaoPago(a)}</td>
+              <td class="col-x">${linkCobranca(a)}</td>
               <td class="col-x">${botaoPortal(a)}</td>
               <td class="col-x">${botaoGuia(a)}</td>
               <td class="col-x"><button class="btn-x" title="Cancelar agendamento" data-slot-id="${escapeHtml(a.slotId)}">✕</button></td>

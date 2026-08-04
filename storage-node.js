@@ -369,12 +369,38 @@ function acharAgendamentoPorEmail(email) {
 // existe integração que avise quando o Pix cai, então a única fonte de verdade é ele
 // olhando o extrato. Desligar tem que funcionar igual a ligar, porque errar a linha do
 // clique é o tipo de coisa que acontece no celular.
-function marcarPagamento(slotId, pago) {
+// Guarda a cobrança criada na InfinitePay junto do agendamento. O slug pode vir null: no
+// link que a API devolve o identificador vem no parâmetro lenc, não no caminho. O que
+// amarra o pagamento à consulta é o slotId, que vai no order_nsu.
+function guardarCobranca(slotId, { url, slug = null }) {
+  const lista = lerAgendamentos();
+  const item = lista.find((a) => a.slotId === slotId);
+  if (!item) return false;
+  item.cobranca = { url, slug, criadaEm: new Date().toISOString() };
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  return true;
+}
+
+// As consultas que ainda não foram pagas e que ainda vão acontecer. É o que a conferência
+// periódica pergunta à InfinitePay. Consulta que já passou fica de fora: cobrar depois do
+// atendimento não é problema deste laço.
+function agendamentosPendentesDePagamento(now = new Date()) {
+  const hoje = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return lerAgendamentos().filter((a) => {
+    if (a.pago) return false;
+    if (!a.cobranca || !a.cobranca.url) return false;
+    const [ano, mes, dia] = String(a.data).split("-").map(Number);
+    return new Date(ano, mes - 1, dia) >= hoje;
+  });
+}
+
+function marcarPagamento(slotId, pago, detalhes = null) {
   const lista = lerAgendamentos();
   const item = lista.find((a) => a.slotId === slotId);
   if (!item) return false;
   item.pago = !!pago;
   item.pagoEm = item.pago ? new Date().toISOString() : null;
+  item.pagamento = item.pago && detalhes ? detalhes : null;
   escreverJSON(ARQ_AGENDAMENTOS, lista);
   reescreverCSV(lista);
   return true;
@@ -665,7 +691,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, historicoExpirou, proximaConsultaDoTelefone,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, guardarCobranca, agendamentosPendentesDePagamento, historicoExpirou, proximaConsultaDoTelefone,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,

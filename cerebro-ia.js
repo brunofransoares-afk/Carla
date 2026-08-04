@@ -19,6 +19,12 @@ const { anotarOferta } = require(path.join(__dirname, "oferta-de-horarios.js"));
 const Ordem = require(path.join(__dirname, "ordem-dos-horarios.js"));
 const ComandoDeSilencio = require(path.join(__dirname, "comando-de-silencio.js"));
 const Prazo = require(path.join(__dirname, "prazo-de-pagamento.js"));
+const InfinitePay = require(path.join(__dirname, "infinitepay.js"));
+
+// R$ 550,00. Em centavos porque é assim que a InfinitePay cobra, e converter no meio do
+// caminho é como se erra por fator 100. O valor de fim de semana (R$ 800) não entra aqui:
+// fim de semana a Carla não fecha sozinha, escala pro Dr. Bruno.
+const PRECO_CONSULTA_CENTAVOS = Number(process.env.PRECO_CONSULTA_CENTAVOS || 55000);
 
 // Sonnet em vez de Haiku aqui de propósito: esse módulo conduz a conversa inteira e
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
@@ -232,7 +238,11 @@ O momento certo é quando a conversa está fechando: depois de resolver o pagame
 
 Depois dessa segunda vez, acabou: se ela não responder, ou disser que não quer passar, NÃO pergunte mais, não insista e não repita. O portal é um extra, nunca uma condição pra ser atendida. Esta é a única exceção à regra NÃO FIQUE COBRANDO A MESMA COISA.
 
-Não envie a chave Pix nem o link de pagamento nessa mensagem. Espere a família responder qual forma prefere. Só depois que ela responder:
+LINK DE PAGAMENTO ÚNICO (quando a ferramenta devolver linkPagamento): esse link já tem Pix e cartão em até 3x na mesma página, então NÃO pergunte a forma de pagamento e NÃO mande a chave Pix. Mande só o link, dizendo que dá pra pagar por Pix ou cartão ali mesmo, e repita o prazo. Ex: "Aqui está o link do pagamento, dá pra pagar por Pix ou cartão em até 3x: [link]". Nada de "escolhe a forma e eu te mando": a escolha é dentro da página.
+
+Se a ferramenta devolver avisoCobranca em vez de linkPagamento, o link não pôde ser gerado agora: aí sim siga o caminho abaixo, perguntando a forma e mandando a chave ou o link fixo. Nunca invente o link nem prometa mandar depois.
+
+CAMINHO ANTIGO (só quando NÃO veio linkPagamento): não envie a chave Pix nem o link de pagamento nessa mensagem. Espere a família responder qual forma prefere. Só depois que ela responder:
 - Se escolher Pix: mande a chave dizendo QUE TIPO de chave é, porque um e-mail sozinho na tela não parece uma chave Pix e a família fica sem saber o que fazer com aquilo. Escreva exatamente assim, em duas linhas, com a chave sozinha na segunda (pra ser fácil de copiar) e sem nenhum emoji na mensagem:
 "A chave Pix é o e-mail:
 
@@ -546,13 +556,37 @@ async function executarFerramenta(nome, input, ctx) {
     // O prazo de pagamento vem calculado, não deduzido por ela: é conta com data, hora e
     // dia da semana, e errar aqui é combinar com a família um prazo que não existe.
     const prazo = Prazo.prazoDePagamento(slotFinal, ctx.now);
-    return {
+    const resposta = {
       sucesso: true,
       horarioSeparado: slotFinal.label,
       aviso: "O horário está SEPARADO, não confirmado. Quem confirma é o pagamento.",
       prazoPagamento: prazo.texto,
       pagarAgora: prazo.agora,
     };
+
+    // A cobrança da InfinitePay, com o slotId no order_nsu — é o que amarra o dinheiro a
+    // esta consulta e deixa o sistema conferir sozinho depois.
+    //
+    // ISTO NUNCA DERRUBA A RESERVA. Ela já está gravada quando chegamos aqui. Se a
+    // InfinitePay estiver fora do ar, ou nem estiver configurada, a Carla segue pelo
+    // caminho antigo (chave Pix e link fixo) e a família continua com o horário separado.
+    // Perder a cobrança automática é chato; perder a consulta é prejuízo.
+    if (InfinitePay.estaLigado()) {
+      const cobranca = await InfinitePay.criarCobranca({
+        valorCentavos: PRECO_CONSULTA_CENTAVOS,
+        descricao: `Consulta - ${input.crianca} - ${slotFinal.label}`,
+        orderNsu: slotFinal.id,
+      });
+      if (cobranca.ok) {
+        Storage.guardarCobranca(slotFinal.id, { url: cobranca.url, slug: cobranca.slug });
+        resposta.linkPagamento = cobranca.url;
+      } else {
+        console.error(`[PAGAMENTO] Não consegui criar a cobrança de ${slotFinal.id}: ${cobranca.motivo}`);
+        resposta.avisoCobranca = "Não consegui gerar o link de pagamento agora. Siga pelo caminho normal: pergunte a forma de pagamento e mande a chave Pix ou o link de cartão.";
+      }
+    }
+
+    return resposta;
   }
 
   if (nome === "registrar_dados_do_paciente") {
