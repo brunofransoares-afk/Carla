@@ -170,8 +170,20 @@ const servidor = http.createServer(async (req, res) => {
       console.log(marcou
         ? `[PAGAMENTO CONFIRMADO] ${aviso.slotId} — ${aviso.pago.forma || "?"} — R$ ${((aviso.pago.valorCentavos || 0) / 100).toFixed(2)}`
         : `[PAGAMENTO] Aviso de ${aviso.slotId}, mas não achei esse agendamento. Corpo: ${cru.slice(0, 400)}`);
+
+      // Responde a InfinitePay ANTES de mandar o WhatsApp: eles esperam resposta rápida e
+      // reenviam o aviso quando demora. O envio segue por conta própria; se falhar, o
+      // pagamento continua marcado e o log diz o motivo.
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ ok: true }));
+
+      if (marcou) {
+        encaminharAoBot("/interno/pagamento-confirmado", JSON.stringify({ slotId: aviso.slotId }))
+          .then((r) => {
+            if (r.status !== 200) console.error(`[PAGAMENTO] Não avisei a família de ${aviso.slotId}: ${r.texto}`);
+          })
+          .catch((erro) => console.error(`[PAGAMENTO] Erro ao avisar a família: ${erro.message}`));
+      }
     });
     return;
   }

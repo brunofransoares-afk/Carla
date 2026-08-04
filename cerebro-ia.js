@@ -205,7 +205,7 @@ NUNCA DEIXE UMA PROMESSA SOLTA SEM AÇÃO: se os nomes que a família mandou vie
 
 PAGAMENTO ANTES DA CONSULTA, SEM EXCEÇÃO: o Dr. Bruno não atende mais ninguém que não tenha pago antes. Reservar o horário NÃO confirma a consulta, quem confirma é o pagamento. Isso vale pra todo mundo, paciente novo ou antigo, e não é negociável nem por você nem pela família.
 
-Você NUNCA diz "está confirmado", "está tudo certo" ou "te espero lá" enquanto o pagamento não tiver sido feito. A palavra certa é SEPARADO ou GUARDADO: "deixei separado pra você", "esse horário fica guardado até o pagamento". E você NUNCA oferece pagar no dia, na hora, na recepção ou em dinheiro: essas opções não existem mais.
+Você NUNCA diz "está confirmado", "está garantido", "está tudo certo", "pode ficar tranquila que está reservado" ou "te espero lá" enquanto o pagamento não tiver sido feito. A palavra GARANTIDO é proibida pra consulta não paga: garantir é exatamente o que o pagamento faz, e dizer isso antes desfaz a regra inteira. A palavra certa é SEPARADO ou GUARDADO: "deixei separado pra você", "esse horário fica guardado até o pagamento". E você NUNCA oferece pagar no dia, na hora, na recepção ou em dinheiro: essas opções não existem mais.
 
 O VALOR TAMBÉM VEM DA FERRAMENTA: quando confirmar_agendamento devolver valorDaConsulta, é esse o valor daquela consulta. Se vier avisoValor junto, o horário é de fim de semana e vale mais que o normal: diga o valor que veio, com naturalidade, sem se desculpar e sem explicar taxa. Nunca repita R$ 550 de cabeça depois de a ferramenta ter dito outro número.
 
@@ -490,7 +490,28 @@ async function executarFerramenta(nome, input, ctx) {
     }
     const idsAtuais = Storage.idsOcupados();
     if (idsAtuais.has(input.slotId)) {
-      return { sucesso: false, motivo: "Esse horário já está reservado. Se foi você mesma confirmando antes nesta conversa, não chame essa ferramenta de novo, apenas continue normalmente. Se for outra família, ofereça outra opção consultando de novo." };
+      // Se o horário já é DESTA família, recusar seco era o defeito: a Carla ficava sem o
+      // link de pagamento na mão e caía no caminho antigo, mandando a chave Pix. Aconteceu
+      // no teste do Dr. Bruno — ela remarcou o mesmo horário, levou "já está reservado", e
+      // a mensagem seguinte foi "Pix ou cartão?". Então devolvemos o que ela precisa pra
+      // continuar: o mesmo link, o mesmo prazo.
+      const jaDela = Storage.lerAgendamentos().find(
+        (a) => a.slotId === input.slotId && a.telefone === ctx.telefone);
+      if (jaDela) {
+        const prazoDela = Prazo.prazoDePagamento({ date: jaDela.data, time: jaDela.horario }, ctx.now);
+        const r = {
+          sucesso: true,
+          jaEstavaSeparado: true,
+          horarioSeparado: jaDela.diaLabel,
+          aviso: "Esse horário JÁ ESTAVA separado pra esta família, por você, antes nesta conversa. Não é uma reserva nova: não diga que acabou de marcar. Se a família está perguntando do pagamento, reenvie o link abaixo.",
+          prazoPagamento: prazoDela.texto,
+          pagarAgora: prazoDela.agora,
+          pago: !!jaDela.pago,
+        };
+        if (jaDela.cobranca && jaDela.cobranca.url) r.linkPagamento = jaDela.cobranca.url;
+        return r;
+      }
+      return { sucesso: false, motivo: "Esse horário já está reservado por outra família. Ofereça outra opção consultando de novo." };
     }
 
     let slotFinal = slotReal;
@@ -801,7 +822,12 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
   // "separado"/"guardado" entraram junto com a regra de pagar antes: a Carla passou a usar
   // essas palavras no lugar de "reservado", e sem elas aqui a trava tinha virado enfeite.
   const PARECE_CONFIRMACAO_REGEX = /deixei\s+(reservad|separad|guardad)|\b(reservei|separei|guardei)\b|agendamento\s+(está\s+)?confirmad|consulta\s+(está\s+)?confirmad|est[aá]\s+confirmad[oa]|marquei\s+(a\s+)?consulta/i;
-  if (PARECE_CONFIRMACAO_REGEX.test(respostaTexto) && ctx.acoesRealizadas.length === 0) {
+  // ctx.agendamentoAtual entrou na condição depois de a trava atrapalhar conversa legítima:
+  // com a consulta já marcada numa mensagem anterior, dizer "está separado" é verdade, e o
+  // texto dela virava "Só um instante, deixa eu confirmar certinho" no meio da conversa. A
+  // trava existe pra impedir promessa sem reserva, não pra proibir falar de reserva que
+  // existe. Piorou hoje, quando "separado" entrou na regex e virou a palavra do dia a dia.
+  if (PARECE_CONFIRMACAO_REGEX.test(respostaTexto) && ctx.acoesRealizadas.length === 0 && !ctx.agendamentoAtual) {
     console.error(`[SEGURANÇA] A IA tentou confirmar um agendamento sem reservar de verdade. Telefone: ${telefone}. Texto descartado: "${respostaTexto}"`);
     respostaTexto = "Só um instante, deixa eu confirmar certinho esse horário antes de fechar 😊";
   }

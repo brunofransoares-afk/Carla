@@ -98,6 +98,26 @@ const url = (s) => `/webhook/infinitepay/${s}`;
   eq(r.pago.comprovante, null, "6. inclusive o comprovante");
 }
 
+// ------------------------------------------------- 7. o caminho até a família existe
+// O aviso chega no painel, mas quem tem a conexão do WhatsApp é o bot. Se esse encanamento
+// sumir, o pagamento é marcado e a família nunca recebe a confirmação.
+{
+  const fs = require("fs");
+  const painel = fs.readFileSync(path.join(__dirname, "..", "painel-server.js"), "utf8");
+  ok(/encaminharAoBot\("\/interno\/pagamento-confirmado"/.test(painel),
+    "7. o painel encaminha pro bot depois de marcar pago");
+
+  const bot = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
+  ok(/req\.url === "\/interno\/pagamento-confirmado"/.test(bot),
+    "7. e o bot escuta esse caminho");
+  ok(/async function avisarPagamentoConfirmado\(slotId\)/.test(bot),
+    "7. com a função que manda a mensagem");
+  ok(/if \(a\.pagamentoAvisadoEm\) return \{ ok: true, jaAvisado: true \};/.test(bot),
+    "7. e a trava contra mandar duas vezes, porque a InfinitePay reenvia o aviso");
+  ok(/está confirmada para/.test(bot),
+    "7. a mensagem confirma a consulta, que é o único momento em que essa palavra vale");
+}
+
 console.log(erros.map((e) => "  FALHA " + e).join("\n"));
 console.log(`pagamento-webhook: ${passou} passaram, ${falhou} falharam`);
 process.exit(falhou ? 1 : 0);

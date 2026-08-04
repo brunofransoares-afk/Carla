@@ -393,6 +393,21 @@ function marcarPagamento(slotId, pago, detalhes = null) {
   return true;
 }
 
+// Marca que a família já recebeu a mensagem de "pagamento confirmado". Sem isso, um segundo
+// aviso da InfinitePay (ela reenvia quando não recebe 200) mandaria a mesma mensagem de novo.
+function marcarPagamentoAvisado(slotId) {
+  const lista = lerAgendamentos();
+  const item = lista.find((a) => a.slotId === slotId);
+  if (!item) return false;
+  item.pagamentoAvisadoEm = new Date().toISOString();
+  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  return true;
+}
+
+function acharAgendamentoPorSlot(slotId) {
+  return lerAgendamentos().find((a) => a.slotId === slotId) || null;
+}
+
 function marcarPortalAvisado(slotId) {
   const lista = lerAgendamentos();
   const item = lista.find((a) => a.slotId === slotId);
@@ -678,7 +693,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, guardarCobranca, historicoExpirou, proximaConsultaDoTelefone,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, marcarPagamentoAvisado, acharAgendamentoPorSlot, guardarCobranca, historicoExpirou, proximaConsultaDoTelefone,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
