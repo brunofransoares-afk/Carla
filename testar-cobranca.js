@@ -47,10 +47,16 @@ const corpo = {
   order_nsu: "sonda-" + Date.now(),
   redirect_url: PAINEL + "/",
   webhook_url: PAINEL + "/webhook/infinitepay/sonda",
-  itens: [
+  // "items" em inglês, que é como o payload gerado pelo próprio app escreve. A
+  // documentação escrita mostra "itens" em português na mesma tela: é erro deles. Se a API
+  // recusar, a sonda tenta de novo em português antes de desistir.
+  items: [
     // Preço SEMPRE em centavos. 100 = R$ 1,00.
     { quantity: 1, price: 100, description: "Teste de integracao da Carla (R$ 1,00)" },
   ],
+  // Nenhum campo de validade apareceu na documentação, e o Dr. Bruno diz que o link de
+  // pagamento não tem validade (só a cobrança criada no app tem). Mando quatro nomes
+  // plausíveis assim mesmo: custa nada e a recusa, se vier, nomeia o certo.
   expires_at: amanhaISO,
   expiration_date: amanhaData,
   due_date: amanhaData,
@@ -74,7 +80,25 @@ const corpo = {
     process.exit(1);
   }
 
-  const texto = await resposta.text();
+  let texto = await resposta.text();
+
+  // Se recusou, tenta a grafia da documentação escrita antes de dar o assunto por perdido.
+  if (!resposta.ok && resposta.status !== 401 && resposta.status !== 403) {
+    const emPortugues = { ...corpo, itens: corpo.items };
+    delete emPortugues.items;
+    console.log("Recusou com \"items\". Tentando de novo com \"itens\"...\n");
+    const segunda = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(emPortugues),
+    });
+    const textoSegunda = await segunda.text();
+    console.log("Com \"itens\": HTTP " + segunda.status + "\n" + textoSegunda + "\n");
+    if (segunda.ok) {
+      resposta = segunda;
+      texto = textoSegunda;
+    }
+  }
   console.log("=".repeat(60));
   console.log("HTTP " + resposta.status + " " + resposta.statusText);
   console.log("=".repeat(60));
