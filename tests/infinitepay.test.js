@@ -23,6 +23,11 @@ function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + "
 
 const env = { INFINITEPAY_HANDLE: "brunoffsoares" };
 
+// A URL que a API devolveu de verdade, no teste feito pelo app do Dr. Bruno. Fica aqui
+// literal de propósito: eu tinha escrito cinco palpites de nome de campo e nenhum era
+// "checkout_url", e nenhum previa identificador em parâmetro em vez de caminho.
+const RESPOSTA_REAL = "https://checkout.infinitepay.io/brunoffsoares?lenc=G5gAYGTwpvYEBnheZn171wskgfc50NDSyYHD8WtBWxAEEmYShhAGnbHSnPIslPH2ETSsMsKseJ8EfhtI6EzXESEQYmpASn3ssXqofOx2Ooy-Z5GVelmPnF0zHca0Hm9_0r-SyDOe7cgj4HrAq70g9qOhNL0xkDyiIgc.v1.ffdcfa5923382412";
+
 // fetch de mentira: guarda o que foi pedido e devolve o que mandarem.
 function fetchFalso(resposta, registro = {}) {
   return async (url, opcoes) => {
@@ -54,7 +59,8 @@ function fetchFalso(resposta, registro = {}) {
     descricao: "Consulta com Dr. Bruno Soares",
     orderNsu: "2026-08-06T08:00",
     env,
-    fetchFn: fetchFalso({ corpo: { url: "https://invoice.infinitepay.io/brunoffsoares/Z8oIyXH5hu" } }, reg),
+    // Esta é a resposta de verdade da API, copiada do teste que o Dr. Bruno rodou no app.
+    fetchFn: fetchFalso({ corpo: { checkout_url: RESPOSTA_REAL } }, reg),
   });
 
   eq(reg.url, "https://api.infinitepay.io/invoices/public/checkout/links", "2. o endereço é o da documentação oficial");
@@ -66,13 +72,13 @@ function fetchFalso(resposta, registro = {}) {
   ok(reg.corpo.itens, "2. manda também 'itens' em português, porque as duas telas da documentação discordam");
 
   eq(r.ok, true, "2. deu certo");
-  eq(r.url, "https://invoice.infinitepay.io/brunoffsoares/Z8oIyXH5hu", "2. devolve o link pra família");
-  eq(r.slug, "Z8oIyXH5hu", "2. e o slug, que o payment_check pede depois");
+  eq(r.url, RESPOSTA_REAL, "2. devolve o link pra família, lido de checkout_url");
+  eq(r.slug, null, "2. e NÃO inventa slug: nessa URL o identificador vem no parâmetro lenc, não no caminho");
 }
 
 // ------------------------------------------------- 3. valor errado nunca vira cobrança
 {
-  const respostaBoa = { corpo: { url: "https://invoice.infinitepay.io/brunoffsoares/AAA" } };
+  const respostaBoa = { corpo: { checkout_url: RESPOSTA_REAL } };
   for (const valor of [550, 0, -1, 55000.5, "55000", null, undefined, NaN]) {
     const r = await IP.criarCobranca({ valorCentavos: valor, orderNsu: "x", env, fetchFn: fetchFalso(respostaBoa) });
     // 550 é inteiro e positivo, então passa: seria uma consulta de R$ 5,50, valor esquisito
@@ -153,18 +159,24 @@ function fetchFalso(resposta, registro = {}) {
 
 // ------------------------------------------------- 8. o link em outros formatos de resposta
 {
+  // checkout_url é o nome de verdade; os outros são rede de segurança caso mudem.
   const formatos = [
+    { checkout_url: "https://invoice.infinitepay.io/brunoffsoares/AAA" },
     { url: "https://invoice.infinitepay.io/brunoffsoares/AAA" },
     { link: "https://invoice.infinitepay.io/brunoffsoares/AAA" },
-    { payment_url: "https://invoice.infinitepay.io/brunoffsoares/AAA" },
-    { data: { url: "https://invoice.infinitepay.io/brunoffsoares/AAA" } },
+    { data: { checkout_url: "https://invoice.infinitepay.io/brunoffsoares/AAA" } },
   ];
   for (const corpo of formatos) {
     const r = await IP.criarCobranca({ valorCentavos: 55000, orderNsu: "x", env, fetchFn: fetchFalso({ corpo }) });
     eq(r.slug, "AAA", `8. acha o link em ${Object.keys(corpo)[0]}`);
   }
-  eq(IP.slugDaUrl("https://invoice.infinitepay.io/brunoffsoares/Z8oIyXH5hu?x=1"), "Z8oIyXH5hu",
-    "8. o slug ignora parâmetros na URL");
+
+  // Os dois formatos de URL que existem, e o erro que o segundo causava.
+  eq(IP.slugDaUrl("https://invoice.infinitepay.io/brunoffsoares/Z8oIyXH5hu?x=1", "brunoffsoares"), "Z8oIyXH5hu",
+    "8. cobrança criada na mão: o código está no caminho, e é isso que vira slug");
+  eq(IP.slugDaUrl(RESPOSTA_REAL, "brunoffsoares"), null,
+    "8. link criado pela API: nada de slug, porque o último pedaço do caminho é o próprio handle");
+  eq(IP.slugDaUrl("https://checkout.infinitepay.io", "brunoffsoares"), null, "8. só domínio não vira slug");
   eq(IP.slugDaUrl(null), null, "8. e não quebra sem URL");
 }
 

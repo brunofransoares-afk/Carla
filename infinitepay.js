@@ -76,25 +76,39 @@ async function pedir(caminho, corpo, { fetchFn = fetch } = {}) {
   }
 }
 
-// A resposta da criação não está documentada campo a campo, então procuro o link em todos
-// os lugares plausíveis em vez de apostar num. O slug é o código no fim da URL
-// (invoice.infinitepay.io/brunoffsoares/Z8oIyXH5hu -> Z8oIyXH5hu) e é o que o
-// payment_check pede depois.
+// O campo é checkout_url. Isso veio de uma chamada de verdade, não de palpite: eu tinha
+// escrito cinco candidatos (url, link, payment_url, data.url, data.link) e nenhum era. Os
+// outros continuam na lista só como rede de segurança, caso mudem o nome um dia.
 function acharUrl(dados) {
   const candidatos = [
+    dados && dados.checkout_url,
     dados && dados.url,
     dados && dados.link,
     dados && dados.payment_url,
+    dados && dados.data && dados.data.checkout_url,
     dados && dados.data && dados.data.url,
-    dados && dados.data && dados.data.link,
   ];
   return candidatos.find((u) => typeof u === "string" && u.startsWith("http")) || null;
 }
 
-function slugDaUrl(url) {
+// O link de verdade sai assim:
+//
+//   https://checkout.infinitepay.io/brunoffsoares?lenc=G5gAYGTwpv...
+//
+// O identificador vem em PARÂMETRO (lenc), não no caminho. Sem este cuidado, pegar "o
+// último pedaço do caminho" devolveria "brunoffsoares", o próprio handle, e a gente
+// mandaria o handle no lugar do slug no payment_check.
+//
+// A cobrança criada na mão pelo app tem outro formato, com o código no caminho
+// (invoice.infinitepay.io/brunoffsoares/Z8oIyXH5hu), então os dois casos são tratados.
+function slugDaUrl(url, handle = null) {
   if (!url) return null;
   const partes = String(url).split("?")[0].split("/").filter(Boolean);
-  return partes.length ? partes[partes.length - 1] : null;
+  if (partes.length < 2) return null;
+  const ultimo = partes[partes.length - 1];
+  if (ultimo.includes(".")) return null;              // ainda é o domínio: não há caminho
+  if (handle && ultimo === handle) return null;       // é o handle, não um slug
+  return ultimo;
 }
 
 // valorCentavos: 55000 para R$ 550,00
@@ -118,7 +132,7 @@ async function criarCobranca({ valorCentavos, descricao, orderNsu, redirectUrl =
   const url = acharUrl(r.dados);
   if (!url) return { ok: false, motivo: `Criou, mas não achei o link na resposta: ${JSON.stringify(r.dados).slice(0, 300)}` };
 
-  return { ok: true, url, slug: slugDaUrl(url), valorCentavos };
+  return { ok: true, url, slug: slugDaUrl(url, handle), valorCentavos };
 }
 
 // transactionNsu só existe depois de alguém pagar e voltar pelo redirect, então é opcional:
