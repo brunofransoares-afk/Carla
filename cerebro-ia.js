@@ -581,6 +581,10 @@ async function executarFerramenta(nome, input, ctx) {
         valorCentavos: preco.centavos,
         descricao: `Consulta - ${input.crianca} - ${slotFinal.label}`,
         orderNsu: slotFinal.id,
+        // O aviso de pagamento é a ÚNICA forma de o sistema saber que o dinheiro caiu: o
+        // payment_check foi testado com um pagamento de verdade e devolveu success:false
+        // pra tudo que a gente tem em mãos. Sem este endereço, o painel nunca fica verde.
+        webhookUrl: InfinitePay.enderecoDoAviso(),
       });
       if (cobranca.ok) {
         Storage.guardarCobranca(slotFinal.id, { url: cobranca.url, slug: cobranca.slug });

@@ -20,7 +20,6 @@ const {
 require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
 const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"));
 const Storage = require(path.join(__dirname, "storage-node.js"));
-const InfinitePay = require(path.join(__dirname, "infinitepay.js"));
 const CerebroIA = require(path.join(__dirname, "cerebro-ia.js"));
 const Avisos = require(path.join(__dirname, "avisos-texto.js"));
 
@@ -436,43 +435,17 @@ function checarLembretes() {
 
 setInterval(checarLembretes, 15 * 60 * 1000);
 
-// CONFERÊNCIA DE PAGAMENTO. Não existe integração que avise quando o dinheiro cai, então a
-// Carla pergunta em vez de esperar: pra cada consulta futura que tem cobrança criada e
-// ainda não está paga, consulta o payment_check da InfinitePay.
+// A CONFERÊNCIA PERIÓDICA FOI TIRADA DAQUI, e o motivo fica registrado pra ninguém tentar
+// de novo achando que é fácil: o payment_check da InfinitePay foi testado contra um
+// pagamento de verdade, com todas as combinações que temos em mãos (só order_nsu, order_nsu
+// com o hexadecimal do fim do lenc, o lenc inteiro como slug, o hexadecimal como
+// transaction_nsu), e devolveu {"success":false} em todas.
 //
-// Por que perguntar em vez de receber webhook: os dados do pagamento também voltam pela URL
-// de redirecionamento, mas SÓ se a família clicar em "Continuar" depois de pagar. Quem paga
-// e fecha a página some. Perguntando, o painel fica certo de qualquer jeito, e o servidor
-// não precisa receber nada de fora.
+// Ele foi feito pra confirmar quem VOLTOU pelo redirect, usando o transaction_nsu que só
+// existe depois de a pessoa clicar em "Continuar". Não serve pra descobrir quem pagou.
 //
-// De 5 em 5 minutos é de graça em movimento baixo (uma chamada por consulta pendente) e é
-// rápido o suficiente pra Carla poder confirmar quase na hora.
-async function conferirPagamentos() {
-  if (!InfinitePay.estaLigado()) return;
-  const pendentes = Storage.agendamentosPendentesDePagamento(new Date());
-  for (const a of pendentes) {
-    const r = await InfinitePay.conferirPagamento({
-      orderNsu: a.slotId,
-      slug: (a.cobranca && a.cobranca.slug) || null,
-    });
-    if (!r.ok) {
-      console.error(`[PAGAMENTO] Não consegui conferir ${a.slotId}: ${r.motivo}`);
-      continue;
-    }
-    if (!r.pago) continue;
-    Storage.marcarPagamento(a.slotId, true, {
-      valorCentavos: r.valorCentavos,
-      forma: r.forma,
-      parcelas: r.parcelas,
-      conferidoEm: new Date().toISOString(),
-    });
-    console.log(`[PAGAMENTO CONFIRMADO] ${a.crianca} em ${a.diaLabel} — ${r.forma} — R$ ${((r.valorCentavos || 0) / 100).toFixed(2)}`);
-  }
-}
-
-setInterval(() => {
-  conferirPagamentos().catch((erro) => console.error("[PAGAMENTO] Erro geral:", erro.message));
-}, 5 * 60 * 1000);
+// Quem marca pago agora é o aviso da InfinitePay, recebido em painel-server.js
+// (ver pagamento-webhook.js).
 
 // Se o processo for reiniciado (ex: "npm run restart") bem no meio da janela de espera de
 // alguém que acabou de mandar mensagem, o buffer em memória seria perdido pra sempre —

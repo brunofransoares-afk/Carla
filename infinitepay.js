@@ -163,4 +163,19 @@ async function conferirPagamento({ orderNsu, slug = null, transactionNsu = null,
   };
 }
 
-module.exports = { criarCobranca, conferirPagamento, estaLigado, handleConfigurado, slugDaUrl, BASE };
+// O endereço que a InfinitePay chama quando o pagamento é aprovado. O segredo vai na URL
+// porque a InfinitePay não assina o aviso — não há cabeçalho pra conferir, então o que
+// resta é um endereço que só nós dois conhecemos. Ele nunca aparece em lugar público:
+// entra em cada chamada de criação e some junto com ela.
+//
+// Sem PAINEL_URL ou sem INFINITEPAY_WEBHOOK_SECRET, devolve null e a cobrança é criada sem
+// aviso: dá pra pagar, mas ninguém fica sabendo. Melhor isso do que apontar pra um endereço
+// errado e o Dr. Bruno achar que o painel está certo quando não está.
+function enderecoDoAviso(env = process.env) {
+  const base = String(env.PAINEL_URL || "").trim().replace(/\/+$/, "");
+  const segredo = String(env.INFINITEPAY_WEBHOOK_SECRET || "").trim();
+  if (!base || !segredo) return null;
+  return `${base}/webhook/infinitepay/${segredo}`;
+}
+
+module.exports = { criarCobranca, conferirPagamento, estaLigado, handleConfigurado, slugDaUrl, enderecoDoAviso, BASE };
