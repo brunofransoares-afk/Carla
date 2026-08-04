@@ -381,19 +381,6 @@ function guardarCobranca(slotId, { url, slug = null }) {
   return true;
 }
 
-// As consultas que ainda não foram pagas e que ainda vão acontecer. É o que a conferência
-// periódica pergunta à InfinitePay. Consulta que já passou fica de fora: cobrar depois do
-// atendimento não é problema deste laço.
-function agendamentosPendentesDePagamento(now = new Date()) {
-  const hoje = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return lerAgendamentos().filter((a) => {
-    if (a.pago) return false;
-    if (!a.cobranca || !a.cobranca.url) return false;
-    const [ano, mes, dia] = String(a.data).split("-").map(Number);
-    return new Date(ano, mes - 1, dia) >= hoje;
-  });
-}
-
 function marcarPagamento(slotId, pago, detalhes = null) {
   const lista = lerAgendamentos();
   const item = lista.find((a) => a.slotId === slotId);
@@ -691,7 +678,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, guardarCobranca, agendamentosPendentesDePagamento, historicoExpirou, proximaConsultaDoTelefone,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, guardarCobranca, historicoExpirou, proximaConsultaDoTelefone,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
