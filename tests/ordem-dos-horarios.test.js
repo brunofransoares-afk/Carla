@@ -109,6 +109,72 @@ const rotulos = (lista) => lista.map((s) => s.label);
   eq(rotulos(r)[0], "2026-08-03 08:00", "8. e na ordem que a grade já tinha escolhido");
 }
 
+// ------------------------------------------------- 9. o caso do print: dois da mesma manhã
+{
+  // O Dr. Bruno reparou que ela passou a oferecer "terça às 8h e às 9h30". São duas
+  // opções no papel e uma só na prática: quem não pode de manhã na terça ficou sem nada.
+  const grade = [
+    g("2026-08-04", "08:00", 2), g("2026-08-04", "09:30", 2),
+    g("2026-08-04", "14:00", 2), g("2026-08-06", "08:00", 4),
+  ];
+  const r = ordenarCandidatos(grade, [], {}).slice(0, 2);
+  eq(rotulos(r).join(" | "), "2026-08-04 08:00 | 2026-08-04 14:00",
+    "9. a segunda opção é de outro período, não o horário colado no primeiro");
+  ok(r[0].time < "12:00" && r[1].time >= "12:00", "9. uma de manhã e uma de tarde");
+}
+
+// ------------------------------------------------- 10. dia diferente não é forçado
+{
+  // De propósito. Forçar dia diferente faria o extra de amanhã à tarde perder pra um da
+  // grade de segunda que vem, que é o mesmo defeito do caso 1 voltando por outra porta.
+  const grade = [g("2026-07-31", "08:00", 5), g("2026-08-03", "14:00", 1)];
+  const extras = [x("2026-07-31", "14:00")];
+  const r = ordenarCandidatos(grade, extras, {}).slice(0, 2);
+  eq(rotulos(r).join(" | "), "2026-07-31 08:00 | 2026-07-31 14:00 (extra)",
+    "10. entre duas tardes, ganha a mais cedo, mesmo sendo no mesmo dia da primeira opção");
+}
+
+// ------------------------------------------------- 11. período pedido não é distorcido
+{
+  // Ela pediu tarde. Espalhar aqui seria devolver uma manhã que ela não quer.
+  const grade = [g("2026-08-03", "14:00", 1), g("2026-08-03", "16:00", 1), g("2026-08-04", "08:00", 2)];
+  const r = ordenarCandidatos(grade, [], { periodo: "tarde" }).slice(0, 2);
+  eq(rotulos(r).join(" | "), "2026-08-03 14:00 | 2026-08-03 16:00",
+    "11. pedindo tarde, as duas opções são de tarde e em ordem de tempo");
+}
+
+// ------------------------------------------------- 12. pedindo um dia: manhã e tarde dele
+{
+  const grade = [g("2026-08-04", "08:00", 2), g("2026-08-04", "09:30", 2), g("2026-08-04", "15:00", 2)];
+  const r = ordenarCandidatos(grade, [], { dataPreferida: "2026-08-04" }).slice(0, 2);
+  eq(rotulos(r).join(" | "), "2026-08-04 08:00 | 2026-08-04 15:00",
+    "12. dentro do dia pedido, ela oferece uma de manhã e uma de tarde");
+}
+
+// ------------------------------------------------- 13. só existe um período
+{
+  const grade = [g("2026-08-04", "08:00", 2), g("2026-08-04", "09:30", 2), g("2026-08-06", "08:00", 4)];
+  const r = ordenarCandidatos(grade, [], {});
+  eq(rotulos(r).join(" | "), "2026-08-04 08:00 | 2026-08-04 09:30 | 2026-08-06 08:00",
+    "13. sem nenhuma tarde livre, não trava nem inventa: devolve tudo em ordem de tempo");
+}
+
+// ------------------------------------------------- 14. não perde nem duplica horário
+{
+  // O espalhamento reordena. Se algum dia ele começar a comer ou repetir horário, a
+  // família recebe opção que não existe, ou perde uma que existia.
+  const grade = [
+    g("2026-08-03", "08:00", 1), g("2026-08-03", "14:00", 1), g("2026-08-04", "09:30", 2),
+    g("2026-08-06", "16:00", 4), g("2026-08-07", "08:00", 5),
+  ];
+  const extras = [x("2026-08-03", "18:00"), x("2026-08-04", "07:00")];
+  const r = ordenarCandidatos(grade, extras, {});
+  eq(r.length, 7, "14. sai a mesma quantidade que entrou");
+  eq(new Set(r.map((s) => s.id)).size, 7, "14. sem repetir horário");
+  const entraram = new Set([...grade, ...extras].map((s) => s.id));
+  ok(r.every((s) => entraram.has(s.id)), "14. e sem inventar nenhum que não tenha entrado");
+}
+
 console.log(erros.map((e) => "  FALHA " + e).join("\n"));
 console.log(`ordem-dos-horarios: ${passou} passaram, ${falhou} falharam`);
 process.exit(falhou ? 1 : 0);
