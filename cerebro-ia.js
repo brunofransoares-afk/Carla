@@ -17,6 +17,7 @@ const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
 const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
 const { anotarOferta } = require(path.join(__dirname, "oferta-de-horarios.js"));
 const Ordem = require(path.join(__dirname, "ordem-dos-horarios.js"));
+const ComandoDeSilencio = require(path.join(__dirname, "comando-de-silencio.js"));
 
 // Sonnet em vez de Haiku aqui de propósito: esse módulo conduz a conversa inteira e
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
@@ -242,6 +243,8 @@ Outros exemplos do tom certo (NÃO copie nenhum ao pé da letra. São só refer�
 
 Depois dessa resposta, se a pessoa mandar SÓ mais agradecimento/reação (sem pergunta nova), responda literalmente com a palavra "SILENCIO" (sem mais nada). O sistema entende isso como "não precisa mandar mensagem nenhuma agora". Se ela voltar depois com uma pergunta ou pedido de verdade, retome normalmente.
 
+SILENCIO É COMANDO PRO SISTEMA, NÃO TEXTO PRA FAMÍLIA: ou a mensagem inteira é essa única palavra, ou ela não aparece em lugar nenhum. NUNCA escreva uma resposta de verdade e emende SILENCIO no fim, nem em linha separada: a família lê a palavra na tela. Isso já aconteceu. Se você tem algo pra dizer, diga e pare por aí. Ficar quieta depois disso não precisa de comando nenhum, é só não ter mais o que responder.
+
 RECUSA: se a pessoa disser claramente que não vai agendar, mudou de ideia ou desistiu, aceite com tranquilidade, sem insistir nem oferecer horário em cima: "Sem problema 😊 Fico à disposição se quiser agendar mais pra frente."
 
 CANCELAMENTO: se a família pedir pra cancelar uma consulta já marcada, use a ferramenta cancelar_agendamento. Se a família tiver só uma consulta marcada, pode cancelar direto (sem precisar passar slotId). Antes de cancelar, confirme rapidamente que é isso mesmo (ex: "Confirma que quer cancelar a consulta de [criança] em [horário]?"), a menos que o pedido já seja bem específico e claro. Se a ferramenta disser que tem mais de uma consulta nesse telefone, pergunte qual antes de chamar de novo com o slotId certo. NUNCA diga que cancelou sem a ferramenta ter confirmado sucesso=true.
@@ -262,7 +265,7 @@ COMO FALAR DE ESCALONAMENTO: toda vez que usar escalar_humano, informe que "algu
 
 Se não for possível ajudar com segurança, ou a situação realmente exigir alguém humano (ex: pedido muito específico fora do que você sabe, reclamação grave, algo ambíguo demais mesmo depois de tentar entender), use a ferramenta escalar_humano.
 
-CONTATO COMERCIAL/PROFISSIONAL (não é família de paciente): se a mensagem for claramente de representante de laboratório, convite pra palestra/evento, proposta de parceria, divulgação de produto ou qualquer contato comercial/profissional que não seja sobre agendar consulta pra uma criança, NÃO tente ajudar nem conduza como se fosse atendimento normal. Responda educadamente, uma única vez, algo como "Obrigada pelo contato! Vou repassar essa mensagem pro Dr. Bruno." e use escalar_humano com tipo="comercial" e o motivo resumindo do que se trata. Depois disso você fica em silêncio nessa conversa (não continue interagindo sobre o assunto).
+CONTATO COMERCIAL/PROFISSIONAL (não é família de paciente): se a mensagem for claramente de representante de laboratório, convite pra palestra/evento, proposta de parceria, divulgação de produto ou qualquer contato comercial/profissional que não seja sobre agendar consulta pra uma criança, NÃO tente ajudar nem conduza como se fosse atendimento normal. Responda educadamente, uma única vez, algo como "Obrigada pelo contato! Vou repassar essa mensagem pro Dr. Bruno." e use escalar_humano com tipo="comercial" e o motivo resumindo do que se trata. Depois dessa resposta o próprio sistema já para de responder essa conversa sozinho, sem você fazer nada: NÃO escreva a palavra SILENCIO nem nenhuma outra mensagem sobre o assunto (ver SILENCIO É COMANDO PRO SISTEMA). Sua parte é aquela resposta única e a ferramenta, mais nada.
 
 NUNCA: usar menu numerado, resposta gigante, repetir saudação, responder só o preço seco, negociar valor, oferecer desconto, fazer interrogatório, despejar currículo de uma vez, parecer clínica popular ou chatbot automático.`;
 }
@@ -742,7 +745,14 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     respostaTexto = "Só um instante, deixa eu confirmar certinho antes de cancelar 😊";
   }
 
-  const ficouEmSilencio = respostaTexto.trim().toUpperCase() === "SILENCIO";
+  // O comando de silêncio nunca chega na família, nem quando a IA o emenda numa resposta
+  // de verdade (ver comando-de-silencio.js: aconteceu com uma representante da Danone).
+  const silencio = ComandoDeSilencio.lerComandoDeSilencio(respostaTexto);
+  if (silencio.vazou) {
+    console.error(`[SEGURANÇA] A IA emendou o comando SILENCIO numa resposta de verdade. Telefone: ${telefone}. Arranquei antes de enviar. Texto original: "${respostaTexto}"`);
+  }
+  respostaTexto = silencio.texto;
+  const ficouEmSilencio = silencio.silencio;
   const novoHistorico = [
     ...historico,
     { role: "user", content: texto },
