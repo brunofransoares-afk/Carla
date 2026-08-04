@@ -1,6 +1,11 @@
 /*
  * SONDA DE UMA VEZ SÓ: descobre o que a API da InfinitePay aceita de verdade.
  *
+ * O endereço e o nome do campo dos itens vieram da documentação oficial, dentro do app
+ * (Checkout Integrado -> Documentação). A primeira versão deste arquivo usava
+ * api.checkout.infinitepay.io/links e "items" em inglês, que era o que as fontes de
+ * terceiros diziam. Estava errado nos dois.
+ *
  * ISTO NÃO FAZ PARTE DA CARLA. Nem o server.js nem o painel-server.js chamam este arquivo.
  * Ele existe pra ser rodado na mão, uma vez, e responder o que a documentação não responde.
  *
@@ -42,7 +47,7 @@ const corpo = {
   order_nsu: "sonda-" + Date.now(),
   redirect_url: PAINEL + "/",
   webhook_url: PAINEL + "/webhook/infinitepay/sonda",
-  items: [
+  itens: [
     // Preço SEMPRE em centavos. 100 = R$ 1,00.
     { quantity: 1, price: 100, description: "Teste de integracao da Carla (R$ 1,00)" },
   ],
@@ -53,12 +58,12 @@ const corpo = {
 };
 
 (async () => {
-  console.log("Mandando pra https://api.checkout.infinitepay.io/links");
+  console.log("Mandando pra https://api.infinitepay.io/invoices/public/checkout/links");
   console.log("Corpo enviado:\n" + JSON.stringify(corpo, null, 2) + "\n");
 
   let resposta;
   try {
-    resposta = await fetch("https://api.checkout.infinitepay.io/links", {
+    resposta = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(corpo),
