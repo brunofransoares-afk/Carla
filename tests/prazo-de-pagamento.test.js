@@ -156,6 +156,21 @@ const em = (data, hora) => {
   ok(/prazoPagamento/.test(fonte),
     "10. o prazo calculado chega até ela pela ferramenta");
 
+  // O botão "Pago" do painel é o gatilho da confirmação: é o Dr. Bruno dizendo que viu o
+  // dinheiro no extrato. Se esse encanamento sumir, ele marca pago e a família nunca sabe.
+  const painel = fs.readFileSync(path.join(__dirname, "..", "painel-server.js"), "utf8");
+  ok(/encaminharAoBot\("\/interno\/pagamento-confirmado"/.test(painel),
+    "10. marcar pago no painel avisa a família");
+  ok(/if \(ok && pago\)/.test(painel),
+    "10. só quando MARCA, nunca ao desmarcar");
+
+  const bot = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
+  ok(/req\.url === "\/interno\/pagamento-confirmado"/.test(bot), "10. e o bot escuta esse caminho");
+  ok(/if \(a\.pagamentoAvisadoEm\) return \{ ok: true, jaAvisado: true \};/.test(bot),
+    "10. com trava contra mandar duas vezes, porque clique repetido acontece");
+  ok(/está confirmada para/.test(bot),
+    "10. e a mensagem confirma a consulta, o único momento em que essa palavra vale");
+
   const storage = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8");
   ok(/pago: false/.test(storage), "10. todo agendamento novo nasce como não pago");
   ok(/function marcarPagamento\(slotId, pago/.test(storage),

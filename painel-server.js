@@ -14,7 +14,6 @@ const Storage = require(path.join(__dirname, "storage-node.js"));
 const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
 const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
 const PainelWebhook = require(path.join(__dirname, "painel-webhook.js"));
-const PagamentoWebhook = require(path.join(__dirname, "pagamento-webhook.js"));
 
 const PORTA = 3355;
 const NOME_APP_BOT = "carla-bot";
@@ -135,59 +134,6 @@ function encaminharAoBot(caminho, corpo) {
 }
 
 const servidor = http.createServer(async (req, res) => {
-  // Porta de máquina (InfinitePay -> Carla). Fica ANTES da senha do painel porque quem
-  // chama é máquina: ela se identifica pelo endereço secreto, que só existe dentro do
-  // webhook_url que mandamos ao criar cada cobrança.
-  const pagamento = PagamentoWebhook.decidir({ url: req.url, method: req.method, env: process.env });
-  if (pagamento.tipo === "recusar") {
-    console.error(`[PAGAMENTO] Aviso recusado: ${pagamento.corpo.motivo}`);
-    res.writeHead(pagamento.status, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify(pagamento.corpo));
-    return;
-  }
-  if (pagamento.tipo === "pagamento") {
-    let cru = "";
-    req.on("data", (p) => { cru += p; });
-    req.on("end", () => {
-      let corpo = null;
-      try { corpo = JSON.parse(cru || "{}"); } catch { corpo = null; }
-      const aviso = PagamentoWebhook.lerAviso(corpo);
-      if (!aviso.ok) {
-        console.error(`[PAGAMENTO] Aviso sem serventia: ${aviso.motivo} | corpo: ${cru.slice(0, 400)}`);
-        // 200 de propósito: o aviso chegou e foi lido. Devolver erro faria a InfinitePay
-        // reenviar pra sempre um aviso que nunca vai dar certo.
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ ok: false, motivo: aviso.motivo }));
-        return;
-      }
-      const marcou = Storage.marcarPagamento(aviso.slotId, true, {
-        valorCentavos: aviso.pago.valorCentavos,
-        forma: aviso.pago.forma,
-        transacao: aviso.pago.transacao,
-        comprovante: aviso.pago.comprovante,
-        conferidoEm: new Date().toISOString(),
-      });
-      console.log(marcou
-        ? `[PAGAMENTO CONFIRMADO] ${aviso.slotId} — ${aviso.pago.forma || "?"} — R$ ${((aviso.pago.valorCentavos || 0) / 100).toFixed(2)}`
-        : `[PAGAMENTO] Aviso de ${aviso.slotId}, mas não achei esse agendamento. Corpo: ${cru.slice(0, 400)}`);
-
-      // Responde a InfinitePay ANTES de mandar o WhatsApp: eles esperam resposta rápida e
-      // reenviam o aviso quando demora. O envio segue por conta própria; se falhar, o
-      // pagamento continua marcado e o log diz o motivo.
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ ok: true }));
-
-      if (marcou) {
-        encaminharAoBot("/interno/pagamento-confirmado", JSON.stringify({ slotId: aviso.slotId }))
-          .then((r) => {
-            if (r.status !== 200) console.error(`[PAGAMENTO] Não avisei a família de ${aviso.slotId}: ${r.texto}`);
-          })
-          .catch((erro) => console.error(`[PAGAMENTO] Erro ao avisar a família: ${erro.message}`));
-      }
-    });
-    return;
-  }
-
   // Porta de máquina (prontuário -> Carla). A decisão de quem entra vive em
   // painel-webhook.js, que é módulo puro e testado; aqui só sobra o encanamento.
   const decisao = PainelWebhook.decidir({
@@ -358,9 +304,24 @@ const servidor = http.createServer(async (req, res) => {
   // um interruptor: o clique errado na lista precisa poder ser desfeito no clique seguinte.
   if (req.url === "/api/pagamento-toggle" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
-    const ok = corpo.slotId ? Storage.marcarPagamento(corpo.slotId, !!corpo.pago) : false;
+    const pago = !!corpo.pago;
+    const ok = corpo.slotId ? Storage.marcarPagamento(corpo.slotId, pago) : false;
+
+    // Marcar como pago é o gatilho da confirmação: é o Dr. Bruno dizendo que viu o dinheiro
+    // no extrato, e é o único momento em que a família pode ouvir que a consulta está
+    // confirmada. Desmarcar não desfaz mensagem nenhuma — o que já foi enviado foi.
+    //
+    // O painel não manda WhatsApp (a conexão vive no processo do bot), então encaminha pra
+    // porta interna, igual aos avisos do portal e do guia.
+    let avisou = null;
+    if (ok && pago) {
+      const r = await encaminharAoBot("/interno/pagamento-confirmado", JSON.stringify({ slotId: corpo.slotId }));
+      try { avisou = JSON.parse(r.texto); } catch { avisou = { ok: false, motivo: r.texto }; }
+      if (!avisou.ok) console.error(`[PAGAMENTO] Não avisei a família de ${corpo.slotId}: ${r.texto}`);
+    }
+
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok }));
+    res.end(JSON.stringify({ ok, avisou }));
     return;
   }
 

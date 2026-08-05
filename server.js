@@ -64,8 +64,9 @@ async function avisarGuiaLiberado({ telefone, email }) {
 //
 // Inerte sem PORTAL_URL: sem o endereço não há o que mandar, e mandar meia mensagem
 // ("seu portal está liberado!" sem link) seria pior que não mandar nada.
-// A mensagem que a família recebe quando o pagamento entra. É o único momento em que a
-// Carla pode usar a palavra "confirmada": até aqui o horário estava só separado.
+// A mensagem que a família recebe quando o Dr. Bruno marca a consulta como paga. É o único
+// momento em que a palavra "confirmada" pode ser usada: até aqui o horário estava só
+// separado, e quem viu o dinheiro no extrato foi ele.
 //
 // Não passa pela IA de propósito. É texto fixo, escrito uma vez, sobre um fato que o
 // sistema conhece com certeza. Botar a IA pra redigir isso seria dar a ela a chance de
@@ -75,8 +76,8 @@ async function avisarPagamentoConfirmado(slotId) {
   if (!slotId) return { ok: false, motivo: "Sem slotId." };
   const a = Storage.acharAgendamentoPorSlot(slotId);
   if (!a) return { ok: false, motivo: `Não achei agendamento com slotId ${slotId}.` };
-  // A InfinitePay reenvia o aviso quando não recebe 200. Sem esta trava a família receberia
-  // a mesma confirmação duas vezes.
+  // O botão do painel é um interruptor, e clique repetido acontece. Sem esta trava a
+  // família receberia a mesma confirmação duas vezes.
   if (a.pagamentoAvisadoEm) return { ok: true, jaAvisado: true };
   if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp." };
   if (!String(a.telefone || "").startsWith("+")) return { ok: false, motivo: "Sem telefone de WhatsApp." };
@@ -142,8 +143,8 @@ function iniciarTravaInstancia() {
       });
       return;
     }
-    // O pagamento caiu. Quem recebe o aviso da InfinitePay é o painel, mas quem tem a
-    // conexão do WhatsApp é este processo — então o painel encaminha pra cá.
+    // O Dr. Bruno apertou "Pago" no painel. Quem tem a conexão do WhatsApp é este
+    // processo, então o painel encaminha pra cá.
     if (req.method === "POST" && req.url === "/interno/pagamento-confirmado") {
       let corpo = "";
       req.on("data", (p) => { corpo += p; });
@@ -480,18 +481,6 @@ function checarLembretes() {
 }
 
 setInterval(checarLembretes, 15 * 60 * 1000);
-
-// A CONFERÊNCIA PERIÓDICA FOI TIRADA DAQUI, e o motivo fica registrado pra ninguém tentar
-// de novo achando que é fácil: o payment_check da InfinitePay foi testado contra um
-// pagamento de verdade, com todas as combinações que temos em mãos (só order_nsu, order_nsu
-// com o hexadecimal do fim do lenc, o lenc inteiro como slug, o hexadecimal como
-// transaction_nsu), e devolveu {"success":false} em todas.
-//
-// Ele foi feito pra confirmar quem VOLTOU pelo redirect, usando o transaction_nsu que só
-// existe depois de a pessoa clicar em "Continuar". Não serve pra descobrir quem pagou.
-//
-// Quem marca pago agora é o aviso da InfinitePay, recebido em painel-server.js
-// (ver pagamento-webhook.js).
 
 // Se o processo for reiniciado (ex: "npm run restart") bem no meio da janela de espera de
 // alguém que acabou de mandar mensagem, o buffer em memória seria perdido pra sempre —
