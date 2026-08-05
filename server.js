@@ -72,6 +72,16 @@ async function avisarGuiaLiberado({ telefone, email }) {
 // sistema conhece com certeza. Botar a IA pra redigir isso seria dar a ela a chance de
 // escrever "confirmado" errado, ou de inventar detalhe, justamente na mensagem que a
 // família vai guardar pra saber quando e onde é a consulta.
+// Só o primeiro nome, e SEM artigo: "a consulta de Isis", nunca "da Isis" ou "do Isis".
+//
+// A primeira versão disto chutava o gênero pela terminação e escrevia "do Isis" e "do Lis".
+// Adivinhar sexo por nome é justamente o que o prompt proíbe a Carla de fazer, e eu fui
+// fazer no código — onde é pior, porque aqui não tem a conversa pra dar pista nenhuma.
+// "de Fulano" é sempre certo, pra qualquer nome, e não soa artificial.
+function primeiroNome(nome) {
+  return String(nome || "").trim().split(/\s+/)[0] || "";
+}
+
 async function avisarPagamentoConfirmado(slotId) {
   if (!slotId) return { ok: false, motivo: "Sem slotId." };
   const a = Storage.acharAgendamentoPorSlot(slotId);
@@ -83,7 +93,26 @@ async function avisarPagamentoConfirmado(slotId) {
   if (!String(a.telefone || "").startsWith("+")) return { ok: false, motivo: "Sem telefone de WhatsApp." };
 
   const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
-  const texto = `Pagamento recebido! 😊\n\nA consulta do ${a.crianca} está confirmada para ${a.diaLabel}.\n\nEndereço: Rua Ranulpho Alvarenga Ferreira, 61\n\nQualquer coisa até lá, é só me chamar por aqui.`;
+
+  // O e-mail e a data de nascimento são pedidos AQUI, e não junto da reserva, porque este é
+  // o melhor momento da conversa inteira pra pedir: a família acabou de pagar, está
+  // comprometida e satisfeita. Antes, isso ia na mensagem da reserva, que ficava com cinco
+  // assuntos — e a família respondia um e esquecia o resto, quase sempre o e-mail.
+  //
+  // Cada dado só é pedido se ainda faltar. O e-mail é do responsável e serve pra qualquer
+  // filho; a data é da criança e nunca serve pra outra. Como isto é código e não IA, a
+  // conferência é certa: ela não pergunta de novo o que já está guardado.
+  const falta = [];
+  if (!a.responsavelEmail) falta.push("seu *e-mail*");
+  if (!a.criancaDataNascimento) falta.push(`a data de nascimento de ${primeiroNome(a.crianca)}`);
+
+  const pedido = falta.length === 0 ? "" : `\n\nMe manda ${falta.join(" e ")}?\n\n${
+    a.responsavelEmail && !a.criancaDataNascimento
+      ? `É pra montar a curva de crescimento de ${primeiroNome(a.crianca)} no portal.`
+      : `É pra criar o portal de ${primeiroNome(a.crianca)}: um espaço só de vocês, onde você guarda os exames, a carteira de vacinação e o peso e altura, e compara os exames antigos com os novos. As receitas e os documentos que o Dr. Bruno passar também ficam lá, junto com o crescimento e as vacinas que ainda faltam.`
+  }`;
+
+  const texto = `Pagamento recebido! 😊\n\nA consulta de ${primeiroNome(a.crianca)} está confirmada para ${a.diaLabel}.\n\nEndereço: Rua Ranulpho Alvarenga Ferreira, 61${pedido}\n\nQualquer coisa até lá, é só me chamar por aqui.`;
 
   await sockAtivo.sendMessage(jid, { text: texto });
   Storage.marcarPagamentoAvisado(slotId);
