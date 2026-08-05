@@ -22,6 +22,7 @@ const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const CerebroIA = require(path.join(__dirname, "cerebro-ia.js"));
 const Avisos = require(path.join(__dirname, "avisos-texto.js"));
+const Previa = require(path.join(__dirname, "previa-de-link.js"));
 
 const ATRASO_RESPOSTA_MS = 3000;
 const PORTA_TRAVA = 3357;
@@ -51,7 +52,7 @@ async function avisarGuiaLiberado({ telefone, email }) {
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
   const texto = Avisos.textoGuia({ endereco: endereco, email: porta.email });
 
-  await sockAtivo.sendMessage(jid, { text: texto });
+  await sockAtivo.sendMessage(jid, Previa.mensagemDeTexto(texto));
   Storage.marcarGuiaAvisado(agendamento.slotId);
   console.log(`[GUIA] Avisei ${agendamento.telefone} sobre o guia de ${agendamento.crianca}`);
   return { ok: true };
@@ -114,7 +115,7 @@ async function avisarPagamentoConfirmado(slotId) {
 
   const texto = `Pagamento recebido! 😊\n\nA consulta de ${primeiroNome(a.crianca)} está confirmada para ${a.diaLabel}.\n\nEndereço: Rua Ranulpho Alvarenga Ferreira, 61${pedido}\n\nQualquer coisa até lá, é só me chamar por aqui.`;
 
-  await sockAtivo.sendMessage(jid, { text: texto });
+  await sockAtivo.sendMessage(jid, Previa.mensagemDeTexto(texto));
   Storage.marcarPagamentoAvisado(slotId);
   console.log(`[PAGAMENTO] Avisei ${a.telefone} que a consulta de ${a.crianca} está confirmada`);
   return { ok: true };
@@ -139,7 +140,7 @@ async function avisarPortalLiberado({ telefone, email }) {
   const texto = Avisos.textoPortal({ endereco: endereco, crianca: agendamento.crianca,
     email: porta.email });
 
-  await sockAtivo.sendMessage(jid, { text: texto });
+  await sockAtivo.sendMessage(jid, Previa.mensagemDeTexto(texto));
   Storage.marcarPortalAvisado(agendamento.slotId);
   console.log(`[PORTAL] Avisei ${agendamento.telefone} sobre o portal de ${agendamento.crianca}`);
   return { ok: true };
@@ -296,7 +297,7 @@ async function enviarResposta(sock, jid, telefone, texto, semAtraso) {
     await sock.sendPresenceUpdate("paused", jid).catch(() => {});
   }
   try {
-    await sock.sendMessage(jid, { text: texto });
+    await sock.sendMessage(jid, Previa.mensagemDeTexto(texto));
     console.log(`[ENVIADA] ${telefone}: ${texto}`);
   } catch (erro) {
     console.error(`[ERRO AO ENVIAR] ${telefone}:`, erro.message);
@@ -324,7 +325,7 @@ async function notificarNovoAgendamento(sock, acao, telefoneFamilia) {
   try {
     const jid = telefoneDrBruno.replace("+", "") + "@s.whatsapp.net";
     const texto = `Novo agendamento pela Carla 📅\n\nCriança: ${acao.crianca}\nResponsável: ${acao.responsavel}\nTelefone: ${telefoneFamilia}\nQuando: ${acao.slot.label}`;
-    await sock.sendMessage(jid, { text: texto });
+    await sock.sendMessage(jid, Previa.mensagemDeTexto(texto));
   } catch (erro) {
     console.error("[NOTIFICAÇÃO] Erro ao avisar o Dr. Bruno:", erro.message);
   }
@@ -345,7 +346,7 @@ async function notificarDadosDoPaciente(sock, dados, acao, telefoneFamilia) {
     linhas.push(`Telefone: ${telefoneFamilia}`);
     if (dados.email) linhas.push(`E-mail: ${dados.email}`);
     if (dados.dataNascimento) linhas.push(`Nascimento: ${dados.dataNascimento}`);
-    await sock.sendMessage(jid, { text: linhas.join("\n") });
+    await sock.sendMessage(jid, Previa.mensagemDeTexto(linhas.join("\n")));
   } catch (erro) {
     console.error("[NOTIFICAÇÃO] Erro ao avisar os dados do paciente:", erro.message);
   }
@@ -475,7 +476,7 @@ async function enviarLembretes(sock) {
     const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
     const texto = `Olá! Passando pra lembrar que a consulta de ${a.crianca} com o Dr. Bruno está agendada para ${a.diaLabel}.\n\nSe precisar remarcar, é só me avisar por aqui 😊`;
     try {
-      await sock.sendMessage(jid, { text: texto });
+      await sock.sendMessage(jid, Previa.mensagemDeTexto(texto));
       Storage.marcarLembreteEnviado(a.slotId, "semanaAntes");
       console.log(`[LEMBRETE 1 semana antes] ${a.telefone} — ${a.crianca} em ${a.diaLabel}`);
     } catch (erro) {
@@ -487,7 +488,7 @@ async function enviarLembretes(sock) {
     const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
     const texto = `Bom dia! Só confirmando: hoje é o dia da consulta de ${a.crianca} com o Dr. Bruno, às ${Agenda.formatHora(a.horario)}.\n\nEndereço: ${CARLA_CONFIG.endereco}\n\nAté já! 😊`;
     try {
-      await sock.sendMessage(jid, { text: texto });
+      await sock.sendMessage(jid, Previa.mensagemDeTexto(texto));
       Storage.marcarLembreteEnviado(a.slotId, "diaDaConsulta");
       console.log(`[LEMBRETE dia da consulta] ${a.telefone} — ${a.crianca} às ${a.horario}`);
     } catch (erro) {
