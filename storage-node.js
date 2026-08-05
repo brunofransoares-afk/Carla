@@ -369,18 +369,6 @@ function acharAgendamentoPorEmail(email) {
 // existe integração que avise quando o Pix cai, então a única fonte de verdade é ele
 // olhando o extrato. Desligar tem que funcionar igual a ligar, porque errar a linha do
 // clique é o tipo de coisa que acontece no celular.
-// Guarda a cobrança criada na InfinitePay junto do agendamento. O slug pode vir null: no
-// link que a API devolve o identificador vem no parâmetro lenc, não no caminho. O que
-// amarra o pagamento à consulta é o slotId, que vai no order_nsu.
-function guardarCobranca(slotId, { url, slug = null }) {
-  const lista = lerAgendamentos();
-  const item = lista.find((a) => a.slotId === slotId);
-  if (!item) return false;
-  item.cobranca = { url, slug, criadaEm: new Date().toISOString() };
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
-  return true;
-}
-
 function marcarPagamento(slotId, pago, detalhes = null) {
   const lista = lerAgendamentos();
   const item = lista.find((a) => a.slotId === slotId);
@@ -393,8 +381,8 @@ function marcarPagamento(slotId, pago, detalhes = null) {
   return true;
 }
 
-// Marca que a família já recebeu a mensagem de "pagamento confirmado". Sem isso, um segundo
-// aviso da InfinitePay (ela reenvia quando não recebe 200) mandaria a mesma mensagem de novo.
+// Marca que a família já recebeu a mensagem de "pagamento confirmado". Sem isso, um
+// clique repetido no botão do painel mandaria a mesma mensagem de novo.
 function marcarPagamentoAvisado(slotId) {
   const lista = lerAgendamentos();
   const item = lista.find((a) => a.slotId === slotId);
@@ -693,7 +681,7 @@ function dessilenciarContato(telefone) {
 
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, marcarPagamentoAvisado, acharAgendamentoPorSlot, guardarCobranca, historicoExpirou, proximaConsultaDoTelefone,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, marcarPagamentoAvisado, acharAgendamentoPorSlot, historicoExpirou, proximaConsultaDoTelefone,
   lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
