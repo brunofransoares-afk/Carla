@@ -179,6 +179,22 @@ const em = (data, hora) => {
   ok(/está confirmada para/.test(bot),
     "10. e a mensagem confirma a consulta, o único momento em que essa palavra vale");
 
+  // O e-mail e a data saíram da mensagem da reserva e vieram pra confirmação do pagamento,
+  // que é o melhor momento pra pedir: a família acabou de pagar. Cada um só é pedido se
+  // ainda faltar — como isto é código, a conferência é certa.
+  ok(/if \(!a\.responsavelEmail\) falta\.push/.test(bot),
+    "10. a confirmação pede o e-mail, e só se ainda faltar");
+  ok(/if \(!a\.criancaDataNascimento\) falta\.push/.test(bot),
+    "10. e a data de nascimento, também só se faltar");
+  ok(!/(^|\s)(da|do) \$\{|\bdela\b/m.test(bot.slice(bot.indexOf("function primeiroNome"), bot.indexOf("async function avisarPortalLiberado"))),
+    "10. e não chuta o sexo da criança por artigo: a primeira versão escrevia \"do Isis\"");
+
+  const prompt = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
+  ok(/NESSA MENSAGEM VOCÊ NÃO PEDE E-MAIL NEM DATA DE NASCIMENTO/.test(prompt),
+    "10. e a Carla foi proibida de antecipar esse pedido na mensagem da reserva");
+  ok(/VOCÊ NÃO PERGUNTA MAIS "PIX OU CARTÃO\?"/.test(prompt),
+    "10. a chave Pix vai direto, sem gastar uma ida e volta perguntando a forma");
+
   const storage = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8");
   ok(/pago: false/.test(storage), "10. todo agendamento novo nasce como não pago");
   ok(/function marcarPagamento\(slotId, pago/.test(storage),
