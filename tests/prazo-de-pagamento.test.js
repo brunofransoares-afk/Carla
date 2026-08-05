@@ -156,6 +156,14 @@ const em = (data, hora) => {
   ok(/prazoPagamento/.test(fonte),
     "10. o prazo calculado chega até ela pela ferramenta");
 
+  // A linha do pagamento tem que ficar sozinha e em negrito, e o valor tem que aparecer
+  // junto da chave Pix. As duas coisas são o mesmo problema: a informação que decide se a
+  // consulta acontece some quando fica no meio de um parágrafo ou uma tela acima.
+  ok(/\n\*O horário fica guardado até o pagamento/.test(fonte),
+    "10. a linha do pagamento fica sozinha e em negrito na mensagem de reserva");
+  ok(/A chave Pix é o e-mail \(R\$ 550,00\):/.test(fonte),
+    "10. e a chave Pix vai com o valor entre parênteses");
+
   // O botão "Pago" do painel é o gatilho da confirmação: é o Dr. Bruno dizendo que viu o
   // dinheiro no extrato. Se esse encanamento sumir, ele marca pago e a família nunca sabe.
   const painel = fs.readFileSync(path.join(__dirname, "..", "painel-server.js"), "utf8");
