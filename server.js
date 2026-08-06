@@ -23,6 +23,7 @@ const Storage = require(path.join(__dirname, "storage-node.js"));
 const CerebroIA = require(path.join(__dirname, "cerebro-ia.js"));
 const Avisos = require(path.join(__dirname, "avisos-texto.js"));
 const Previa = require(path.join(__dirname, "previa-de-link.js"));
+const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"));
 
 const ATRASO_RESPOSTA_MS = 3000;
 const PORTA_TRAVA = 3357;
@@ -387,6 +388,26 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   // não é emergência (regra 1, acima, é inegociável e vale pra qualquer telefone).
   if (Storage.contatoSilenciado(telefone)) {
     console.log(`[IGNORADO — silenciado manualmente] ${telefone}`);
+    return;
+  }
+
+  // 1.7) Comprovante de pagamento: silêncio. Quem confirma pagamento é o Dr. Bruno, no
+  // botão "Pago" do painel, e aquele botão já dispara a mensagem que confirma a consulta e
+  // pede o e-mail e a data de nascimento que faltam. Quando a Carla respondia por conta
+  // própria, ela pedia as mesmas duas coisas e a família recebia o pedido duas vezes.
+  //
+  // Fica DEPOIS da emergência de propósito: comprovante junto de "meu filho está
+  // convulsionando" ainda é emergência, e a regra 1 é inegociável.
+  //
+  // Não entra no histórico de propósito. Se a Carla lesse o comprovante numa mensagem
+  // seguinte, ela teria material pra comentar o pagamento por conta própria, que é
+  // exatamente o que esta regra existe pra impedir. O painel do Dr. Bruno continua
+  // mostrando a mensagem (ultimaMensagem, logo abaixo), que é onde ele precisa ver.
+  if (Comprovante.pareceComprovante(texto)) {
+    console.log(`[COMPROVANTE] ${telefone}: recebido, silêncio — quem confirma é o botão do painel`);
+    sessao.ultimaAtividade = now.toISOString();
+    sessao.ultimaMensagem = texto.slice(0, 140);
+    Storage.salvarSessao(telefone, sessao);
     return;
   }
 
