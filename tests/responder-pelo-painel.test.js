@@ -158,8 +158,18 @@ const DASH = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8
     "7. a regra manda preencher a pergunta quando cabe sim ou não");
   ok(/deixe a pergunta vazia e explique tudo no motivo/.test(CEREBRO),
     "7b. e deixar vazia quando não cabe, em vez de forçar");
-  ok(/dataPedida no formato AAAA-MM-DD e horaPedida no formato HH:MM/.test(CEREBRO),
-    "7c. o caso do horário manda os campos que fazem o Sim abrir a agenda");
+  ok(/dataPedida \(AAAA-MM-DD\) e horaPedida \(HH:MM\) SÓ ENTRAM QUANDO A FAMÍLIA DISSE O DIA/.test(CEREBRO),
+    "7c. os campos que abrem a agenda só entram com o dia confirmado pela família");
+  // Ela chutou uma quinta-feira que ninguém tinha dito, e o Sim teria aberto horário no dia
+  // errado. A data ali não é informação, é uma ação: ela abre buraco na agenda de verdade.
+  ok(/NUNCA escolha um dia por conta própria, nem o mais próximo, nem o que sobrou na conversa/.test(CEREBRO),
+    "7f. e ela é proibida de escolher o dia sozinha");
+  ok(/Qual dia seria melhor pra você\?/.test(CEREBRO),
+    "7g. com a pergunta do dia colada na frase de que vai confirmar, pra não virar interrogatório");
+  ok(/Na dúvida, deixe as duas vazias/.test(CEREBRO),
+    "7h. e sem certeza do dia, escala sem os campos: ele responde igual e abre o horário na mão");
+  ok(/NUNCA deduza nem escolha um dia por conta própria/.test(CEREBRO),
+    "7i. a mesma regra na descrição da ferramenta, que é onde ela olha na hora de preencher");
 
   // O código valida o formato, não confia no que a IA escreveu.
   ok(/\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(input\.dataPedida \|\| ""\)/.test(CEREBRO),
