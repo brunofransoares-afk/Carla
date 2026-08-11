@@ -260,6 +260,40 @@ const servidor = http.createServer(async (req, res) => {
 
   // Libera um horário fora da grade padrão (ex: uma sexta à tarde). Valida data e hora
   // aqui, no servidor — o painel nunca é a única barreira contra um valor esquisito.
+  // O Dr. Bruno respondendo Sim ou Não a uma pergunta que a Carla fez. Ele não assume a
+  // conversa: responde aqui e ela continua sozinha, do outro lado.
+  //
+  // Quando a pergunta é sobre abrir um horário que a grade não tem, o alerta carrega a data e
+  // a hora, e o SIM cria o horário extra ANTES de avisar o bot. Sem isso a Carla prometeria um
+  // horário que a ferramenta ia recusar na hora de marcar, que é pior que ter dito não.
+  if (req.url === "/api/responder-escalada" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const alerta = corpo.alertaId ? Storage.acharAlerta(corpo.alertaId) : null;
+    const resposta = typeof corpo.resposta === "string" ? corpo.resposta.trim() : "";
+    if (!alerta || !alerta.pergunta || !resposta) {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: false, erro: "Alerta sem pergunta, ou resposta vazia." }));
+      return;
+    }
+
+    // "sim" cru é o botão; qualquer texto que o Dr. Bruno escreva à mão NÃO abre horário
+    // nenhum, porque aí ele pode estar dizendo "só depois do dia 20" e abrir seria errado.
+    const ehSim = resposta.toLowerCase() === "sim";
+    let horarioAberto = null;
+    if (ehSim && alerta.dataPedida && alerta.horaPedida) {
+      Storage.adicionarHorarioExtra(alerta.dataPedida, alerta.horaPedida);
+      horarioAberto = `${alerta.dataPedida} ${alerta.horaPedida}`;
+    }
+
+    const r = await encaminharAoBot("/interno/resposta-do-doutor",
+      JSON.stringify({ alertaId: alerta.id, resposta }));
+    let devolvido = {};
+    try { devolvido = JSON.parse(r.texto || "{}"); } catch { devolvido = { ok: false, motivo: "Resposta inesperada do bot." }; }
+    res.writeHead(r.status === 200 ? 200 : 422, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ...devolvido, horarioAberto }));
+    return;
+  }
+
   if (req.url === "/api/horario-extra" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const data = typeof corpo.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(corpo.data) ? corpo.data : null;

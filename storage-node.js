@@ -434,10 +434,47 @@ function lerAlertas() {
   return lerJSON(ARQ_ALERTAS, []);
 }
 
-function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia" }) {
+// Um alerta pode carregar uma PERGUNTA objetiva pro Dr. Bruno, com resposta sim ou não. Aí
+// ele responde pelo painel e a Carla continua a conversa sozinha, em vez de ele ter que
+// assumir e digitar. Sem pergunta, é alerta simples de sempre.
+//
+// dataPedida e horaPedida só existem quando a pergunta é sobre abrir um horário que a grade
+// não tem. Com elas o botão "Sim" do painel cria o horário extra junto, senão a Carla
+// prometeria um horário que a ferramenta ia recusar na hora de marcar.
+function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", pergunta = null, dataPedida = null, horaPedida = null }) {
   const lista = lerAlertas();
-  lista.push({ telefone, mensagem, tipo, quando: new Date().toISOString() });
+  const registro = {
+    // Precisa de identidade pra o painel conseguir responder um alerta específico. Os alertas
+    // antigos não têm, e tudo bem: não dá pra responder alerta de antes desta mudança.
+    id: Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+    telefone, mensagem, tipo, quando: new Date().toISOString(),
+  };
+  if (pergunta) {
+    registro.pergunta = String(pergunta).slice(0, 300);
+    if (dataPedida) registro.dataPedida = dataPedida;
+    if (horaPedida) registro.horaPedida = horaPedida;
+  }
+  lista.push(registro);
   escreverJSON(ARQ_ALERTAS, lista);
+  return registro;
+}
+
+function acharAlerta(id) {
+  return lerAlertas().find((a) => a.id === id) || null;
+}
+
+// Grava a resposta do Dr. Bruno. Devolve null se o alerta não existe, e jaRespondido se já
+// foi respondido: o painel abre no celular e no computador, e clique repetido acontece. Sem
+// esta trava a família receberia duas mensagens dizendo a mesma coisa.
+function responderAlerta(id, resposta) {
+  const lista = lerAlertas();
+  const alerta = lista.find((a) => a.id === id);
+  if (!alerta) return null;
+  if (alerta.respondidoEm) return { ...alerta, jaRespondido: true };
+  alerta.respondidoEm = new Date().toISOString();
+  alerta.resposta = String(resposta == null ? "" : resposta).trim().slice(0, 300);
+  escreverJSON(ARQ_ALERTAS, lista);
+  return alerta;
 }
 
 function limparAlertas() {
@@ -712,7 +749,7 @@ function dessilenciarContato(telefone) {
 module.exports = {
   registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
   acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, marcarPagamentoAvisado, acharAgendamentoPorSlot, historicoExpirou, proximaConsultaDoTelefone,
-  lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia,
+  lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia, acharAlerta, responderAlerta,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,

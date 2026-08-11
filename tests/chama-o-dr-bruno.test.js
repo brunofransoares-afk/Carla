@@ -33,7 +33,7 @@ const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
 
 // ------------------------------------------------- 1. os dois casos chamam
 {
-  ok(/async function notificarAtencao\(sock, \{ tipo, telefoneFamilia, texto, crianca \}\)/.test(SERVER),
+  ok(/async function notificarAtencao\(sock, \{ tipo, telefoneFamilia, texto, crianca, pergunta \}\)/.test(SERVER),
     "1. a função existe");
   ok(/notificarAtencao\(sock, \{ tipo: "emergencia"/.test(SERVER), "1b. emergência chama o Dr. Bruno");
   ok(/tipo: resultado\.escalarTipo === "comercial" \? "comercial" : "escalonamento"/.test(SERVER),
