@@ -424,11 +424,27 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     sessao.aguardandoHumanoDesde = null;
   }
 
+  // Antes de a IA rodar, porque ela vai escrever no histórico e aí não dá mais pra saber.
+  const ehPrimeiraMensagemDaConversa = (sessao.historico || []).length === 0;
+
   const idsOcupados = Storage.idsOcupados();
   const resultado = await CerebroIA.responder({
     telefone, texto, historico: sessao.historico || [], now, idsOcupados,
     agendamentoAtual: sessao.ultimoAgendamento || null,
     pacienteConhecido: Storage.ehPacienteConhecido(telefone),
+    // Se ela precisa dizer, NESTA mensagem, que é o atendimento automático.
+    //
+    // Vale pra todo mundo menos quem o painel mostra como Paciente: quem está salvo na agenda
+    // do Dr. Bruno ou foi marcado no botão. Esses ele já conhece pessoalmente, e anunciar
+    // automação pra eles seria estranho.
+    //
+    // Uma vez por número, pra sempre. Quem já marcou consulta com ela continua recebendo o
+    // cumprimento curto de sempre, só que da primeira vez com essa frase junto. Sem o "uma
+    // vez" ela reapresentaria o consultório inteiro pra família que tem consulta amanhã, que
+    // é um defeito que já aconteceu aqui (ver ehPacienteConhecido em storage-node.js).
+    precisaSeApresentar: ehPrimeiraMensagemDaConversa
+      && !Storage.ehPacienteNoPainel(telefone)
+      && !Storage.jaSeApresentou(telefone),
     // Sem isso a Carla continua dizendo que o Dr. Bruno "vai liberar mais perto da
     // consulta" DEPOIS de ela mesma ter mandado o link. O prompt é montado antes de ela
     // ver o histórico, então quem sabe disso é o código, não ela.
@@ -485,6 +501,12 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   }
 
   await enviarResposta(sock, jid, telefone, resultado.resposta, semAtraso);
+
+  // Só depois de a mensagem sair de verdade. Marcar antes faria o número perder a
+  // apresentação por causa de uma falha de envio, e ele nunca mais ouviria.
+  if (ehPrimeiraMensagemDaConversa && Storage.marcarApresentacao(telefone)) {
+    console.log(`[APRESENTAÇÃO] ${telefone}: soube que a Carla é o atendimento automático`);
+  }
 }
 
 // Lembretes automáticos: aviso 1 semana antes e confirmação no dia da consulta. Só manda
