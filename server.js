@@ -353,6 +353,40 @@ async function notificarDadosDoPaciente(sock, dados, acao, telefoneFamilia) {
   }
 }
 
+// Chama o Dr. Bruno no WhatsApp quando a conversa precisa dele: emergência ou escalonamento.
+//
+// Isto faltava, e a falta era pior na emergência: a mensagem que a família recebe promete
+// "vou avisar o Dr. Bruno sobre esse contato assim que possível", e ninguém era avisado. O
+// alerta ficava parado no painel esperando alguém abrir. Agendamento novo e dados do portal
+// já chamavam por ele desde sempre; os dois casos que mais precisam dele, não.
+//
+// Mesmo desenho das outras duas: inerte sem DR_BRUNO_TELEFONE, nunca aguardada, e o erro
+// morre aqui dentro. Avisar o Dr. Bruno nunca pode atrapalhar a resposta pra família.
+async function notificarAtencao(sock, { tipo, telefoneFamilia, texto, crianca }) {
+  const telefoneDrBruno = (process.env.DR_BRUNO_TELEFONE || "").trim();
+  if (!telefoneDrBruno) return;
+  try {
+    const jid = telefoneDrBruno.replace("+", "") + "@s.whatsapp.net";
+    const cabecalho = tipo === "emergencia"
+      ? "🚨 EMERGÊNCIA"
+      : tipo === "comercial"
+        ? "📩 Contato comercial"
+        : "⚠️ Precisa de você";
+    const linhas = [cabecalho, ""];
+    if (crianca) linhas.push(`Criança: ${crianca}`);
+    linhas.push(`Telefone: ${telefoneFamilia}`);
+    linhas.push("", String(texto || "").slice(0, 600));
+    // A emergência NÃO silencia a conversa (a Carla continua respondendo, de propósito), o
+    // escalonamento silencia por 2h. Dizer qual é o caso evita ele achar que tem tempo.
+    if (tipo !== "emergencia") {
+      linhas.push("", "A Carla parou de responder essa conversa. Ela volta sozinha em 2h se ninguém retornar.");
+    }
+    await sock.sendMessage(jid, Previa.mensagemDeTexto(linhas.join("\n")));
+  } catch (erro) {
+    console.error("[NOTIFICAÇÃO] Erro ao chamar o Dr. Bruno:", erro.message);
+  }
+}
+
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
   const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
   const now = new Date();
@@ -372,6 +406,8 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   if (CerebroIA.pareceEmergencia(texto)) {
     Storage.registrarAlertaUrgencia({ telefone, mensagem: texto, tipo: "emergencia" });
     console.log(`[ALERTA: URGÊNCIA] ${telefone}: "${texto}"`);
+    // Antes de responder a família, pra já estar a caminho. Não é aguardada.
+    notificarAtencao(sock, { tipo: "emergencia", telefoneFamilia: telefone, texto });
     const respostaEmergencia = "Isso parece ser uma emergência.\n\nPor favor, leve a criança agora para o pronto-socorro mais próximo.\n\nVou avisar o Dr. Bruno sobre esse contato assim que possível.";
     sessao.historico = [...(sessao.historico || []), { role: "user", content: texto }, { role: "assistant", content: respostaEmergencia }].slice(-24);
     sessao.aguardandoHumano = false;
@@ -489,6 +525,12 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     const tipoAlerta = resultado.escalarTipo === "comercial" ? "comercial" : "nao_entendida";
     Storage.registrarAlertaUrgencia({ telefone, mensagem: resultado.escalar, tipo: tipoAlerta });
     console.log(`[ALERTA: ESCALADO PELA IA] ${telefone}: "${resultado.escalar}"`);
+    notificarAtencao(sock, {
+      tipo: resultado.escalarTipo === "comercial" ? "comercial" : "escalonamento",
+      telefoneFamilia: telefone,
+      texto: resultado.escalar,
+      crianca: sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca,
+    });
   }
 
   sessao.ultimaAtividade = now.toISOString();
