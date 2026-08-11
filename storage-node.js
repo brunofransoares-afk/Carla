@@ -578,6 +578,37 @@ function desmarcarPacienteManual(telefone) {
   return lista;
 }
 
+// Exatamente o que o painel mostra como "Paciente": salvo com nome na agenda do celular do
+// Dr. Bruno OU marcado no botão. A lista de "não-paciente" sobrepõe os dois.
+//
+// É mais estreito que ehPacienteConhecido de propósito: aqui NÃO entra quem só marcou
+// consulta. Quem decide isso é quem lê o painel, então tinha que ser o que o painel mostra.
+// listarTodosContatos usa esta mesma função, pra a etiqueta na tela e a decisão da Carla não
+// poderem separar sem alguém perceber.
+function ehPacienteNoPainel(telefone) {
+  if (lerNaoPacientesManuais().includes(telefone)) return false;
+  const contato = lerContatosWhatsappMapa()[telefone];
+  if (contato && contato.nomeSalvo) return true;
+  return lerPacientesManuais().includes(telefone);
+}
+
+// Se este número já ouviu, alguma vez, que a Carla é o atendimento automático. Fica no
+// cadastro do contato e não na sessão de propósito: sessão o painel limpa e expira em 4
+// horas, e isto precisa valer pra sempre. Ninguém ouve duas vezes.
+function jaSeApresentou(telefone) {
+  const contato = lerContatosWhatsappMapa()[telefone];
+  return !!(contato && contato.apresentadaEm);
+}
+
+function marcarApresentacao(telefone, quando = new Date()) {
+  const contatos = lerJSON(ARQ_CONTATOS_WHATSAPP, {});
+  const atual = contatos[telefone] || { nomeSalvo: null, pushName: null };
+  if (atual.apresentadaEm) return false;
+  contatos[telefone] = { ...atual, apresentadaEm: quando.toISOString() };
+  escreverJSON(ARQ_CONTATOS_WHATSAPP, contatos);
+  return true;
+}
+
 // true quando o telefone está salvo com nome na agenda do celular do Dr. Bruno (sinal
 // automático) OU foi marcado manualmente como paciente pelo painel — qualquer um dos dois
 // já ajusta o tom de abordagem da Carla (ver cerebro-ia.js). A lista de "não-paciente"
@@ -613,15 +644,14 @@ function listarTodosContatos() {
   const sessoes = lerSessoes();
   const silenciados = new Set(lerContatosSilenciados());
   const pacientesManuais = new Set(lerPacientesManuais());
-  const naoPacientes = new Set(lerNaoPacientesManuais());
   const telefones = new Set([...Object.keys(contatosWhatsapp), ...pacientesManuais]);
   const lista = [...telefones].map((telefone) => {
     const info = contatosWhatsapp[telefone] || {};
     const sessao = sessoes[telefone];
     const marcadoManualmente = pacientesManuais.has(telefone);
-    // Estado efetivo de paciente (o mesmo que a Carla usa): "não-paciente" forçado sobrepõe
-    // tudo; senão, é paciente se estiver salvo com nome ou marcado manualmente.
-    const ehPaciente = naoPacientes.has(telefone) ? false : (!!info.nomeSalvo || marcadoManualmente);
+    // Estado efetivo de paciente. Vem da mesma função que a Carla consulta pra decidir se se
+    // apresenta, senão a etiqueta na tela e o comportamento dela podiam discordar em silêncio.
+    const ehPaciente = ehPacienteNoPainel(telefone);
     return {
       telefone,
       nome: info.nomeSalvo || info.pushName || null,
@@ -692,6 +722,7 @@ module.exports = {
   listarContatosRecentes, metricasConversao,
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
   registrarContatoWhatsapp, listarTodosContatos, ehPacienteConhecido,
+  ehPacienteNoPainel, jaSeApresentou, marcarApresentacao,
   lerPacientesManuais, lerNaoPacientesManuais, marcarPacienteManual, desmarcarPacienteManual,
   retomarAtendimento, limparConversa,
 };
