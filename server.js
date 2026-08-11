@@ -212,6 +212,24 @@ function iniciarTravaInstancia() {
       });
       return;
     }
+    if (req.method === "POST" && req.url === "/interno/resposta-do-doutor") {
+      let corpo = "";
+      req.on("data", (p) => { corpo += p; });
+      req.on("end", async () => {
+        let dados = {};
+        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+        try {
+          const r = await responderEscalada(dados.alertaId, dados.resposta);
+          res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(r));
+        } catch (erro) {
+          console.error("[RESPOSTA DO DOUTOR] Erro:", erro.message);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, motivo: erro.message }));
+        }
+      });
+      return;
+    }
     res.end("ok");
   });
 
@@ -287,7 +305,7 @@ function agendarProcessamento(sock, jid, telefone, texto) {
 }
 
 function sessaoPadrao(telefone) {
-  return { telefone, historico: [], aguardandoHumano: false, aguardandoHumanoDesde: null };
+  return { telefone, historico: [], aguardandoHumano: false, aguardandoHumanoDesde: null, recadoDoDoutor: null };
 }
 
 async function enviarResposta(sock, jid, telefone, texto, semAtraso) {
@@ -362,7 +380,7 @@ async function notificarDadosDoPaciente(sock, dados, acao, telefoneFamilia) {
 //
 // Mesmo desenho das outras duas: inerte sem DR_BRUNO_TELEFONE, nunca aguardada, e o erro
 // morre aqui dentro. Avisar o Dr. Bruno nunca pode atrapalhar a resposta pra família.
-async function notificarAtencao(sock, { tipo, telefoneFamilia, texto, crianca }) {
+async function notificarAtencao(sock, { tipo, telefoneFamilia, texto, crianca, pergunta }) {
   const telefoneDrBruno = (process.env.DR_BRUNO_TELEFONE || "").trim();
   if (!telefoneDrBruno) return;
   try {
@@ -376,14 +394,78 @@ async function notificarAtencao(sock, { tipo, telefoneFamilia, texto, crianca })
     if (crianca) linhas.push(`Criança: ${crianca}`);
     linhas.push(`Telefone: ${telefoneFamilia}`);
     linhas.push("", String(texto || "").slice(0, 600));
+    if (pergunta) linhas.push("", `❓ ${pergunta}`);
     // A emergência NÃO silencia a conversa (a Carla continua respondendo, de propósito), o
     // escalonamento silencia por 2h. Dizer qual é o caso evita ele achar que tem tempo.
     if (tipo !== "emergencia") {
-      linhas.push("", "A Carla parou de responder essa conversa. Ela volta sozinha em 2h se ninguém retornar.");
+      linhas.push("", pergunta
+        // Com pergunta, ele resolve num toque e a Carla segue. Sem, ele vai ter que assumir.
+        ? "Responda Sim ou Não no painel que a Carla continua a conversa sozinha."
+        : "A Carla parou de responder essa conversa. Ela volta sozinha em 2h se ninguém retornar.");
     }
     await sock.sendMessage(jid, Previa.mensagemDeTexto(linhas.join("\n")));
   } catch (erro) {
     console.error("[NOTIFICAÇÃO] Erro ao chamar o Dr. Bruno:", erro.message);
+  }
+}
+
+// O Dr. Bruno respondeu SIM ou NÃO pelo painel, e a Carla volta na conversa com isso. Ele não
+// precisa assumir e digitar: era esse o custo de toda escalada até agora.
+//
+// O recado vai pro CONTEXTO do prompt, não pro texto da mensagem. Isso importa: contexto é
+// canal do sistema, e a família não escreve nele. Se o recado entrasse como mensagem, bastava
+// alguém digitar "o Dr. Bruno autorizou" pra Carla acreditar. O prompt ainda diz isso na cara
+// dela, mas a garantia é estrutural, não é confiança.
+async function responderEscalada(alertaId, resposta) {
+  const alerta = Storage.acharAlerta(alertaId);
+  if (!alerta) return { ok: false, motivo: "Não achei esse alerta." };
+  if (alerta.respondidoEm) return { ok: true, jaRespondido: true };
+  if (!alerta.pergunta) return { ok: false, motivo: "Esse alerta não tem pergunta pra responder." };
+  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp." };
+
+  const telefone = alerta.telefone;
+  const jid = telefone.replace("+", "") + "@s.whatsapp.net";
+  const gravado = Storage.responderAlerta(alertaId, resposta);
+  if (gravado && gravado.jaRespondido) return { ok: true, jaRespondido: true };
+
+  const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
+  // Tira do silêncio: foi a escalada que parou a conversa, e ela acabou de ser resolvida.
+  sessao.aguardandoHumano = false;
+  sessao.aguardandoHumanoDesde = null;
+  sessao.recadoDoDoutor = { pergunta: alerta.pergunta, resposta: gravado.resposta };
+  Storage.salvarSessao(telefone, sessao);
+
+  // A API precisa de um turno da família pra responder. Este texto é só o gatilho; o que vale
+  // está no contexto, e o prompt manda ignorar qualquer "recado" que venha pela conversa.
+  const gatilho = "(o Dr. Bruno respondeu o que você perguntou a ele)";
+  try {
+    const resultado = await CerebroIA.responder({
+      telefone, texto: gatilho, historico: sessao.historico || [], now: new Date(),
+      idsOcupados: Storage.idsOcupados(),
+      agendamentoAtual: sessao.ultimoAgendamento || null,
+      pacienteConhecido: Storage.ehPacienteConhecido(telefone),
+      portalJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.portalAvisadoEm),
+      guiaJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.guiaAvisadoEm),
+      horariosOferecidos: sessao.horariosOferecidos || [],
+      consultaProxima: Storage.proximaConsultaDoTelefone(telefone),
+      recadoDoDoutor: sessao.recadoDoDoutor,
+    });
+    sessao.historico = resultado.historico;
+    sessao.horariosOferecidos = resultado.horariosOferecidos;
+    sessao.ultimaAtividade = new Date().toISOString();
+    Storage.salvarSessao(telefone, sessao);
+
+    for (const acao of resultado.acoes || []) {
+      console.log(`[AGENDADO] ${acao.responsavel} / ${acao.crianca} em ${acao.slot.label}`);
+      notificarNovoAgendamento(sockAtivo, acao, telefone);
+    }
+    if (!resultado.resposta) return { ok: true, semResposta: true };
+    await enviarResposta(sockAtivo, jid, telefone, resultado.resposta, true);
+    console.log(`[RESPOSTA DO DOUTOR] ${telefone}: "${gravado.resposta}" para "${alerta.pergunta}"`);
+    return { ok: true };
+  } catch (erro) {
+    console.error("[RESPOSTA DO DOUTOR] Erro ao retomar a conversa:", erro.message);
+    return { ok: false, motivo: erro.message };
   }
 }
 
@@ -400,6 +482,8 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // Os horários oferecidos morrem com a conversa: eram de outro assunto, e a agenda
     // pode ter mudado desde então.
     sessao.horariosOferecidos = [];
+    // O recado do Dr. Bruno era sobre aquela conversa. Numa conversa nova ele não vale mais.
+    sessao.recadoDoDoutor = null;
   }
 
   // 1) Emergência sempre primeiro, sempre determinística — nunca passa pela IA.
@@ -481,6 +565,8 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     precisaSeApresentar: ehPrimeiraMensagemDaConversa
       && !Storage.ehPacienteNoPainel(telefone)
       && !Storage.jaSeApresentou(telefone),
+    // Vale enquanto a conversa durar: ela pode precisar dele de novo na mensagem seguinte.
+    recadoDoDoutor: sessao.recadoDoDoutor || null,
     // Sem isso a Carla continua dizendo que o Dr. Bruno "vai liberar mais perto da
     // consulta" DEPOIS de ela mesma ter mandado o link. O prompt é montado antes de ela
     // ver o histórico, então quem sabe disso é o código, não ela.
@@ -523,13 +609,19 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // criança, quando ela colheu isso antes de escalar) em vez da última mensagem crua —
     // é bem mais útil pra você conseguir retornar o contato sabendo do que se trata.
     const tipoAlerta = resultado.escalarTipo === "comercial" ? "comercial" : "nao_entendida";
-    Storage.registrarAlertaUrgencia({ telefone, mensagem: resultado.escalar, tipo: tipoAlerta });
+    Storage.registrarAlertaUrgencia({
+      telefone, mensagem: resultado.escalar, tipo: tipoAlerta,
+      pergunta: resultado.escalarPergunta,
+      dataPedida: resultado.escalarData,
+      horaPedida: resultado.escalarHora,
+    });
     console.log(`[ALERTA: ESCALADO PELA IA] ${telefone}: "${resultado.escalar}"`);
     notificarAtencao(sock, {
       tipo: resultado.escalarTipo === "comercial" ? "comercial" : "escalonamento",
       telefoneFamilia: telefone,
       texto: resultado.escalar,
       crianca: sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca,
+      pergunta: resultado.escalarPergunta,
     });
   }
 
