@@ -108,13 +108,8 @@ const LINK = Previa.LINK_DE_PAGAMENTO;
   const cru = SERVER.match(/sendMessage\([^)]*\{\s*text:/g) || [];
   eq(cru.length, 0, "6. nenhum sendMessage pode montar { text: ... } na mão. Achei: " + JSON.stringify(cru));
 
-  // A rede agora fica centralizada na caixa de saída. O servidor injeta a função da prévia
-  // uma vez, e nenhum fluxo individual chama sendMessage por conta própria.
-  const CAIXA = fs.readFileSync(path.join(RAIZ, "caixa-de-saida.js"), "utf8");
-  ok(!SERVER.includes(".sendMessage(")
-    && /sendMessage\(atual\.jid, prepararMensagem\(atual\.texto\)\)/.test(CAIXA)
-    && /prepararMensagem: Previa\.mensagemDeTexto/.test(SERVER),
-  "6b. o único envio de rede passa pela decisão central de prévia");
+  const envios = SERVER.match(/sendMessage\(jid, Previa\.mensagemDeTexto\(/g) || [];
+  ok(envios.length >= 8, "6b. todos os envios de texto passam pelo Previa.mensagemDeTexto (achei " + envios.length + ")");
   ok(/require\(path\.join\(__dirname, "previa-de-link\.js"\)\)/.test(SERVER), "6c. o server importa o módulo da prévia");
 }
 

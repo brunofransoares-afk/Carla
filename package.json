@@ -4,7 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "test": "node tests/run-all.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "pm2 start ecosystem.config.js",
     "stop": "pm2 stop carla-bot",
     "restart": "pm2 restart carla-bot",

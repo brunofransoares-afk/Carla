@@ -34,7 +34,6 @@ function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + "
 const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-apres-")), "bot");
 fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "storage-node.js"));
-fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
 // storage-node puxa config.js e agenda.js da pasta irmã. Nada do que esta bateria testa
 // (paciente, apresentação, contatos) passa por eles, então dublês bastam — e assim a bateria
 // roda em máquina onde carla-app não existe, que é o caso hoje: a pasta não está em git
@@ -159,14 +158,11 @@ Storage.reservar({
   ok(/const ehPrimeiraMensagemDaConversa = \(sessao\.historico \|\| \[\]\)\.length === 0;/.test(SERVER),
     "6d. 'primeira mensagem' é medida ANTES de a IA escrever no histórico");
 
-  // Agora a marcação é um efeito durável da caixa de saída. Se a rede cair, a mensagem fica
-  // pendente; se cair depois do envio, o efeito é retomado sem mandar a mensagem duas vezes.
-  const CAIXA = fs.readFileSync(path.join(__dirname, "..", "caixa-de-saida.js"), "utf8");
-  const posEntregue = CAIXA.indexOf("marcarMensagemPendenteEnviada");
-  const posEfeito = CAIXA.indexOf("aplicarEfeito(atual.efeitoAposEnvio)");
-  ok(posEntregue > 0 && posEfeito > posEntregue
-    && /efeitoAposEnvio: \{ tipo: "marcar_apresentacao", telefone \}/.test(SERVER),
-  "6e. marca a apresentação como efeito posterior à entrega");
+  // A marcação só pode acontecer DEPOIS do envio: marcar antes faria o número perder a
+  // apresentação por causa de uma falha de rede, e ele nunca mais ouviria.
+  const posEnvio = SERVER.indexOf("await enviarResposta(sock, jid, telefone, resultado.resposta, semAtraso);");
+  const posMarca = SERVER.indexOf("Storage.marcarApresentacao(telefone)");
+  ok(posEnvio > 0 && posMarca > posEnvio, "6e. marca a apresentação só depois de a mensagem sair");
 
   ok(/precisaSeApresentar = false/.test(CEREBRO), "6f. o cérebro recebe a decisão, e o padrão é não apresentar");
   ok(/o atendimento automático do consultório do Dr\. Bruno 😊/.test(CEREBRO), "6g. e sabe o que dizer");

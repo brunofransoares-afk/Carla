@@ -20,7 +20,6 @@ const Ordem = require(path.join(__dirname, "ordem-dos-horarios.js"));
 const ComandoDeSilencio = require(path.join(__dirname, "comando-de-silencio.js"));
 const Prazo = require(path.join(__dirname, "prazo-de-pagamento.js"));
 const Preco = require(path.join(__dirname, "preco-da-consulta.js"));
-const { recuperarAposFalha } = require(path.join(__dirname, "recuperacao-apos-falha.js"));
 
 // Sonnet em vez de Haiku aqui de propósito: esse módulo conduz a conversa inteira e
 // orquestra várias ferramentas em sequência (consultar horário, pedir nomes, confirmar) —
@@ -604,24 +603,11 @@ async function executarFerramenta(nome, input, ctx) {
     // Devolve o agendamento criado, não só true: se a família adiantou e-mail ou data de
     // nascimento antes de ter horário, esses dados foram colados aqui e precisam seguir
     // pro prontuário na mesma tacada (senão a ficha da criança não é criada).
-    let ok;
-    try {
-      ok = Storage.reservar({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca, telefone: ctx.telefone, googleEventId });
-    } catch (erro) {
-      // O evento já existe no Google. Se a persistência local falhar com exceção, desfaz o
-      // evento antes de propagar a falha, senão nasce um compromisso órfão na agenda.
-      if (googleEventId) await GoogleAgenda.cancelarEvento(googleEventId);
-      throw erro;
-    }
+    const ok = Storage.reservar({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca, telefone: ctx.telefone, googleEventId });
     if (!ok) {
       if (googleEventId) await GoogleAgenda.cancelarEvento(googleEventId);
       return { sucesso: false, motivo: "Esse horário já foi reservado por outra família. Consulte novamente e ofereça outra opção." };
     }
-
-    // Registra o efeito assim que a reserva local existe. Tudo abaixo é enriquecimento e
-    // integração secundária: uma falha posterior não pode fazer a ação desaparecer.
-    const acaoRealizada = { slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca };
-    ctx.acoesRealizadas.push(acaoRealizada);
 
     // Manda uma cópia pro Sistema Pediátrico Integrado (fail-open — ver app-agenda.js).
     // DEPOIS da reserva local dar certo, de propósito: antes, se duas famílias disputassem
@@ -646,6 +632,7 @@ async function executarFerramenta(nome, input, ctx) {
       ctx.dadosDoPacienteRegistrados = { email: ok.responsavelEmail || null, dataNascimento: ok.criancaDataNascimento || null };
     }
 
+    ctx.acoesRealizadas.push({ slot: slotFinal, responsavel: input.responsavel, crianca: input.crianca });
     // O prazo de pagamento vem calculado, não deduzido por ela: é conta com data, hora e
     // dia da semana, e errar aqui é combinar com a família um prazo que não existe.
     const prazo = Prazo.prazoDePagamento(slotFinal, ctx.now);
@@ -663,15 +650,6 @@ async function executarFerramenta(nome, input, ctx) {
       prazoPagamento: prazo.texto,
       pagarAgora: prazo.agora,
     };
-
-    // Guarda também tudo que uma resposta determinística precisa. Se a reserva funcionar e
-    // a chamada seguinte à IA cair, o servidor não pode esquecer a ação nem deixar a família
-    // sem horário, valor e prazo de pagamento.
-    Object.assign(acaoRealizada, {
-      valorDaConsulta: preco.reais,
-      prazoPagamento: prazo.texto,
-      pagarAgora: prazo.agora,
-    });
 
     return resposta;
   }
@@ -891,14 +869,13 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     respostaTexto = await chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx });
   } catch (erro) {
     console.error("[IA] Erro ao gerar resposta:", erro.message);
-    const efeitos = ctx.acoesRealizadas.length
-      + ctx.cancelamentosRealizados.length
-      + (ctx.dadosDoPacienteRegistrados ? 1 : 0)
-      + (ctx.escalar ? 1 : 0);
-    if (efeitos > 0) {
-      console.error(`[IA] A falha aconteceu depois de ${efeitos} efeito(s); usando resposta determinística de recuperação.`);
-    }
-    return recuperarAposFalha({ historico, texto, ctx });
+    return {
+      resposta: "Deu uma instabilidade aqui do meu lado, pode repetir sua mensagem?",
+      historico,
+      acoes: [],
+      cancelamentos: [],
+      escalar: null,
+    };
   }
 
   // Trava de segurança: nunca confia cegamente no texto da IA pra saber se um agendamento

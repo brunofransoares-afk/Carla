@@ -4,8 +4,6 @@
 
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
-const { escreverTextoAtomico, escreverJSONAtomico, lerJSONSeguro } = require("./arquivo-atomico.js");
 
 // Garante CARLA_CONFIG (global) antes do Agenda, que depende dele — precisa disso aqui
 // porque o painel (painel-server.js) usa este arquivo sem nunca ter carregado config.js.
@@ -25,7 +23,6 @@ const ARQ_PACIENTES_MANUAIS = path.join(DIR_DADOS, "pacientes-manuais.json");
 const ARQ_NAO_PACIENTES_MANUAIS = path.join(DIR_DADOS, "nao-pacientes-manuais.json");
 const ARQ_HORARIOS_EXTRAS = path.join(DIR_DADOS, "horarios-extras.json");
 const ARQ_DADOS_PENDENTES = path.join(DIR_DADOS, "dados-pendentes.json");
-const ARQ_MENSAGENS_PENDENTES = path.join(DIR_DADOS, "mensagens-pendentes.json");
 
 function garantirPasta() {
   if (!fs.existsSync(DIR_DADOS)) fs.mkdirSync(DIR_DADOS, { recursive: true });
@@ -33,12 +30,17 @@ function garantirPasta() {
 
 function lerJSON(caminho, padrao) {
   garantirPasta();
-  return lerJSONSeguro(caminho, padrao);
+  if (!fs.existsSync(caminho)) return padrao;
+  try {
+    return JSON.parse(fs.readFileSync(caminho, "utf8"));
+  } catch {
+    return padrao;
+  }
 }
 
 function escreverJSON(caminho, dados) {
   garantirPasta();
-  escreverJSONAtomico(caminho, dados);
+  fs.writeFileSync(caminho, JSON.stringify(dados, null, 2), "utf8");
 }
 
 function lerAgendamentos() {
@@ -216,7 +218,7 @@ function reescreverCSV(lista) {
     ]),
   ];
   const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
-  escreverTextoAtomico(ARQ_AGENDAMENTOS_CSV, "﻿" + csv);
+  fs.writeFileSync(ARQ_AGENDAMENTOS_CSV, "﻿" + csv, "utf8");
 }
 
 // E-mail do responsável e data de nascimento da criança que a família mandou ANTES de
@@ -532,65 +534,6 @@ function limparConversa(telefone) {
   escreverJSON(ARQ_SESSOES, sessoes);
 }
 
-// Caixa de saída durável. A sessão pode avançar depois de uma reserva ou cancelamento, mas
-// a mensagem que explica isso não pode desaparecer se o WhatsApp falhar ou o processo cair.
-function listarMensagensPendentes(telefone = null) {
-  const todas = lerJSON(ARQ_MENSAGENS_PENDENTES, []);
-  return telefone ? todas.filter((m) => m.telefone === telefone) : todas;
-}
-
-function registrarMensagemPendente({ telefone, jid, texto, efeitoAposEnvio = null, chaveIdempotencia = null }) {
-  const lista = listarMensagensPendentes();
-  if (chaveIdempotencia) {
-    const existente = lista.find((m) => m.chaveIdempotencia === chaveIdempotencia);
-    if (existente) return existente;
-  }
-  const item = {
-    id: crypto.randomUUID(),
-    telefone,
-    jid,
-    texto,
-    criadaEm: new Date().toISOString(),
-    enviadaEm: null,
-    tentativas: 0,
-    ultimoErro: null,
-    efeitoAposEnvio,
-    chaveIdempotencia,
-  };
-  lista.push(item);
-  escreverJSON(ARQ_MENSAGENS_PENDENTES, lista);
-  return item;
-}
-
-function marcarMensagemPendenteEnviada(id) {
-  const lista = listarMensagensPendentes();
-  const item = lista.find((m) => m.id === id);
-  if (!item) return null;
-  if (!item.enviadaEm) item.enviadaEm = new Date().toISOString();
-  item.ultimoErro = null;
-  escreverJSON(ARQ_MENSAGENS_PENDENTES, lista);
-  return item;
-}
-
-function marcarFalhaMensagemPendente(id, erro) {
-  const lista = listarMensagensPendentes();
-  const item = lista.find((m) => m.id === id);
-  if (!item) return false;
-  item.tentativas = (item.tentativas || 0) + 1;
-  item.ultimoErro = String(erro && erro.message ? erro.message : erro || "erro desconhecido").slice(0, 300);
-  item.ultimaTentativaEm = new Date().toISOString();
-  escreverJSON(ARQ_MENSAGENS_PENDENTES, lista);
-  return true;
-}
-
-function removerMensagemPendente(id) {
-  const lista = listarMensagensPendentes();
-  const nova = lista.filter((m) => m.id !== id);
-  if (nova.length === lista.length) return false;
-  escreverJSON(ARQ_MENSAGENS_PENDENTES, nova);
-  return true;
-}
-
 // Últimos contatos pro painel: um por telefone, ordenado do mais recente pro mais antigo.
 // Só entra quem já tem "ultimaAtividade" registrada (server.js carimba isso a cada
 // mensagem processada) — sessões antigas sem esse campo simplesmente não aparecem.
@@ -819,6 +762,4 @@ module.exports = {
   ehPacienteNoPainel, jaSeApresentou, marcarApresentacao,
   lerPacientesManuais, lerNaoPacientesManuais, marcarPacienteManual, desmarcarPacienteManual,
   retomarAtendimento, limparConversa,
-  listarMensagensPendentes, registrarMensagemPendente, marcarMensagemPendenteEnviada,
-  marcarFalhaMensagemPendente, removerMensagemPendente,
 };
