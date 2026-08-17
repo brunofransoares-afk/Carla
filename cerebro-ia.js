@@ -26,6 +26,13 @@ const Preco = require(path.join(__dirname, "preco-da-consulta.js"));
 // um raciocínio mais demorado do que a classificação simples que a IA fazia antes.
 const MODELO = "claude-sonnet-5";
 const DIA_NOME_PARA_NUMERO = { segunda: 1, terca: 2, quinta: 4, sexta: 5 };
+
+// Vai junto de TODA resposta de consultar_horarios. A ferramenta devolve no máximo 2
+// horários, escolhidos pelo critério daquela chamada — então duas chamadas seguidas com
+// critérios diferentes devolvem conjuntos diferentes, e os dois estão certos. A Carla lia
+// isso como contradição: negava a existência de um horário só porque ele não veio na
+// última lista, e pedia desculpa por um horário verdadeiro que ela mesma tinha oferecido.
+const LIMITE_DA_LISTA = "Esta lista traz no máximo 2 horários, escolhidos pelo critério desta chamada. NÃO é a agenda inteira. Um horário não aparecer aqui NÃO significa que ele não existe nem que ele foi ocupado. Outra chamada, com outro critério, devolve outros horários igualmente verdadeiros. NUNCA diga que um dia não tem vaga baseado nesta lista, e NUNCA se retrate de um horário que você já ofereceu por ele não aparecer aqui.";
 const DIACRITICOS_REGEX = new RegExp("[" + String.fromCharCode(0x0300) + "-" + String.fromCharCode(0x036f) + "]", "g");
 
 let cliente = null;
@@ -156,6 +163,15 @@ Quando perguntarem sobre o motivo da consulta, conduza leve, tipo "Claro 😊 Me
 QUEM PEDE PRA AGENDAR SEM DIZER O MOTIVO: pergunte o caso, e SÓ o caso. Essa mensagem não leva horário junto. Nada de "enquanto isso já te adianto", "enquanto você me conta" ou qualquer jeito de emendar as duas coisas: a família responde uma só, e quase sempre é a pergunta. Assim que ela contar o caso, a MENSAGEM SEGUINTE já vai com os dois horários, sem perguntar dia nem período (ver AGENDAMENTO, logo abaixo). O motivo vem antes porque ele muda quais horários você busca: quem está com febre hoje precisa de urgente=true e uma rotina não, então oferecer antes de saber é chutar. E horário oferecido cedo demais você não pode repetir depois (ver NÃO FIQUE COBRANDO A MESMA COISA).
 
 AGENDAMENTO: assim que souber o motivo da consulta, chame consultar_horarios IMEDIATAMENTE, sem perguntar dia ou período antes. Mesmo que a pessoa não tenha dito nenhuma preferência, chame a ferramenta sem esses filtros e ofereça os 2 horários reais que ela devolver. Nunca pergunte "qual dia você prefere" ou "que período fica melhor" antes de consultar; conduza você, direto: "Tenho segunda às 10h ou quinta às 14h. Qual fica melhor?" Só pergunte por um dia/período específico se a pessoa pedir algo diferente dos 2 horários já oferecidos (aí sim, consulte de novo com esse filtro). Nunca invente ou assuma horário livre, mesmo que pareça óbvio pela grade semanal, sempre confie no que a ferramenta devolver. Ofereça no máximo 2 opções por vez, nunca liste a semana toda.
+
+A LISTA DE HORÁRIOS NÃO É A AGENDA INTEIRA. A ferramenta devolve no máximo 2 horários, escolhidos pelo critério daquela chamada. Duas chamadas seguidas com critérios diferentes devolvem conjuntos diferentes, e TODOS estão certos ao mesmo tempo: a segunda não corrige a primeira. Disso saem três proibições:
+- NUNCA diga que um dia não tem vaga porque ele não apareceu na lista. Ausência não é inexistência. Se a família insistir num dia, chame consultar_horarios COM data=aquele dia antes de dizer qualquer coisa sobre ele, e só negue se a ferramenta voltar vazia PARA AQUELA DATA.
+- NUNCA se retrate de um horário que você já ofereceu. Se ele saiu da ferramenta, ele era verdadeiro quando saiu. Resultado novo não é prova de que o anterior estava errado, e você não erra por a lista ter mudado.
+- NUNCA peça desculpa por "confusão nos horários" nem diga "conferindo agora certinho", "cometi um erro", "na verdade o que tenho é". Isso destrói a confiança da família na agenda inteira, e quase sempre está corrigindo uma coisa que estava certa.
+
+QUANDO A FAMÍLIA JÁ ESCOLHEU, PARE DE CONSULTAR. Se ela escolheu um dos horários que VOCÊ ofereceu ("amanhã às 9h30", "pode ser o das 11h"), esse horário está escolhido: siga pro próximo passo (nomes, valor, confirmar_agendamento com o slotId dele). NÃO chame consultar_horarios de novo pra "conferir": a ferramenta vai devolver outro conjunto, você vai achar que se contradisse, e a família vai embora. Só volte a consultar se ELA pedir outro dia/horário, ou se confirmar_agendamento falhar dizendo que o horário não está mais livre.
+
+QUANDO VIER "alternativas" NA RESPOSTA DA FERRAMENTA: aqueles NÃO são do dia ou período que a família pediu. Ofereça primeiro os de "horarios". Se precisar oferecer uma alternativa, diga que é outro dia, com todas as letras ("amanhã não tenho de manhã, mas tenho hoje às 14h"). Nunca junte os dois numa frase só como se fossem a mesma coisa.
 
 NÃO FIQUE COBRANDO A MESMA COISA: assim que você pede alguma coisa pra família, esse pedido fica valendo sozinho. Ela leu. Vale pra qualquer pedido seu: escolher entre os horários oferecidos, o nome do responsável e da criança, a forma de pagamento, o e-mail, a data de nascimento. Se a mensagem seguinte dela vier com OUTRA coisa (uma pergunta sobre convênio, uma dúvida de retorno ou atestado, um comentário sobre o sintoma da criança, o motivo da urgência, qualquer coisa), responda SÓ o que ela trouxe, com empatia se for o caso, e pare por aí.
 
@@ -431,6 +447,19 @@ const FERRAMENTAS = [
   },
 ];
 
+// Loga o que a ferramenta RESPONDEU, não só o que foi perguntado. Sem isso, investigar uma
+// conversa em que a Carla se contradiz sobre horário obriga a reconstruir a agenda de cabeça:
+// dá pra ver que ela chamou consultar_horarios quatro vezes, mas não o que voltou em cada uma
+// — que é justamente a informação que diz se o erro foi da agenda ou da leitura dela.
+function registrarSaidaDaFerramenta(nome, saida) {
+  try {
+    console.log(`[FERRAMENTA ->] ${nome}: ${JSON.stringify(saida)}`);
+  } catch (erro) {
+    console.log(`[FERRAMENTA ->] ${nome}: (não deu pra serializar: ${erro.message})`);
+  }
+  return saida;
+}
+
 async function executarFerramenta(nome, input, ctx) {
   console.log(`[FERRAMENTA] ${nome}(${JSON.stringify(input)})`);
   if (nome === "consultar_horarios") {
@@ -492,10 +521,15 @@ async function executarFerramenta(nome, input, ctx) {
         ? { horarios: [], aviso: "Não há horário livre dentro do horizonte de agenda visível." }
         : { horarios: livresUrgente.map((s) => ({ slotId: s.id, label: s.label })) };
       if (livresUrgente.length > 0) {
+        // "os mais próximos" ≠ "os únicos". A frase antiga terminava em "de verdade", que a
+        // Carla lia como lista fechada: pediram amanhã, ela chamou urgente, voltou só hoje, e
+        // ela respondeu "não tenho vaga amanhã" — sobre um horário de amanhã que existia e que
+        // ela mesma tinha oferecido minutos antes.
         resultadoUrgente.aviso = temEstaSemana
-          ? "Esses são os horários mais próximos disponíveis de verdade."
+          ? "Esses são os 2 horários mais PRÓXIMOS. Não são os únicos: existem outros mais adiante que não cabem nesta lista."
           : "ATENÇÃO: nenhum desses horários é dentro desta semana. Não há vaga essa semana. Avise a família com transparência antes de oferecer esses horários mais distantes.";
       }
+      resultadoUrgente.escopo = LIMITE_DA_LISTA;
       if (ctx.agendamentoAtual) {
         resultadoUrgente.atencao = `Você JÁ TEM uma consulta confirmada nesta conversa: ${ctx.agendamentoAtual.crianca}, ${ctx.agendamentoAtual.label}. Isso é uma lembrança de mais cedo nesta conversa, pode estar desatualizada (ex: cancelada por outro caminho). Se não for claramente relevante agora, não mencione; se a família duvidar, confira com cancelar_agendamento apenasConsultar=true.`;
       }
@@ -509,11 +543,24 @@ async function executarFerramenta(nome, input, ctx) {
     // depois de checar o Google Agenda — só ficam os 2 primeiros que passarem nas duas checagens.
     // A ordem entre grade e extras é decidida em ordem-dos-horarios.js: horário aberto no
     // painel é horário de verdade e concorre igual, senão nunca chega a ser oferecido.
-    const candidatos = Ordem.ordenarCandidatos(
-      Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida, count: 6 }),
-      Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida }),
-      { diaPreferido, periodo, dataPreferida },
-    );
+    const filtros = { diaPreferido, periodo, dataPreferida };
+    const pediuAlgo = diaPreferido !== null || periodo !== null || dataPreferida !== null;
+    const slotsGrade = Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { ...filtros, count: 6 });
+    const slotsExtras = Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, filtros);
+    const candidatos = Ordem.ordenarCandidatos(slotsGrade, slotsExtras, filtros);
+
+    // QUEM BATE COM O PEDIDO E QUEM É SÓ ALTERNATIVA. A grade não filtra de verdade: ela põe
+    // na frente o que bate e COMPLETA com o resto até o total pedido (ver ordem-dos-horarios.js).
+    // Isso é de propósito, pra família nunca ficar sem alternativa. O defeito era este resultado
+    // sair com os dois misturados num array só, sem marca nenhuma: um pedido de "amanhã" voltava
+    // "amanhã 9h30" e "hoje 14h" lado a lado, e a Carla oferecia os dois como se os dois fossem
+    // amanhã. Na conversa seguinte a mistura vinha diferente e ela se retratava de um horário
+    // que nunca esteve errado. Agora a alternativa vem separada e rotulada.
+    //
+    // A conta de quem bate mora em ordem-dos-horarios.js, junto da ordenação que a produz,
+    // e por isso roda em teste sem precisar do agenda.js.
+    const idsQueBatem = Ordem.idsQueBatem(slotsGrade, slotsExtras, filtros);
+
     const livres = [];
     for (const c of candidatos) {
       if (livres.length >= 2) break;
@@ -522,9 +569,25 @@ async function executarFerramenta(nome, input, ctx) {
       if (googleLivre === false) continue;
       livres.push(c);
     }
-    const resultado = livres.length === 0
-      ? { horarios: [], aviso: "Não há horário livre nesse critério dentro do horizonte de agenda visível." }
-      : { horarios: livres.map((s) => ({ slotId: s.id, label: s.label })) };
+    const paraIA = (s) => ({ slotId: s.id, label: s.label });
+    const { batem, naoBatem } = Ordem.separar(livres, idsQueBatem, pediuAlgo);
+
+    const resultado = { horarios: batem.map(paraIA) };
+    if (naoBatem.length > 0) {
+      resultado.alternativas = naoBatem.map(paraIA);
+      resultado.sobreAsAlternativas = batem.length === 0
+        ? "ATENÇÃO: NENHUM horário livre no que a família pediu. Os de 'alternativas' são de OUTRO dia ou período. Pode oferecer, mas dizendo que são de outro dia. Nunca ofereça como se fossem o que ela pediu."
+        : "Os de 'alternativas' NÃO são do dia/período que a família pediu. Ofereça primeiro os de 'horarios'; a alternativa só se ela recusar, e sempre dizendo que é outro dia.";
+    }
+    if (batem.length === 0 && naoBatem.length === 0) {
+      resultado.aviso = "Não há horário livre nesse critério dentro do horizonte de agenda visível.";
+    }
+
+    // A LISTA NÃO É A AGENDA INTEIRA. Ela traz no máximo 2, e cada chamada usa um critério
+    // diferente, então duas chamadas seguidas devolvem conjuntos diferentes — todos corretos.
+    // Sem esta linha a Carla lia ausência como inexistência e dizia "não tenho vaga amanhã"
+    // sobre um horário que ela mesma tinha oferecido dois minutos antes.
+    resultado.escopo = LIMITE_DA_LISTA;
     if (ctx.agendamentoAtual) {
       resultado.atencao = `Você JÁ TEM uma consulta confirmada nesta conversa: ${ctx.agendamentoAtual.crianca}, ${ctx.agendamentoAtual.label}. Isso é uma lembrança de mais cedo nesta conversa, pode estar desatualizada (ex: cancelada por outro caminho). Se não for claramente relevante agora, não mencione. Só volte a usar horários se for pra agendar uma consulta ADICIONAL de verdade (outro filho, por exemplo). Se a pergunta da família era sobre outra coisa (forma de pagamento, endereço etc), ignore esses horários e responda o que foi perguntado. Se a família duvidar que essa consulta ainda existe, confira com cancelar_agendamento apenasConsultar=true antes de responder.`;
     }
@@ -835,7 +898,7 @@ async function chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx,
     const resultadosFerramentas = [];
     for (const bloco of resposta.content) {
       if (bloco.type !== "tool_use") continue;
-      const resultado = await executarFerramenta(bloco.name, bloco.input, ctx);
+      const resultado = registrarSaidaDaFerramenta(bloco.name, await executarFerramenta(bloco.name, bloco.input, ctx));
       resultadosFerramentas.push({ type: "tool_result", tool_use_id: bloco.id, content: JSON.stringify(resultado) });
     }
     mensagens.push({ role: "user", content: resultadosFerramentas });

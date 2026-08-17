@@ -14,9 +14,16 @@
 
 // Anota os horários que a ferramenta acabou de devolver. Devolve o mesmo resultado, pra
 // dar pra usar direto no return de quem chama.
+// As alternativas contam igual: elas são horários reais que a ferramenta devolveu, só que de
+// outro dia/período do que a família pediu. Se a família aceitar uma delas, a Carla precisa
+// poder marcar — sem isso o confirmar_agendamento recusaria um horário que a própria
+// ferramenta ofereceu.
 function anotarOferta(ctx, resultado) {
-  for (const h of (resultado && resultado.horarios) || []) {
-    if (h && h.slotId) ctx.horariosOferecidos.add(h.slotId);
+  const listas = [(resultado && resultado.horarios) || [], (resultado && resultado.alternativas) || []];
+  for (const lista of listas) {
+    for (const h of lista) {
+      if (h && h.slotId) ctx.horariosOferecidos.add(h.slotId);
+    }
   }
   return resultado;
 }
