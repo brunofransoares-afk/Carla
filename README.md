@@ -171,13 +171,14 @@ evento no Google Agenda), ela também manda uma cópia desse agendamento pro
 Sistema Pediátrico Integrado — outro projeto, separado deste, que cuida do
 prontuário do paciente.
 
-Precisa de três variáveis no `.env`:
+Precisa de duas variáveis no `.env`:
 - `APP_SUPABASE_URL` — URL do projeto Supabase do Sistema Pediátrico Integrado
-- `APP_OWNER_ID` — identificador do Dr. Bruno dentro daquele sistema
-- `APP_SERVICE_ROLE_KEY` — chave `service_role` do Supabase (acesso de servidor,
-  não expor em lugar nenhum além do `.env`)
+- `APP_CARLA_SECRET` — o mesmo segredo dedicado configurado como
+  `CARLA_WEBHOOK_SECRET` na Edge Function. Se `PORTAL_WEBHOOK_SECRET` já estiver
+  configurado com esse valor, ele é reutilizado automaticamente e
+  `APP_CARLA_SECRET` pode ser omitido.
 
-Sem as três configuradas, esse envio fica completamente inerte — a Carla
+Sem a URL e um desses segredos, esse envio fica completamente inerte — a Carla
 segue confirmando e gravando o agendamento normalmente aqui e no Google
 Agenda, só não manda nada pro outro sistema. **Quando falta alguma, aparece um
 aviso no `pm2 logs carla-bot`** dizendo qual: antes ele saía calado, e a cópia
@@ -194,20 +195,12 @@ numa mensagem seguinte. Quando isso acontece, a Carla também manda pro outro
 sistema — e é isso que cria a **ficha do paciente** no prontuário e monta o
 **acesso do responsável ao portal da criança**.
 
-**Não precisa de variável nova.** Esse envio fala com uma Edge Function, que aceita
-duas formas de autenticar: o segredo combinado ou a `service_role` que já está
-neste `.env`. Sem o segredo, ele usa a `service_role` e funciona.
-
-Opcionalmente, quando der:
-- `APP_CARLA_SECRET` — o mesmo valor do `CARLA_WEBHOOK_SECRET` que está nos
-  secrets do Supabase daquele projeto
-
-Se essa variável existir, ela passa a ser usada em vez da `service_role`, sem
-mexer em código. Vale fazer um dia porque a `service_role` lê e escreve o
-prontuário inteiro de qualquer paciente, enquanto esse segredo só marca e
-completa consulta — mas só faz diferença de verdade quando a `service_role` sair
-deste servidor de vez (o `enviarAgendamento` ainda depende dela). Enquanto ela
-estiver aqui, exigir o segredo não protegeria nada.
+**Não precisa de variável nova.** Criar, completar e cancelar falam exclusivamente
+com a Edge Function usando `APP_CARLA_SECRET` ou o `PORTAL_WEBHOOK_SECRET` já
+existente. A Carla não usa `APP_SERVICE_ROLE_KEY` nem `APP_OWNER_ID`; esses valores
+antigos podem ser retirados do servidor depois da validação em produção. A chave
+administrativa continua somente dentro do Supabase, onde a função a usa após
+validar o segredo estreito da integração.
 
 Do outro lado, o acesso ao portal nasce **desligado**: o e-mail chegou digitado
 no WhatsApp, sem verificação, e um dígito errado que caia numa caixa real daria

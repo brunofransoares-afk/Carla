@@ -46,8 +46,8 @@ function limpar() {
 function configurar() {
   process.env.APP_SUPABASE_URL = "https://exemplo.supabase.co";
   process.env.APP_CARLA_SECRET = "segredo-combinado";
-  process.env.APP_OWNER_ID = "medico-uuid";
-  process.env.APP_SERVICE_ROLE_KEY = "service-role";
+  delete process.env.PORTAL_WEBHOOK_SECRET;
+  process.env.APP_SERVICE_ROLE_KEY = "service-role-antiga-que-nao-pode-ser-usada";
 }
 
 (async function () {
@@ -98,27 +98,25 @@ function configurar() {
   ok(avisos.some((a) => /appAgendamentoId/.test(a)),
     "4: AVISA no log — sem isso o dado desaparece calado");
 
-  // ------------- 5. sem o segredo, usa a service role que já está no servidor
-  // Não exigir o segredo é uma decisão consciente: a service role JÁ está neste `.env` e
-  // já vai pra rede em cada agendamento. Exigir uma variável nova não protegeria nada e
-  // travaria a integração num passo manual no servidor.
+  // ------------- 5. reaproveita o segredo da comunicação inversa; nunca a service role
   limpar();
   delete process.env.APP_CARLA_SECRET;
+  process.env.PORTAL_WEBHOOK_SECRET = "segredo-do-portal";
   await AppAgenda.completarDadosDoPaciente({ appAgendamentoId: "ag-1", email: "ana@exemplo.com" });
-  eq(chamadas.length, 1, "5: sem o segredo, ainda chama");
-  eq(chamadas[0].headers.Authorization, "Bearer service-role",
-    "5: cai para a service role no Bearer");
-  ok(!chamadas[0].headers["X-Carla-Secret"], "5: e não manda header de segredo vazio");
-  eq(avisos.length, 0, "5: isso é caminho previsto, não avisa nada");
+  eq(chamadas.length, 1, "5: sem APP_CARLA_SECRET, ainda chama");
+  eq(chamadas[0].headers["X-Carla-Secret"], "segredo-do-portal",
+    "5: usa PORTAL_WEBHOOK_SECRET, que já protege a direção inversa");
+  ok(!chamadas[0].headers.apikey && !chamadas[0].headers.Authorization,
+    "5: não envia service role nem como fallback");
 
-  // sem NENHUM dos dois: aí sim está desligado, e avisa uma vez só
+  // Sem nenhum segredo estreito: fica desligado, mesmo que a chave mestra ainda exista.
   limpar();
-  delete process.env.APP_SERVICE_ROLE_KEY;
+  delete process.env.PORTAL_WEBHOOK_SECRET;
   await AppAgenda.completarDadosDoPaciente({ appAgendamentoId: "ag-1", email: "ana@exemplo.com" });
   await AppAgenda.completarDadosDoPaciente({ appAgendamentoId: "ag-2", email: "b@exemplo.com" });
   await AppAgenda.completarDadosDoPaciente({ appAgendamentoId: "ag-3", email: "c@exemplo.com" });
   eq(chamadas.length, 0, "5: sem nenhum meio de autenticar, não chama");
-  eq(avisos.filter((a) => /APP_CARLA_SECRET|APP_SERVICE_ROLE_KEY/.test(a)).length, 1,
+  eq(avisos.filter((a) => /APP_CARLA_SECRET|PORTAL_WEBHOOK_SECRET/.test(a)).length, 1,
     "5: avisa UMA vez, não uma por mensagem (senão entope o log)");
   configurar();
 
@@ -146,16 +144,32 @@ function configurar() {
   eq(r, null, "7: erro de rede devolve null em vez de estourar");
   ok(errosLog.some((e) => /ENOTFOUND/.test(e)), "7: e loga o erro");
 
-  // ------------------- 8. o espelho do agendamento não regrediu
+  // ------------------- 8. criar agendamento também passa pela função estreita
   limpar();
-  await AppAgenda.enviarAgendamento({
+  respostaFalsa = { ok: true, agendamento_id: "ag-novo" };
+  r = await AppAgenda.enviarAgendamento({
     pacienteNome: "Miguel", responsavelNome: "Ana", telefone: "+5531900000000",
     inicio: new Date("2026-08-10T17:30:00Z"), fim: null,
   });
   const ca = chamadas[0];
-  ok(/\/rest\/v1\/agendamentos$/.test(ca.url), "8: enviarAgendamento continua na API REST");
-  eq(ca.headers.apikey, "service-role", "8: e continua usando a service role");
-  eq(JSON.parse(ca.body).origem, "carla", "8: origem carla preservada");
+  ok(/\/functions\/v1\/carla-agendamento$/.test(ca.url), "8: bate na Edge Function");
+  ok(!/\/rest\/v1\//.test(ca.url), "8: não escreve diretamente em tabela");
+  ok(!ca.headers.apikey && !ca.headers.Authorization, "8: não manda service role");
+  eq(ca.headers["X-Carla-Secret"], "segredo-combinado", "8: usa só o segredo dedicado");
+  eq(JSON.parse(ca.body).acao, "marcar", "8: ação marcar");
+  eq(r, "ag-novo", "8: devolve o id criado pelo SPI");
+
+  // ------------------- 9. cancelamento também não toca no PostgREST
+  limpar();
+  await AppAgenda.cancelarAgendamento("ag-novo");
+  const cc = chamadas[0];
+  eq(cc.method, "POST", "9: cancelamento é POST na função");
+  ok(/\/functions\/v1\/carla-agendamento$/.test(cc.url), "9: cancela pela Edge Function");
+  ok(!/\/rest\/v1\//.test(cc.url), "9: não atualiza tabela diretamente");
+  eq(JSON.parse(cc.body).acao, "cancelar", "9: ação cancelar");
+  eq(JSON.parse(cc.body).agendamento_id, "ag-novo", "9: manda o id correto");
+  ok(!cc.headers.apikey && !cc.headers.Authorization,
+    "9: cancelamento também não manda service role");
 
   // ------------------------------------------------------------- fim
   console.log("app-agenda: " + passou + " passaram, " + falhou + " falharam");
