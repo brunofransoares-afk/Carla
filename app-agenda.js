@@ -1,7 +1,8 @@
 // Integração com o Sistema Pediátrico Integrado (prontuário): sempre que a Carla confirma um
-// agendamento, envia uma cópia pra lá também, via HTTP (API REST do Supabase), pra já existir
-// o registro do paciente sem precisar duplicar entrada manual depois. Também marca esse
-// registro como cancelado lá se o agendamento for cancelado por aqui ou pelo painel. Fail-open:
+// agendamento, envia uma cópia pra Edge Function protegida do SPI, pra já existir o registro
+// sem precisar duplicar entrada manual depois. Também marca esse registro como cancelado lá
+// se o agendamento for cancelado por aqui ou pelo painel. A Carla NÃO recebe chave
+// administrativa do banco: ela conhece apenas o segredo estreito desta integração. Fail-open:
 // se qualquer chamada falhar (serviço fora do ar, timeout, chave errada), só loga o erro e
 // segue — o agendamento aqui e no Google Agenda já foram feitos/desfeitos antes disso
 // acontecer, uma falha nesta integração nunca desfaz nem atrasa o resto.
@@ -21,54 +22,35 @@ function avisarUmaVez(chave, mensagem) {
   console.warn(`[APP AGENDA] ${mensagem}`);
 }
 
+function segredoIntegracao() {
+  // PORTAL_WEBHOOK_SECRET já autentica o SPI quando ele pede à Carla que avise a família.
+  // Aceitá-lo aqui evita criar/copy-paste de mais uma chave para as mesmas duas pontas.
+  return String(process.env.APP_CARLA_SECRET || process.env.PORTAL_WEBHOOK_SECRET || "").trim();
+}
+
 function configurado() {
-  const ok = !!(process.env.APP_SUPABASE_URL && process.env.APP_OWNER_ID && process.env.APP_SERVICE_ROLE_KEY);
+  const ok = !!(process.env.APP_SUPABASE_URL && segredoIntegracao());
   if (!ok) {
     avisarUmaVez("rest",
-      "Espelho no prontuário DESLIGADO: faltam APP_SUPABASE_URL, APP_OWNER_ID ou APP_SERVICE_ROLE_KEY.");
+      "Espelho no prontuário DESLIGADO: falta APP_SUPABASE_URL e/ou o segredo dedicado " +
+      "APP_CARLA_SECRET (PORTAL_WEBHOOK_SECRET também é aceito).");
   }
   return ok;
 }
 
-// A ação `completar` fala com uma Edge Function, que aceita DOIS jeitos de autenticar:
-// o segredo combinado (APP_CARLA_SECRET) ou a service role que já está aqui.
-//
-// O segredo é o caminho preferido — ele é o que vai permitir, um dia, tirar a service
-// role deste servidor, que é onde está o ganho de segurança de verdade. Mas exigir o
-// segredo HOJE não protegeria nada: a chave mais poderosa já está neste mesmo `.env`, e
-// é com ela que o enviarAgendamento escreve na tabela. Então a integração funciona com o
-// que já existe, e o segredo continua disponível para quando der pra fazer a troca certa.
-function configuradoFuncao() {
-  const ok = !!(process.env.APP_SUPABASE_URL &&
-    (process.env.APP_CARLA_SECRET || process.env.APP_SERVICE_ROLE_KEY));
-  if (!ok) {
-    avisarUmaVez("funcao",
-      "Envio de e-mail/nascimento pro prontuário DESLIGADO: falta APP_SUPABASE_URL, " +
-      "ou nenhum meio de autenticar (APP_CARLA_SECRET ou APP_SERVICE_ROLE_KEY).");
-  }
-  return ok;
-}
-
-// Cabeçalhos da API REST (PostgREST): autenticam com a service role, que passa por cima
-// de toda a RLS do banco do prontuário.
-function headersRest() {
-  const chave = process.env.APP_SERVICE_ROLE_KEY;
+// A única credencial que sai deste servidor para o SPI é o segredo dedicado. Nunca usa
+// service_role, nem como fallback: fallback de uma chave estreita para a chave mestra
+// desfaria justamente a proteção que esta ponte existe para dar.
+function headersFuncao() {
   return {
-    apikey: chave,
-    Authorization: `Bearer ${chave}`,
     "Content-Type": "application/json",
-    Prefer: "return=representation",
+    "X-Carla-Secret": segredoIntegracao(),
   };
 }
 
-// Cabeçalhos da Edge Function. Prefere o segredo combinado; se ele não estiver no `.env`,
-// usa a service role que já está aqui (a função aceita os dois). A ordem importa: no dia
-// em que o segredo for criado, a chamada passa a usar ele sozinha, sem mexer em código.
-function headersFuncao() {
-  const h = { "Content-Type": "application/json" };
-  if (process.env.APP_CARLA_SECRET) h["X-Carla-Secret"] = process.env.APP_CARLA_SECRET;
-  else h.Authorization = `Bearer ${process.env.APP_SERVICE_ROLE_KEY}`;
-  return h;
+function urlFuncao() {
+  return `${String(process.env.APP_SUPABASE_URL || "").replace(/\/+$/, "")}` +
+    "/functions/v1/carla-agendamento";
 }
 
 // Faz a requisição e devolve o corpo já parseado como JSON (ou null se a resposta vier vazia).
@@ -118,7 +100,7 @@ async function enviarAgendamento(dados) {
   if (!configurado()) return null;
   try {
     const corpo = JSON.stringify({
-      owner_id: process.env.APP_OWNER_ID,
+      acao: "marcar",
       paciente_nome: dados.pacienteNome,
       responsavel_nome: dados.responsavelNome || null,
       data_nascimento: dados.dataNascimento || null,
@@ -129,9 +111,8 @@ async function enviarAgendamento(dados) {
       origem: "carla",
       status: "agendado",
     });
-    const resultado = await requestJson(
-      `${process.env.APP_SUPABASE_URL}/rest/v1/agendamentos`, "POST", corpo, headersRest());
-    return resultado?.[0]?.id || null;
+    const resultado = await requestJson(urlFuncao(), "POST", corpo, headersFuncao());
+    return resultado?.agendamento_id || null;
   } catch (erro) {
     console.error("[APP AGENDA] Erro ao enviar agendamento pro Sistema Pediátrico Integrado:", erro.message);
     return null;
@@ -142,9 +123,8 @@ async function enviarAgendamento(dados) {
 async function cancelarAgendamento(appAgendamentoId) {
   if (!configurado() || !appAgendamentoId) return;
   try {
-    const corpo = JSON.stringify({ status: "cancelado" });
-    const url = `${process.env.APP_SUPABASE_URL}/rest/v1/agendamentos?id=eq.${encodeURIComponent(appAgendamentoId)}`;
-    await requestJson(url, "PATCH", corpo, headersRest());
+    const corpo = JSON.stringify({ acao: "cancelar", agendamento_id: appAgendamentoId });
+    await requestJson(urlFuncao(), "POST", corpo, headersFuncao());
   } catch (erro) {
     console.error("[APP AGENDA] Erro ao cancelar agendamento no Sistema Pediátrico Integrado:", erro.message);
   }
@@ -153,13 +133,12 @@ async function cancelarAgendamento(appAgendamentoId) {
 // Manda pro prontuário o e-mail do responsável e a data de nascimento da criança, que a
 // família responde DEPOIS da consulta já estar marcada.
 //
-// Por que aqui é Edge Function e não a API REST como o resto deste arquivo: escrever
-// direto na tabela só grava as colunas. Do outro lado, a ação `completar` faz o trabalho
+// A ação `completar` faz mais que gravar colunas: do outro lado ela executa o trabalho
 // que interessa — cria a ficha do paciente no prontuário (inferindo o sexo pelo primeiro
 // nome) e monta o acesso do responsável ao portal, DESLIGADO, esperando o toque do Dr.
 // Bruno. Nada disso acontece num INSERT de tabela.
 //
-// De brinde, esta chamada não usa a service role: só o segredo combinado. Se a VPS da
+// Assim como criar e cancelar, esta chamada usa apenas o segredo combinado. Se a VPS da
 // Carla for comprometida, um segredo que só marca consulta é muito menos grave que uma
 // chave que lê e escreve o prontuário inteiro de qualquer paciente.
 //
@@ -170,7 +149,7 @@ async function cancelarAgendamento(appAgendamentoId) {
 // dados: { appAgendamentoId, dataNascimento, email } — os dois últimos são opcionais,
 // mas pelo menos um precisa vir (a família pode responder um por vez).
 async function completarDadosDoPaciente(dados) {
-  if (!configuradoFuncao()) return null;
+  if (!configurado()) return null;
   if (!dados || !dados.appAgendamentoId) {
     // Sem o id do registro de lá não há o que completar. Acontece se o espelho do
     // agendamento falhou antes (ou está desligado); os dados continuam no CSV.
@@ -186,8 +165,7 @@ async function completarDadosDoPaciente(dados) {
       data_nascimento: dados.dataNascimento || undefined,
       responsavel_email: dados.email || undefined,
     });
-    const resposta = await requestJson(
-      `${process.env.APP_SUPABASE_URL}/functions/v1/carla-agendamento`, "POST", corpo, headersFuncao());
+    const resposta = await requestJson(urlFuncao(), "POST", corpo, headersFuncao());
 
     // A função responde 200 mesmo quando não deu pra criar a ficha (nome ambíguo, SQL
     // pendente). Logar o motivo é o que evita achar que funcionou quando não funcionou.
