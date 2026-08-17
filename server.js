@@ -15,6 +15,7 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
+  fetchLatestBaileysVersion,
 } = require("@whiskeysockets/baileys");
 
 require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
@@ -722,9 +723,19 @@ process.on("SIGTERM", () => encerrarComCalma("SIGTERM"));
 
 async function iniciar() {
   const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, "data", "auth"));
+  // O WhatsApp rejeita versões antigas do protocolo antes mesmo de gerar o QR. A versão
+  // embutida no pacote pode ficar defasada sem haver uma nova publicação no npm, então
+  // consulta a versão mantida pelo próprio Baileys a cada nova conexão.
+  const { version, isLatest, error: erroVersao } = await fetchLatestBaileysVersion();
+  if (isLatest) {
+    console.log(`[WHATSAPP] Usando versão de protocolo ${version.join(".")}.`);
+  } else {
+    console.warn(`[WHATSAPP] Não consegui consultar a versão atual; usando ${version.join(".")}: ${erroVersao?.message || "erro desconhecido"}`);
+  }
 
   const sock = makeWASocket({
     auth: state,
+    version,
     printQRInTerminal: false,
     syncFullHistory: true,
   });
