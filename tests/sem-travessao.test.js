@@ -50,7 +50,7 @@ function linhasQueACarlaLe(arquivo) {
 // ------------------------------------------------- 2. o que sai direto pro WhatsApp
 // Aqui não passa nem o travessão da regra: é texto que chega na família sem a IA no meio.
 {
-  for (const arquivo of ["avisos-texto.js", "oferta-de-horarios.js"]) {
+  for (const arquivo of ["avisos-texto.js", "oferta-de-horarios.js", "recuperacao-apos-falha.js"]) {
     const sobrando = linhasQueACarlaLe(arquivo).filter(({ texto }) => texto.includes("—"));
     ok(sobrando.length === 0,
       `2. ${arquivo} sem travessão (linha(s): ${sobrando.map((l) => l.n).join(", ")})`);
@@ -62,7 +62,9 @@ function linhasQueACarlaLe(arquivo) {
   // O \s+ é obrigatório: sem ele o regex casa com o `resposta:"` de dentro de um
   // console.error e engole a string de verdade, e o teste passa sem ter olhado nada.
   const respostasFixas = fonte.match(/resposta:\s+"[^"]*"/g) || [];
-  ok(respostasFixas.length >= 2, `2. achei as respostas fixas pra conferir (${respostasFixas.length})`);
+  // As respostas de recuperação agora vivem num módulo próprio, conferido inteiro acima.
+  // Aqui sobra a resposta fixa de indisponibilidade que ainda mora no cérebro.
+  ok(respostasFixas.length >= 1, `2. achei as respostas fixas do cérebro pra conferir (${respostasFixas.length})`);
   const comTravessao = respostasFixas.filter((r) => r.includes("—"));
   ok(comTravessao.length === 0,
     `2. as respostas fixas não usam travessão (${comTravessao.join(" | ")})`);

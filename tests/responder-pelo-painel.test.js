@@ -34,6 +34,7 @@ function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + "
 const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-escalada-")), "bot");
 fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "storage-node.js"));
+fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
 const IRMA = path.join(RAIZ, "..", "carla-app", "js");
 fs.mkdirSync(IRMA, { recursive: true });
 fs.writeFileSync(path.join(IRMA, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
