@@ -72,7 +72,7 @@ const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
   // se falhar, a família não pode nem perceber.
   const bloco = SERVER.slice(SERVER.indexOf("async function notificarAtencao"),
                              SERVER.indexOf("async function processarMensagem"));
-  ok(/const telefoneDrBruno = \(process\.env\.DR_BRUNO_TELEFONE \|\| ""\)\.trim\(\);\n  if \(!telefoneDrBruno\) return;/.test(bloco),
+  ok(/const telefoneDrBruno = \(process\.env\.DR_BRUNO_TELEFONE \|\| ""\)\.trim\(\);\r?\n  if \(!telefoneDrBruno\) return;/.test(bloco),
     "4. inerte sem DR_BRUNO_TELEFONE, igual às outras duas");
   ok(/catch \(erro\) \{/.test(bloco), "4b. o erro morre dentro da função");
   ok(/console\.error\("\[NOTIFICAÇÃO\] Erro ao chamar o Dr\. Bruno:"/.test(bloco),

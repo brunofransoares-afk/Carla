@@ -37,7 +37,7 @@ const ATUAL = fs.readFileSync(path.join(RAIZ, "cerebro-ia.js"), "utf8");
 // instalado na máquina onde os testes rodam. Então recorta só o pedaço que monta o prompt
 // e avalia esse pedaço sozinho.
 function extrairMontador(fonte) {
-  const linhas = fonte.split("\n");
+  const linhas = fonte.split(/\r?\n/);
   const inicio = linhas.findIndex((l) => /^const PROMPT_ESTAVEL = |^function montarSystemPrompt\(/.test(l));
   const daFuncao = linhas.findIndex((l) => /^function montarSystemPrompt\(/.test(l));
   if (inicio < 0 || daFuncao < 0) throw new Error("não achei montarSystemPrompt na fonte");
