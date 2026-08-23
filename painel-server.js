@@ -200,6 +200,37 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  // O FUNIL. Lê o registro de eventos (data/eventos.jsonl) e devolve já agregado, porque
+  // agregar no navegador significaria mandar o arquivo inteiro pra tela a cada 5 segundos.
+  //
+  // A conversão que sai daqui é a da BASE PARTICULAR, não a de todo mundo: quem chega
+  // perguntando de convênio nunca foi lead particular, e contar junto faz a conversão
+  // parecer pior do que é. O anel do painel passou a beber desta mesma fonte pra não
+  // existirem dois números diferentes na mesma tela.
+  // Caminho EXATO, não startsWith: com startsWith esta rota engoliria /api/funil.csv e o
+  // download nunca aconteceria (peguei isso acontecendo aqui).
+  if (new URL(req.url, "http://x").pathname === "/api/funil") {
+    const periodo = new URL(req.url, "http://x").searchParams.get("periodo") || "30d";
+    const { desde, ate, rotulo } = Eventos.periodoPara(periodo);
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    const f = Eventos.funil({ desde, ate });
+    // A lista de contatos crus não vai pro navegador: ela cresce sem teto e a tela não usa.
+    res.end(JSON.stringify({ ...f, contatos: undefined, periodo, rotulo }));
+    return;
+  }
+
+  // A planilha, pronta. É o que substitui alguém preenchendo à mão.
+  if (new URL(req.url, "http://x").pathname === "/api/funil.csv") {
+    const periodo = new URL(req.url, "http://x").searchParams.get("periodo") || "30d";
+    const { desde, ate } = Eventos.periodoPara(periodo);
+    res.writeHead(200, {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="funil-${periodo}.csv"`,
+    });
+    res.end(Eventos.csv({ desde, ate }));
+    return;
+  }
+
   if (req.url === "/api/dados") {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({
