@@ -13,6 +13,7 @@ const { exec } = require("child_process");
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
 const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
+const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const PainelWebhook = require(path.join(__dirname, "painel-webhook.js"));
 
 const PORTA = 3355;
@@ -340,6 +341,15 @@ const servidor = http.createServer(async (req, res) => {
     const corpo = await lerCorpoJSON(req);
     const pago = !!corpo.pago;
     const ok = corpo.slotId ? Storage.marcarPagamento(corpo.slotId, pago) : false;
+
+    // FUNIL, última etapa. Só na marcação, nunca na desmarcação: o registro é append-only e
+    // conta o que aconteceu. Desmarcar é correção de clique errado, não um pagamento que
+    // deixou de existir, e "desfazer" no funil exigiria reescrever linha, que é justamente
+    // o que este formato não faz.
+    if (ok && pago) {
+      const ag = Storage.lerAgendamentos().find((a) => a.slotId === corpo.slotId);
+      if (ag) Eventos.registrar("pagou", ag.telefone, { slotId: corpo.slotId });
+    }
 
     // Marcar como pago é o gatilho da confirmação: é o Dr. Bruno dizendo que viu o dinheiro
     // no extrato, e é o único momento em que a família pode ouvir que a consulta está

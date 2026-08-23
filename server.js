@@ -25,6 +25,7 @@ const CerebroIA = require(path.join(__dirname, "cerebro-ia.js"));
 const Avisos = require(path.join(__dirname, "avisos-texto.js"));
 const Previa = require(path.join(__dirname, "previa-de-link.js"));
 const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"));
+const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const { criarFilaPorChave } = require(path.join(__dirname, "fila-por-chave.js"));
 const { criarCaixaDeSaida } = require(path.join(__dirname, "caixa-de-saida.js"));
 
@@ -550,6 +551,9 @@ async function responderEscaladaNaFila(alertaId, resposta) {
 }
 
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
+  // Lido ANTES de qualquer coisa criar sessão: é o que diz se este número já falou com a
+  // Carla alguma vez. Vira o topo do funil, e só pode ser contado uma vez por número.
+  const jaTeveSessao = !!Storage.obterSessao(telefone);
   const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
   const now = new Date();
 
@@ -627,6 +631,19 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   // Antes de a IA rodar, porque ela vai escrever no histórico e aí não dá mais pra saber.
   const ehPrimeiraMensagemDaConversa = (sessao.historico || []).length === 0;
 
+  // FUNIL. Registra o que chegou e como isso se classifica. Fica DEPOIS da emergência, do
+  // silêncio manual e do comprovante de propósito: aquelas mensagens não são etapa de funil
+  // comercial, e contá-las inflaria o topo com quem já é paciente.
+  //
+  // "contato" só sai uma vez por número, na vida. É o topo do funil, e o teste de "nunca
+  // falou com a gente" é a sessão não existir ainda, o mesmo sinal que a apresentação usa.
+  if (!jaTeveSessao) Eventos.registrar("contato", telefone, {}, now);
+  Eventos.registrar("mensagem", telefone, {
+    classe: Eventos.classificar(texto),
+    trecho: Eventos.trecho(texto),
+    primeiraDaConversa: ehPrimeiraMensagemDaConversa,
+  }, now);
+
   const idsOcupados = Storage.idsOcupados();
   const resultado = await CerebroIA.responder({
     telefone, texto, historico: sessao.historico || [], now, idsOcupados,
@@ -665,16 +682,33 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   });
 
   sessao.historico = resultado.historico;
+  const horariosAntes = (sessao.horariosOferecidos || []).length;
   sessao.horariosOferecidos = resultado.horariosOferecidos || [];
+
+  // FUNIL, etapa do valor. Lê o TEXTO que sai, não uma flag da IA: é o que a família de
+  // fato recebeu. Sem isso eu dependeria de a IA se lembrar de sinalizar, que é justamente
+  // o tipo de coisa que ela esquece. Os dois valores possíveis estão nos FATOS do prompt.
+  if (resultado.resposta && /R\$\s?(550|800)/.test(resultado.resposta)) {
+    Eventos.registrar("preco_informado", telefone, {}, now);
+  }
+  // Etapa do horário: a lista de ofertas cresceu nesta rodada, ou seja, a ferramenta
+  // devolveu horário e ele foi parar na mensagem.
+  if ((resultado.horariosOferecidos || []).length > horariosAntes) {
+    Eventos.registrar("horarios_oferecidos", telefone, {
+      quantidade: (resultado.horariosOferecidos || []).length - horariosAntes,
+    }, now);
+  }
 
   for (const acao of resultado.acoes || []) {
     console.log(`[AGENDADO] ${acao.responsavel} / ${acao.crianca} em ${acao.slot.label}`);
     sessao.ultimoAgendamento = { crianca: acao.crianca, label: acao.slot.label };
+    Eventos.registrar("agendou", telefone, { crianca: acao.crianca, quando: acao.slot.label }, now);
     notificarNovoAgendamento(sock, acao, telefone);
   }
 
   for (const cancelado of resultado.cancelamentos || []) {
     console.log(`[CANCELADO PELA IA] ${telefone} — ${cancelado.crianca} em ${cancelado.label}`);
+    Eventos.registrar("cancelou", telefone, { crianca: cancelado.crianca }, now);
   }
 
   if (resultado.dadosDoPaciente) {
@@ -685,6 +719,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   if (resultado.escalar) {
     sessao.aguardandoHumano = true;
     sessao.aguardandoHumanoDesde = now.toISOString();
+    Eventos.registrar("escalou", telefone, { motivo: Eventos.trecho(resultado.escalar) }, now);
     // Usa o motivo que a própria IA escreveu (geralmente já inclui nome do responsável e da
     // criança, quando ela colheu isso antes de escalar) em vez da última mensagem crua —
     // é bem mais útil pra você conseguir retornar o contato sabendo do que se trata.
