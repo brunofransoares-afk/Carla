@@ -26,6 +26,7 @@ const Avisos = require(path.join(__dirname, "avisos-texto.js"));
 const Previa = require(path.join(__dirname, "previa-de-link.js"));
 const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"));
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
+const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
 const { criarFilaPorChave } = require(path.join(__dirname, "fila-por-chave.js"));
 const { criarCaixaDeSaida } = require(path.join(__dirname, "caixa-de-saida.js"));
 
@@ -250,6 +251,25 @@ function iniciarTravaInstancia() {
       });
       return;
     }
+    if (req.method === "POST" && req.url === "/interno/reaquecer") {
+      let corpo = "";
+      req.on("data", (p) => { corpo += p; });
+      req.on("end", async () => {
+        let dados = {};
+        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+        try {
+          const r = await reaquecerLead(dados.telefone);
+          res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(r));
+        } catch (erro) {
+          console.error("[REAQUECIDO] Erro:", erro.message);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, motivo: erro.message }));
+        }
+      });
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/interno/resposta-do-doutor") {
       let corpo = "";
       req.on("data", (p) => { corpo += p; });
@@ -546,6 +566,85 @@ async function responderEscaladaNaFila(alertaId, resposta) {
     return { ok: true };
   } catch (erro) {
     console.error("[RESPOSTA DO DOUTOR] Erro ao retomar a conversa:", erro.message);
+    return { ok: false, motivo: erro.message };
+  }
+}
+
+// REAQUECER UM LEAD. O Dr. Bruno aperta o botão no painel e a Carla manda UMA mensagem pra
+// uma família que sumiu sem fechar. Se ela responder, a conversa segue normal, sozinha.
+//
+// Mesmo desenho do responderEscalada: o painel não tem a conexão do WhatsApp, então ele
+// encaminha pra cá; o contexto entra pelo PROMPT DO SISTEMA, nunca como turno da conversa
+// (turno seria a Carla achando que a família disse aquilo); e o gatilho é um texto neutro
+// só pra a API ter um turno de usuário.
+//
+// O contexto é convertido em FATOS antes de sair daqui. Os turnos antigos não vão junto de
+// propósito: a limpeza das 4h existe pra impedir a Carla de retomar assunto velho do meio,
+// e ressuscitar a conversa traria esse defeito de volta junto com a memória.
+async function reaquecerLead(telefone) {
+  if (!telefone) return { ok: false, motivo: "Sem telefone." };
+  const jid = telefone.replace("+", "") + "@s.whatsapp.net";
+  const sessao = Storage.obterSessao(telefone);
+  if (!sessao) return { ok: false, motivo: "Esse número nunca falou com a Carla." };
+
+  const agora = new Date();
+  const doFunil = Eventos.funil().contatos.find((c) => c.telefone === telefone) || {};
+
+  // "Respondeu alguma vez" é o histórico ter turno da família. Quem só recebeu e nunca
+  // escreveu de volta não é lead esfriado, e é ali que mora o bloqueio de número.
+  const respondeuAlgumaVez = (sessao.historico || []).some((m) => m && m.role === "user");
+
+  const veredito = Reaquecimento.podeReaquecer({
+    silenciado: Storage.contatoSilenciado(telefone),
+    aguardandoHumano: !!sessao.aguardandoHumano,
+    temConsultaFutura: !!Storage.proximaConsultaDoTelefone(telefone, agora),
+    jaReaquecidoEm: sessao.reaquecidoEm || null,
+    ultimaAtividade: sessao.ultimaAtividade || null,
+    respondeuAlgumaVez,
+  }, agora);
+  if (!veredito.pode) return { ok: false, motivo: veredito.motivo };
+
+  const reaquecimento = {
+    fatos: Reaquecimento.montarContexto({
+      ultimaAtividade: sessao.ultimaAtividade,
+      primeiraPergunta: doFunil.primeiraPergunta || null,
+      recebeuPreco: !!doFunil.recebeuPreco,
+      recebeuHorario: !!doFunil.recebeuHorario,
+      crianca: (sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca) || null,
+    }, agora),
+    instrucao: Reaquecimento.montarInstrucao(),
+  };
+
+  // A conversa recomeça do zero de propósito: o que ela precisa saber está nos fatos.
+  const gatilho = "(o consultório está retomando o contato com esta família)";
+  try {
+    const resultado = await CerebroIA.responder({
+      telefone, texto: gatilho, historico: [], now: agora,
+      idsOcupados: Storage.idsOcupados(),
+      agendamentoAtual: null,
+      pacienteConhecido: Storage.ehPacienteConhecido(telefone),
+      portalJaLiberado: false,
+      guiaJaLiberado: false,
+      horariosOferecidos: [],
+      consultaProxima: null,
+      recadoDoDoutor: null,
+      reaquecimento,
+    });
+    if (!resultado.resposta) return { ok: false, motivo: "A Carla não produziu mensagem." };
+
+    // Marca ANTES de enviar. Se o envio falhar, o pior caso é uma família não reaquecida;
+    // marcar depois arriscaria mandar duas vezes num duplo clique, que é o erro caro aqui.
+    sessao.reaquecidoEm = agora.toISOString();
+    sessao.historico = resultado.historico;
+    sessao.ultimaAtividade = agora.toISOString();
+    Storage.salvarSessao(telefone, sessao);
+    Eventos.registrar("reaquecido", telefone, {}, agora);
+
+    await enviarResposta(sockAtivo, jid, telefone, resultado.resposta, true);
+    console.log(`[REAQUECIDO] ${telefone}: "${resultado.resposta.slice(0, 80)}"`);
+    return { ok: true, mensagem: resultado.resposta };
+  } catch (erro) {
+    console.error("[REAQUECIDO] Erro:", erro.message);
     return { ok: false, motivo: erro.message };
   }
 }

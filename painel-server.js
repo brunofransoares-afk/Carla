@@ -349,6 +349,21 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
 
+  // Botão "reaquecer" da lista de contatos. Quem manda a mensagem é o bot (a conexão do
+  // WhatsApp vive lá), então isto só encaminha, igual aos avisos do portal e do guia.
+  //
+  // NÃO existe versão em lote aqui, de propósito. A Carla roda num cliente NÃO OFICIAL do
+  // WhatsApp, e disparo em massa pra quem parou de responder é o padrão clássico de
+  // banimento. Um botão por vez, com o dedo do Dr. Bruno no gatilho, é o que mantém isso
+  // seguro enquanto ainda não se sabe se a mensagem funciona.
+  if (req.url === "/api/reaquecer" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = await encaminharAoBot("/interno/reaquecer", JSON.stringify({ telefone: corpo.telefone }));
+    res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(r.texto);
+    return;
+  }
+
   if (req.url === "/api/silenciar" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const telefone = corpo.telefone ? normalizarTelefoneManual(corpo.telefone) : null;

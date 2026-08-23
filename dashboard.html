@@ -224,6 +224,12 @@
   .btn-limpar-contato { border: none; background: rgba(255,90,90,0.1); color: #ffb3b3; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
   .btn-limpar-contato:hover { background: rgba(255,90,90,0.22); }
 
+  /* Reaquecer manda mensagem pra fora e nao tem desfazer, entao usa o dourado (acao de
+     peso) em vez do cinza das acoes internas. Desabilitado fica visivelmente morto. */
+  .btn-reaquecer-contato { border: none; background: rgba(203,160,90,0.16); color: var(--ouro-claro); border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
+  .btn-reaquecer-contato:hover:not(:disabled) { background: rgba(203,160,90,0.3); }
+  .btn-reaquecer-contato:disabled { background: rgba(255,255,255,0.05); color: var(--texto-fraco); cursor: default; }
+
   .silenciar-form { display: flex; gap: 8px; margin-bottom: 12px; }
   .silenciar-form input { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); }
   .silenciar-form input::placeholder { color: var(--texto-fraco); }
@@ -876,6 +882,7 @@
           <button class="btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${c.ehPaciente ? "Remover marcação de paciente" : "Marcar como paciente"}</button>
           ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
           ${c.ultimaAtividade ? `<button class="btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
+          ${podeMostrarReaquecer(c, silenciado) ? `<button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}">Reaquecer</button>` : ""}
         </div>
       </li>`;
     }).join("");
@@ -892,6 +899,47 @@
     lista.querySelectorAll(".btn-limpar-contato").forEach((btn) => {
       btn.addEventListener("click", () => limparConversaContato(btn.dataset.telefone));
     });
+    lista.querySelectorAll(".btn-reaquecer-contato").forEach((btn) => {
+      btn.addEventListener("click", () => reaquecerContato(btn, btn.dataset.telefone));
+    });
+  }
+
+  // O botão só aparece pra quem faz sentido. As travas de VERDADE estão no servidor
+  // (reaquecimento.js), porque esconder botão não é segurança: isto aqui só evita mostrar
+  // uma opção que vai ser recusada. A conversa precisa ter pelo menos um dia parada.
+  function podeMostrarReaquecer(c, silenciado) {
+    if (silenciado || c.aguardandoHumano || c.fechou) return false;
+    if (!c.ultimaAtividade) return false;
+    return Date.now() - new Date(c.ultimaAtividade).getTime() >= 24 * 60 * 60 * 1000;
+  }
+
+  // Uma mensagem não solicitada, saindo de um número de WhatsApp que é o do consultório.
+  // Confirmação obrigatória: clique errado aqui não tem desfazer.
+  async function reaquecerContato(botao, telefone) {
+    if (!confirm(`Mandar uma mensagem de retomada para ${telefone}?\n\nA Carla escreve sozinha e continua a conversa se a pessoa responder. Isso só pode ser feito uma vez por contato.`)) return;
+    botao.disabled = true;
+    botao.textContent = "Enviando...";
+    try {
+      const resp = await fetch("/api/reaquecer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone }),
+      });
+      const r = await resp.json();
+      if (!r.ok) {
+        alert("Não deu pra reaquecer: " + (r.motivo || "motivo desconhecido"));
+        botao.disabled = false;
+        botao.textContent = "Reaquecer";
+        return;
+      }
+      botao.textContent = "Reaquecido";
+    } catch (e) {
+      alert("Não deu pra reaquecer: sem conexão com o painel.");
+      botao.disabled = false;
+      botao.textContent = "Reaquecer";
+    }
+    atualizar();
+    atualizarFunil();
   }
 
   async function retomarAtendimentoContato(telefone) {

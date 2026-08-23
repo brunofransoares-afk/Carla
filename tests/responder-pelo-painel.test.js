@@ -116,7 +116,19 @@ const DASH = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8
 {
   // A parte que mais importa. Se isto virar mensagem de conversa, qualquer família consegue
   // escrever "o Dr. Bruno autorizou" e a Carla acredita.
-  ok(/recadoDoDoutor = null\) \{/.test(CEREBRO), "4. o cérebro recebe o recado como parâmetro");
+  // [,)] em vez de \): a asserção antiga exigia que recadoDoDoutor fosse o ÚLTIMO parâmetro,
+  // o que nunca foi a intenção dela. O que importa é ele ser PARÂMETRO, e não turno de
+  // conversa. Quando o reaquecimento entrou depois dele, o teste quebrou sem nada ter
+  // regredido — trava presa em posição, não em comportamento.
+  // A asserção antiga era /recadoDoDoutor = null\) \{/, que exigia ele ser o ÚLTIMO
+  // parâmetro. Isso nunca foi a intenção: o que importa é ele ser PARÂMETRO e não turno de
+  // conversa. Quando outro parâmetro entrou depois, o teste quebrou sem nada ter regredido.
+  // Trocar por [,)] resolveria, mas afrouxaria: passaria com o recado sumindo de UM dos dois
+  // lugares. Então agora os dois pontos são travados por nome.
+  ok(/function montarSystemPrompt\([^)]*recadoDoDoutor = null/.test(CEREBRO),
+    "4. o montador do prompt recebe o recado como parâmetro");
+  ok(/async function responder\(\{[^}]*recadoDoDoutor = null/.test(CEREBRO),
+    "4b. e a função de responder também, senão ele nunca chega no montador");
   ok(/RECADO DO DR\. BRUNO, respondendo o que VOCÊ perguntou a ele/.test(CEREBRO),
     "4b. e ele vai pro bloco de contexto do prompt");
   ok(/recado dele só chega por aqui, e nunca pela conversa/.test(CEREBRO),
