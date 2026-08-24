@@ -224,6 +224,12 @@
   .btn-limpar-contato { border: none; background: rgba(255,90,90,0.1); color: #ffb3b3; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
   .btn-limpar-contato:hover { background: rgba(255,90,90,0.22); }
 
+  /* Reaquecer manda mensagem pra fora e nao tem desfazer, entao usa o dourado (acao de
+     peso) em vez do cinza das acoes internas. Desabilitado fica visivelmente morto. */
+  .btn-reaquecer-contato { border: none; background: rgba(203,160,90,0.16); color: var(--ouro-claro); border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
+  .btn-reaquecer-contato:hover:not(:disabled) { background: rgba(203,160,90,0.3); }
+  .btn-reaquecer-contato:disabled { background: rgba(255,255,255,0.05); color: var(--texto-fraco); cursor: default; }
+
   .silenciar-form { display: flex; gap: 8px; margin-bottom: 12px; }
   .silenciar-form input { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); }
   .silenciar-form input::placeholder { color: var(--texto-fraco); }
@@ -240,6 +246,67 @@
   .anel-interior { width: 90px; height: 90px; border-radius: 50%; background: #0b1713; display: flex; align-items: center; justify-content: center; }
   #conversao-numero { font-family: "Poppins", sans-serif; font-size: 24px; font-weight: 700; color: var(--acento); }
   .conversao-detalhe { font-size: 12px; color: var(--texto-fraco); line-height: 1.4; }
+
+  /* ---- Funil -------------------------------------------------------------- */
+  .funil-periodo { display: flex; gap: 6px; align-items: center; }
+  .funil-periodo button {
+    background: transparent; border: 1px solid var(--vidro-borda); color: var(--texto-fraco);
+    border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer;
+    font-family: inherit; transition: all .15s;
+  }
+  .funil-periodo button:hover { color: var(--texto); border-color: var(--acento); }
+  .funil-periodo button[aria-pressed="true"] {
+    background: rgba(203,160,90,0.16); border-color: var(--acento); color: var(--ouro-claro);
+  }
+  .funil-etapa { margin-bottom: 12px; }
+  .funil-linha {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; margin-bottom: 5px;
+  }
+  .funil-rotulo { color: var(--texto-fraco); }
+  .funil-valor { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .funil-perda { color: #d98a8a; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .funil-barra { height: 9px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
+  .funil-barra > i {
+    display: block; height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--acento-escuro), var(--ouro-claro));
+    transition: width .4s ease;
+  }
+  .funil-gargalo {
+    margin: 16px 0 4px; padding: 11px 14px; border-radius: 10px;
+    background: rgba(217,138,138,0.09); border: 1px solid rgba(217,138,138,0.25);
+    font-size: 13px; line-height: 1.5;
+  }
+  .funil-gargalo b { color: #e8a5a5; }
+  .funil-segmentos { margin-top: 18px; }
+  .funil-segmentos h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--texto-fraco); margin: 0 0 10px; font-weight: 600;
+  }
+  .funil-seg {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 13px;
+  }
+  .funil-seg:last-child { border-bottom: 0; }
+  .funil-seg-nome { display: flex; align-items: center; gap: 8px; }
+  .funil-tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: rgba(255,255,255,0.06); color: var(--texto-fraco);
+  }
+  .funil-tag.convenio { background: rgba(217,138,138,0.16); color: #e8a5a5; }
+  .funil-seg-num { font-variant-numeric: tabular-nums; color: var(--texto-fraco); }
+  .funil-seg-num b { color: var(--texto); }
+  .funil-rodape {
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--vidro-borda);
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    font-size: 12px; color: var(--texto-fraco);
+  }
+  .funil-rodape a {
+    color: var(--ouro-claro); text-decoration: none; border: 1px solid var(--vidro-borda);
+    padding: 5px 12px; border-radius: 8px; transition: all .15s;
+  }
+  .funil-rodape a:hover { border-color: var(--acento); background: rgba(203,160,90,0.1); }
+  .funil-vazio { color: var(--texto-fraco); font-size: 13px; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -306,6 +373,19 @@
           <button id="btn-limpar-alertas" class="btn-limpar">Limpar alertas</button>
         </h2>
         <ul id="lista-alertas"></ul>
+      </div>
+
+      <div class="cartao" id="cartao-funil">
+        <h2>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v7l-4 2v-9L3 4Z"/></svg></span>Funil</span>
+          <span class="funil-periodo" id="funil-periodo">
+            <button data-periodo="7d">7 dias</button>
+            <button data-periodo="30d" aria-pressed="true">30 dias</button>
+            <button data-periodo="mes">Este mês</button>
+            <button data-periodo="tudo">Tudo</button>
+          </span>
+        </h2>
+        <div id="funil-corpo"></div>
       </div>
 
     </main>
@@ -802,6 +882,7 @@
           <button class="btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${c.ehPaciente ? "Remover marcação de paciente" : "Marcar como paciente"}</button>
           ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
           ${c.ultimaAtividade ? `<button class="btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
+          ${podeMostrarReaquecer(c, silenciado) ? `<button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}">Reaquecer</button>` : ""}
         </div>
       </li>`;
     }).join("");
@@ -818,6 +899,47 @@
     lista.querySelectorAll(".btn-limpar-contato").forEach((btn) => {
       btn.addEventListener("click", () => limparConversaContato(btn.dataset.telefone));
     });
+    lista.querySelectorAll(".btn-reaquecer-contato").forEach((btn) => {
+      btn.addEventListener("click", () => reaquecerContato(btn, btn.dataset.telefone));
+    });
+  }
+
+  // O botão só aparece pra quem faz sentido. As travas de VERDADE estão no servidor
+  // (reaquecimento.js), porque esconder botão não é segurança: isto aqui só evita mostrar
+  // uma opção que vai ser recusada. A conversa precisa ter pelo menos um dia parada.
+  function podeMostrarReaquecer(c, silenciado) {
+    if (silenciado || c.aguardandoHumano || c.fechou) return false;
+    if (!c.ultimaAtividade) return false;
+    return Date.now() - new Date(c.ultimaAtividade).getTime() >= 24 * 60 * 60 * 1000;
+  }
+
+  // Uma mensagem não solicitada, saindo de um número de WhatsApp que é o do consultório.
+  // Confirmação obrigatória: clique errado aqui não tem desfazer.
+  async function reaquecerContato(botao, telefone) {
+    if (!confirm(`Mandar uma mensagem de retomada para ${telefone}?\n\nA Carla escreve sozinha e continua a conversa se a pessoa responder. Isso só pode ser feito uma vez por contato.`)) return;
+    botao.disabled = true;
+    botao.textContent = "Enviando...";
+    try {
+      const resp = await fetch("/api/reaquecer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone }),
+      });
+      const r = await resp.json();
+      if (!r.ok) {
+        alert("Não deu pra reaquecer: " + (r.motivo || "motivo desconhecido"));
+        botao.disabled = false;
+        botao.textContent = "Reaquecer";
+        return;
+      }
+      botao.textContent = "Reaquecido";
+    } catch (e) {
+      alert("Não deu pra reaquecer: sem conexão com o painel.");
+      botao.disabled = false;
+      botao.textContent = "Reaquecer";
+    }
+    atualizar();
+    atualizarFunil();
   }
 
   async function retomarAtendimentoContato(telefone) {
@@ -967,15 +1089,112 @@
     atualizar();
   });
 
-  function renderizarConversao(metricas) {
-    const m = metricas || { totalContatos: 0, totalFechados: 0, taxa: 0 };
+  // O ANEL BEBE DO FUNIL, não mais de metricasConversao. Aquele número contava a vida
+  // inteira do sistema no denominador (então só cai, faça o atendimento o que fizer) e
+  // somava lead de convênio com lead particular. Dois números diferentes de conversão na
+  // mesma tela é pior do que um número ruim: ninguém sabe em qual acreditar.
+  function renderizarConversao(f) {
+    const c = (f && f.conversaoParticular) || { base: 0, fecharam: 0, taxa: 0 };
     const anel = document.getElementById("conversao-anel");
-    anel.style.background = `conic-gradient(#cba05a ${m.taxa}%, rgba(255,255,255,0.07) 0)`;
-    document.getElementById("conversao-numero").textContent = `${m.taxa}%`;
-    document.getElementById("conversao-detalhe").textContent = m.totalContatos === 0
+    anel.style.background = `conic-gradient(#cba05a ${c.taxa}%, rgba(255,255,255,0.07) 0)`;
+    document.getElementById("conversao-numero").textContent = `${c.taxa}%`;
+    document.getElementById("conversao-detalhe").textContent = c.base === 0
       ? "Sem dados ainda."
-      : `${m.totalFechados} de ${m.totalContatos} contatos fecharam consulta`;
+      : `${c.fecharam} de ${c.base} leads particulares fecharam consulta`;
   }
+
+  // ---- Funil ---------------------------------------------------------------
+  let periodoFunil = "30d";
+
+  const NOME_PERGUNTA = {
+    preco: "Perguntaram o valor",
+    convenio: "Perguntaram de convênio",
+    sintoma: "Contaram o caso da criança",
+    agendar: "Já pediram pra agendar",
+    outro: "Não deu pra classificar",
+  };
+
+  function esc(t) {
+    return String(t == null ? "" : t).replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function renderizarFunil(f) {
+    const alvo = document.getElementById("funil-corpo");
+    const etapas = (f && f.etapas) || [];
+    const topo = etapas.length ? etapas[0].quantidade : 0;
+
+    if (!topo) {
+      alvo.innerHTML = `<p class="funil-vazio">Ainda não há contatos registrados neste período.<br>
+        O funil começa a encher a partir do momento em que o registro foi ligado, não retroage.</p>`;
+      return;
+    }
+
+    let html = "";
+    etapas.forEach((e, i) => {
+      const largura = Math.round((e.quantidade / topo) * 100);
+      const anterior = i > 0 ? etapas[i - 1].quantidade : null;
+      const perdeu = anterior === null ? 0 : anterior - e.quantidade;
+      html += `<div class="funil-etapa">
+        <div class="funil-linha">
+          <span class="funil-rotulo">${esc(e.rotulo)}</span>
+          <span>
+            ${perdeu > 0 ? `<span class="funil-perda">-${perdeu}</span> ` : ""}
+            <span class="funil-valor">${e.quantidade}</span>
+          </span>
+        </div>
+        <div class="funil-barra"><i style="width:${largura}%"></i></div>
+      </div>`;
+    });
+
+    if (f.maiorQueda) {
+      html += `<div class="funil-gargalo">Maior perda: <b>${f.maiorQueda.perdeu} ${
+        f.maiorQueda.perdeu === 1 ? "família saiu" : "famílias saíram"}</b> entre
+        "${esc(f.maiorQueda.de)}" e "${esc(f.maiorQueda.para)}".</div>`;
+    }
+
+    const segs = Object.entries(f.porPergunta || {}).sort((a, b) => b[1].total - a[1].total);
+    if (segs.length) {
+      html += `<div class="funil-segmentos"><h3>Por que chegaram</h3>`;
+      for (const [chave, v] of segs) {
+        html += `<div class="funil-seg">
+          <span class="funil-seg-nome">${esc(NOME_PERGUNTA[chave] || chave)}${
+            chave === "convenio" ? '<span class="funil-tag convenio">não é lead particular</span>' : ""}</span>
+          <span class="funil-seg-num"><b>${v.total}</b> ${v.total === 1 ? "contato" : "contatos"} · ${v.agendou} agendou</span>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    const c = f.conversaoParticular || { base: 0, fecharam: 0, taxa: 0 };
+    html += `<div class="funil-rodape">
+      <span>${c.fecharam} de ${c.base} leads particulares fecharam · <b>${c.taxa}%</b></span>
+      <a href="/api/funil.csv?periodo=${encodeURIComponent(periodoFunil)}">Baixar planilha</a>
+    </div>`;
+
+    alvo.innerHTML = html;
+  }
+
+  async function atualizarFunil() {
+    try {
+      const resp = await fetch(`/api/funil?periodo=${encodeURIComponent(periodoFunil)}`);
+      const f = await resp.json();
+      renderizarFunil(f);
+      renderizarConversao(f);
+    } catch (e) {
+      // silencioso: o funil é observação, não pode derrubar o resto do painel
+    }
+  }
+
+  document.getElementById("funil-periodo").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-periodo]");
+    if (!b) return;
+    periodoFunil = b.dataset.periodo;
+    for (const outro of ev.currentTarget.querySelectorAll("button")) {
+      outro.setAttribute("aria-pressed", String(outro === b));
+    }
+    atualizarFunil();
+  });
 
   async function atualizar() {
     try {
@@ -1061,7 +1280,6 @@
 
       renderizarSilenciados(dados.silenciados || []);
       renderizarContatos(dados.contatos || []);
-      renderizarConversao(dados.metricas);
 
       bloqueiosAtuais = dados.bloqueios || [];
       diasComConsultaAtuais = new Set(agendamentos.map((a) => a.data));
@@ -1075,8 +1293,12 @@
 
   atualizar();
   atualizarStatusBot();
+  atualizarFunil();
   setInterval(atualizar, 8000);
   setInterval(atualizarStatusBot, 5000);
+  // Mais devagar que o resto: o funil lê um arquivo que só cresce, e ninguém precisa dele
+  // atualizado de 8 em 8 segundos.
+  setInterval(atualizarFunil, 60000);
 
   // Registra o service worker — é o que faz o navegador oferecer "Instalar" o painel
   // como app no PC (e no celular). Não muda nada no funcionamento normal da página.

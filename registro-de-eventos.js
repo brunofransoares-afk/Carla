@@ -251,6 +251,39 @@ function funil({ desde = null, ate = null } = {}) {
   };
 }
 
+// ---------------------------------------------------------------- períodos
+
+// Traduz o nome do período no corte de data. Mora aqui, e não no painel, pra ter teste:
+// "mês" e "30 dias" não são a mesma coisa e a diferença aparece justamente no começo do
+// mês, quando o funil do mês fica quase vazio e o de 30 dias ainda mostra a semana passada.
+function periodoPara(nome, agora = new Date()) {
+  if (nome === "tudo") return { desde: null, ate: null, rotulo: "Desde o começo" };
+  if (nome === "mes") {
+    const inicio = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1));
+    return { desde: inicio.toISOString(), ate: null, rotulo: "Este mês" };
+  }
+  const dias = nome === "7d" ? 7 : 30;
+  const inicio = new Date(agora.getTime() - dias * 24 * 60 * 60 * 1000);
+  return { desde: inicio.toISOString(), ate: null, rotulo: `Últimos ${dias} dias` };
+}
+
+// CSV do funil, uma linha por contato. É o que substitui a planilha que alguém preencheria
+// à mão: sai pronta, com a primeira pergunta já classificada.
+function csv({ desde = null, ate = null } = {}) {
+  const { contatos } = funil({ desde, ate });
+  const cab = ["telefone", "primeira_pergunta", "primeiro_contato", "ultimo_evento",
+    "soube_valor", "recebeu_horario", "agendou", "pagou", "escalou"];
+  const linhas = [cab.join(",")];
+  const sn = (v) => (v ? "sim" : "nao");
+  for (const c of contatos.sort((a, b) => String(a.primeiroContatoEm).localeCompare(b.primeiroContatoEm))) {
+    linhas.push([
+      c.telefone, c.primeiraPergunta || "outro", c.primeiroContatoEm || "", c.ultimoEm || "",
+      sn(c.recebeuPreco), sn(c.recebeuHorario), sn(c.agendou), sn(c.pagou), sn(c.escalou),
+    ].join(","));
+  }
+  return linhas.join("\n");
+}
+
 module.exports = {
   ARQ_EVENTOS,
   ETAPAS,
@@ -259,4 +292,6 @@ module.exports = {
   trecho,
   lerEventos,
   funil,
+  periodoPara,
+  csv,
 };
