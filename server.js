@@ -16,6 +16,7 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  normalizeMessageContent,
 } = require("@whiskeysockets/baileys");
 
 require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
@@ -27,6 +28,7 @@ const Previa = require(path.join(__dirname, "previa-de-link.js"));
 const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"));
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
+const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
 const { criarFilaPorChave } = require(path.join(__dirname, "fila-por-chave.js"));
 const { criarCaixaDeSaida } = require(path.join(__dirname, "caixa-de-saida.js"));
 
@@ -1053,7 +1055,14 @@ async function iniciar() {
 
       Storage.registrarContatoWhatsapp(telefone, { pushName: msg.pushName || null });
 
-      if (msg.message.audioMessage) {
+      // Desembrulha ANTES de qualquer decisão. Mensagem temporária, ver uma vez e documento
+      // com legenda vêm com o conteúdo de verdade uma camada abaixo, então olhar msg.message
+      // direto fazia até o áudio de quem usa mensagem temporária passar batido.
+      const conteudo = (typeof normalizeMessageContent === "function"
+        ? normalizeMessageContent(msg.message)
+        : msg.message) || msg.message;
+
+      if (conteudo.audioMessage) {
         filaMensagens.enfileirar(telefone, async () => {
           await reenviarPendentesDoTelefone(sock, telefone);
           return processarAudioRecebido(sock, jid, telefone);
@@ -1063,10 +1072,20 @@ async function iniciar() {
         continue;
       }
 
-      const texto = msg.message.conversation
-        || msg.message.extendedTextMessage?.text
-        || "";
-      if (!texto.trim()) continue;
+      const texto = TextoDaMensagem.textoDe(conteudo);
+
+      // NADA MAIS SOME EM SILÊNCIO. Antes era `if (!texto.trim()) continue;` e pronto: no
+      // pm2 logs não aparecia nem que a mensagem tinha chegado, então uma família invisível
+      // era indistinguível de uma família que nunca escreveu.
+      if (!texto.trim()) {
+        if (TextoDaMensagem.ehRecadoDeSistema(conteudo)) continue;
+        if (TextoDaMensagem.ehMidiaSemTexto(conteudo)) {
+          console.log(`[MÍDIA SEM TEXTO] ${telefone}: ${TextoDaMensagem.tipoDe(conteudo)} — ninguém responde isso hoje.`);
+          continue;
+        }
+        console.warn(`[SEM TEXTO] ${telefone}: não consegui ler o texto de uma mensagem do tipo ${TextoDaMensagem.tipoDe(conteudo)}.`);
+        continue;
+      }
 
       console.log(`[RECEBIDA] ${telefone} (jid: ${jid}): ${texto}`);
       agendarProcessamento(sock, jid, telefone, texto);
