@@ -72,8 +72,23 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
     "3. a apresentação diz o que ela é");
   ok(/Consigo ver valor, horário e marcar a consulta por aqui/.test(SEM_COMENTARIO),
     "3b. diz o que ela resolve, e inclui MARCAR (que é o que fecha consulta, não só informar)");
-  ok(/o que eu não resolver eu levo pro Dr\. Bruno/.test(SEM_COMENTARIO),
+  // Antes era "o que eu não resolver eu levo pro Dr. Bruno". A ideia de trocar por "equipe"
+  // foi levantada e recusada: não existe equipe, e inventar uma seria trocar uma afirmação
+  // falsa sobre ELA por uma afirmação falsa sobre uma organização. "Consultório" resolve o
+  // que a "equipe" queria resolver (não parecer que tudo depende de uma pessoa só) sem
+  // inventar ninguém: o consultório existe e é dele.
+  ok(/o que eu não resolver aqui, eu encaminho no consultório e te retorno/.test(SEM_COMENTARIO),
     "3c. diz que existe um humano atrás. É a frase mais importante logo depois de assumir que é automática");
+  // A apresentação vive no prompt, mas nem toda frase que a família lê vive lá: a resposta de
+  // emergência (quando a IA não sobe) mora no CÓDIGO, e foi por ali que "Em breve alguém da
+  // equipe te responde" sobreviveu inteira à limpeza da PR #83 — o teste de então só olhava o
+  // prompt. Por isso esta trava olha o arquivo inteiro.
+  const ARQUIVO_SEM_COMENTARIO = CEREBRO.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  eq((ARQUIVO_SEM_COMENTARIO.match(/equipe/g) || []).length, 1,
+    "3e. 'equipe' só pode aparecer uma vez no arquivo inteiro, prompt e código");
+  ok(/NÃO fale em "equipe"/.test(ARQUIVO_SEM_COMENTARIO), "3f. e essa uma é a própria proibição");
+  ok(!/alguém da equipe te responde/.test(CEREBRO),
+    "3g. a frase de emergência não promete mais uma equipe que não existe");
   ok(/Isso é dito UMA VEZ/.test(SEM_COMENTARIO),
     "3d. uma vez só: repetir que é automática em toda mensagem seria frio e ninguém pediu isso");
 }

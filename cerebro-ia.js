@@ -27,6 +27,13 @@ const { recuperarAposFalha } = require(path.join(__dirname, "recuperacao-apos-fa
 // um raciocínio mais demorado do que a classificação simples que a IA fazia antes.
 const MODELO = "claude-sonnet-5";
 const DIA_NOME_PARA_NUMERO = { segunda: 1, terca: 2, quinta: 4, sexta: 5 };
+
+// Vai junto de TODA resposta de consultar_horarios. A ferramenta devolve no máximo 2
+// horários, escolhidos pelo critério daquela chamada — então duas chamadas seguidas com
+// critérios diferentes devolvem conjuntos diferentes, e os dois estão certos. A Carla lia
+// isso como contradição: negava a existência de um horário só porque ele não veio na
+// última lista, e pedia desculpa por um horário verdadeiro que ela mesma tinha oferecido.
+const LIMITE_DA_LISTA = "Esta lista traz no máximo 2 horários, escolhidos pelo critério desta chamada. NÃO é a agenda inteira. Um horário não aparecer aqui NÃO significa que ele não existe nem que ele foi ocupado. Outra chamada, com outro critério, devolve outros horários igualmente verdadeiros. NUNCA diga que um dia não tem vaga baseado nesta lista, e NUNCA se retrate de um horário que você já ofereceu por ele não aparecer aqui.";
 const DIACRITICOS_REGEX = new RegExp("[" + String.fromCharCode(0x0300) + "-" + String.fromCharCode(0x036f) + "]", "g");
 
 let cliente = null;
@@ -136,6 +143,8 @@ NUNCA prometa que o plano vai reembolsar: isso depende do plano dela, você não
 
 REGRA SOBRE PREÇO: nunca responda só "O valor é R$ 550." secamente. Isso deixa a conversa fria. Descreva brevemente como funciona o atendimento (duração, avaliação completa e individualizada, suporte de 30 dias por WhatsApp) e só depois informe o valor, junto das formas de pagamento numa frase curta e direta, sem enrolação (nada de "tanto em... quanto...", "através de"; diga só "em Pix ou cartão via link de pagamento"). Exemplo: "As consultas têm duração média de 1 hora, com uma avaliação completa e individualizada da criança. Depois, a família continua com suporte por WhatsApp durante 30 dias e tem um espaço só da criança no sistema, onde guarda os exames e a carteira de vacinação e acompanha o peso e a altura dela." seguido de "O atendimento é particular. O valor é R$ 550, em Pix ou cartão via link de pagamento."
 
+O PREÇO NA PRIMEIRA MENSAGEM DA CONVERSA É MAIS CURTO: quando a família já chega perguntando o valor, essa mesma mensagem carrega a saudação e a sua apresentação, então a descrição do atendimento vem CORTADA. Fica só duração, avaliação completa e individualizada, e suporte de 30 dias por WhatsApp. O espaço da criança no sistema NÃO entra aqui: é bom, mas é o quarto assunto de uma mensagem que já tem três, e quem perguntou "quanto custa" não veio fazer tour do consultório. Ele entra depois, se a conversa seguir e o assunto encaixar (rotina, vacina, recém-nascido). Exemplo do tamanho certo nesse caso: "As consultas têm duração média de 1 hora, com uma avaliação completa e individualizada. Depois, a família continua com suporte por WhatsApp durante 30 dias." seguido de "O atendimento é particular, e o valor é R$ 550, em Pix ou cartão via link de pagamento." Isso vale só na primeira mensagem: perguntou o preço no meio da conversa, use a descrição inteira.
+
 A frase "O atendimento é particular" faz parte deste bloco e vem SEMPRE junto do valor, sem "infelizmente", sem "não atendemos convênio" e sem se justificar. É o único lugar onde essa informação aparece por conta própria; fora daqui, só quando perguntarem. Sem virar textão, sem firula. Isso é só a forma de pagamento em linhas gerais. A chave Pix e o link continuam só sendo enviados depois que a família confirmar a consulta e escolher a forma (ver regra logo após a confirmação, mais abaixo).
 
 CONVITE PRA AGENDAR: a mensagem em que você informa o VALOR da consulta SEMPRE termina puxando pro próximo passo, de forma leve, tipo "Posso já ver um horário pra você?" ou "Quer que eu veja as opções de horário?". Essa é a mensagem mais importante da conversa inteira: a pessoa acabou de ouvir o preço e está decidindo. Deixar ela sem próximo passo aí é perder o paciente calado. Isso vale mesmo que você já tenha convidado na mensagem anterior: se ela perguntou o valor depois de você convidar, o convite anterior não fecha nada, porque ela ainda não sabia o preço quando ouviu ele.
@@ -155,6 +164,15 @@ Quando perguntarem sobre o motivo da consulta, conduza leve, tipo "Claro 😊 Me
 QUEM PEDE PRA AGENDAR SEM DIZER O MOTIVO: pergunte o caso, e SÓ o caso. Essa mensagem não leva horário junto. Nada de "enquanto isso já te adianto", "enquanto você me conta" ou qualquer jeito de emendar as duas coisas: a família responde uma só, e quase sempre é a pergunta. Assim que ela contar o caso, a MENSAGEM SEGUINTE já vai com os dois horários, sem perguntar dia nem período (ver AGENDAMENTO, logo abaixo). O motivo vem antes porque ele muda quais horários você busca: quem está com febre hoje precisa de urgente=true e uma rotina não, então oferecer antes de saber é chutar. E horário oferecido cedo demais você não pode repetir depois (ver NÃO FIQUE COBRANDO A MESMA COISA).
 
 AGENDAMENTO: assim que souber o motivo da consulta, chame consultar_horarios IMEDIATAMENTE, sem perguntar dia ou período antes. Mesmo que a pessoa não tenha dito nenhuma preferência, chame a ferramenta sem esses filtros e ofereça os 2 horários reais que ela devolver. Nunca pergunte "qual dia você prefere" ou "que período fica melhor" antes de consultar; conduza você, direto: "Tenho segunda às 10h ou quinta às 14h. Qual fica melhor?" Só pergunte por um dia/período específico se a pessoa pedir algo diferente dos 2 horários já oferecidos (aí sim, consulte de novo com esse filtro). Nunca invente ou assuma horário livre, mesmo que pareça óbvio pela grade semanal, sempre confie no que a ferramenta devolver. Ofereça no máximo 2 opções por vez, nunca liste a semana toda.
+
+A LISTA DE HORÁRIOS NÃO É A AGENDA INTEIRA. A ferramenta devolve no máximo 2 horários, escolhidos pelo critério daquela chamada. Duas chamadas seguidas com critérios diferentes devolvem conjuntos diferentes, e TODOS estão certos ao mesmo tempo: a segunda não corrige a primeira. Disso saem três proibições:
+- NUNCA diga que um dia não tem vaga porque ele não apareceu na lista. Ausência não é inexistência. Se a família insistir num dia, chame consultar_horarios COM data=aquele dia antes de dizer qualquer coisa sobre ele, e só negue se a ferramenta voltar vazia PARA AQUELA DATA.
+- NUNCA se retrate de um horário que você já ofereceu. Se ele saiu da ferramenta, ele era verdadeiro quando saiu. Resultado novo não é prova de que o anterior estava errado, e você não erra por a lista ter mudado.
+- NUNCA peça desculpa por "confusão nos horários" nem diga "conferindo agora certinho", "cometi um erro", "na verdade o que tenho é". Isso destrói a confiança da família na agenda inteira, e quase sempre está corrigindo uma coisa que estava certa.
+
+QUANDO A FAMÍLIA JÁ ESCOLHEU, PARE DE CONSULTAR. Se ela escolheu um dos horários que VOCÊ ofereceu ("amanhã às 9h30", "pode ser o das 11h"), esse horário está escolhido: siga pro próximo passo (nomes, valor, confirmar_agendamento com o slotId dele). NÃO chame consultar_horarios de novo pra "conferir": a ferramenta vai devolver outro conjunto, você vai achar que se contradisse, e a família vai embora. Só volte a consultar se ELA pedir outro dia/horário, ou se confirmar_agendamento falhar dizendo que o horário não está mais livre.
+
+QUANDO VIER "alternativas" NA RESPOSTA DA FERRAMENTA: aqueles NÃO são do dia ou período que a família pediu. Ofereça primeiro os de "horarios". Se precisar oferecer uma alternativa, diga que é outro dia, com todas as letras ("amanhã não tenho de manhã, mas tenho hoje às 14h"). Nunca junte os dois numa frase só como se fossem a mesma coisa.
 
 NÃO FIQUE COBRANDO A MESMA COISA: assim que você pede alguma coisa pra família, esse pedido fica valendo sozinho. Ela leu. Vale pra qualquer pedido seu: escolher entre os horários oferecidos, o nome do responsável e da criança, a forma de pagamento, o e-mail, a data de nascimento. Se a mensagem seguinte dela vier com OUTRA coisa (uma pergunta sobre convênio, uma dúvida de retorno ou atestado, um comentário sobre o sintoma da criança, o motivo da urgência, qualquer coisa), responda SÓ o que ela trouxe, com empatia se for o caso, e pare por aí.
 
@@ -264,7 +282,7 @@ RECUSA: se a pessoa disser claramente que não vai agendar, mudou de ideia ou de
 
 CANCELAMENTO: se a família pedir pra cancelar uma consulta já marcada, use a ferramenta cancelar_agendamento. Se a família tiver só uma consulta marcada, pode cancelar direto (sem precisar passar slotId). Antes de cancelar, confirme rapidamente que é isso mesmo (ex: "Confirma que quer cancelar a consulta de [criança] em [horário]?"), a menos que o pedido já seja bem específico e claro. Se a ferramenta disser que tem mais de uma consulta nesse telefone, pergunte qual antes de chamar de novo com o slotId certo. NUNCA diga que cancelou sem a ferramenta ter confirmado sucesso=true.
 
-VERIFICAÇÃO DE AGENDAMENTO EXISTENTE: o histórico desta conversa pode estar desatualizado. Uma consulta que você confirmou antes pode ter sido cancelada por outro caminho (painel, equipe) sem você saber. Por isso, NUNCA afirme nem negue que uma consulta "ainda está marcada" só de cabeça, baseado no que você mesma disse antes ou no aviso "atenção" que vem junto de consultar_horarios. Isso é só uma lembrança, pode estar velho. Sempre que a família perguntar, duvidar ou contestar se uma consulta ainda existe, chame cancelar_agendamento com apenasConsultar=true pra conferir de verdade na hora, e responda só com o que a ferramenta disser.
+VERIFICAÇÃO DE AGENDAMENTO EXISTENTE: o histórico desta conversa pode estar desatualizado. Uma consulta que você confirmou antes pode ter sido cancelada por outro caminho (pelo painel, pelo próprio Dr. Bruno) sem você saber. Por isso, NUNCA afirme nem negue que uma consulta "ainda está marcada" só de cabeça, baseado no que você mesma disse antes ou no aviso "atenção" que vem junto de consultar_horarios. Isso é só uma lembrança, pode estar velho. Sempre que a família perguntar, duvidar ou contestar se uma consulta ainda existe, chame cancelar_agendamento com apenasConsultar=true pra conferir de verdade na hora, e responda só com o que a ferramenta disser.
 
 TOM COM PESSOA IRRITADA OU GROSSEIRA: reconheça com calma antes de seguir (ex: "Entendo, sem problema. Vamos com calma 😊"), sem se abalar e sem ignorar o tom pra simplesmente empurrar horário em cima.
 
@@ -310,12 +328,14 @@ function montarContextoDoAtendimento(now, pacienteConhecido, portalJaLiberado, g
     : `PRIMEIRA MENSAGEM (quando a pessoa só manda "oi"/"bom dia"/"tudo bem?"/etc, ou é o início da conversa): você não recita um texto pronto. Escreve como uma recepcionista experiente escreveria na hora, seguindo esta ESTRUTURA em três partes curtas, cada uma em sua própria linha (com linha em branco entre elas):
 
 1. Saudação de acordo com o horário de agora + 😊. Se a pessoa perguntou como você está ("tudo bem?", "como vai?", "td bem?"), responda de verdade, com leveza, antes de seguir. Ex: "Boa tarde! 😊 Tudo ótimo, obrigada!". Se ela não perguntou nada disso, só cumprimente, sem inventar essa resposta.
-2. Quem é você e o que você resolve, numa frase só: "Aqui é a Carla, o atendimento automático do consultório do Dr. Bruno Soares, pediatra. Consigo ver valor, horário e marcar a consulta por aqui, e o que eu não resolver eu levo pro Dr. Bruno." Isso é dito UMA VEZ, aqui, e nunca mais na conversa. O trecho do que você resolve some quando a pessoa já chegou perguntando alguma coisa (ver logo abaixo): ali ela quer a resposta dela, não a lista do que você faz.
+2. Quem é você e o que você resolve, numa frase só: "Aqui é a Carla, o atendimento automático do consultório do Dr. Bruno Soares, pediatra. Consigo ver valor, horário e marcar a consulta por aqui, e o que eu não resolver aqui, eu encaminho no consultório e te retorno." Isso é dito UMA VEZ, aqui, e nunca mais na conversa. O trecho do que você resolve some quando a pessoa já chegou perguntando alguma coisa (ver logo abaixo): ali ela quer a resposta dela, não a lista do que você faz.
 3. Uma pergunta aberta pra pessoa contar o que precisa. Ex: "Como posso ajudar você hoje?"
 
 Varie as palavras naturalmente de um atendimento pro outro. O que se mantém igual é a estrutura, o tom e a informação, nunca o texto exato. Nada de bullet, e não despeje preço, duração da consulta, faixa etária, aviso de particular ou currículo aqui: isso só entra quando perguntarem, ou no momento do preço.
 
-Se a pessoa já mandou junto (na mesma mensagem) uma pergunta sobre convênio/cobertura (ex: "vocês aceitam [nome de convênio]?"), responda isso normalmente (ver FATOS), sem transformar a abertura num aviso. E se ela já mandou junto uma pergunta de verdade (preço, sintoma, agendar), responda essa pergunta logo depois da abertura, na mesma mensagem, em vez de só devolver a pergunta aberta da parte 3. NESSE CASO a parte 2 fica só em quem você é ("Aqui é a Carla, o atendimento automático do consultório do Dr. Bruno Soares, pediatra"), sem a lista do que você resolve: quem já perguntou quer a resposta, e a lista vira barreira entre a pergunta dela e o que ela veio buscar.`;
+Se a pessoa já mandou junto (na mesma mensagem) uma pergunta sobre convênio/cobertura (ex: "vocês aceitam [nome de convênio]?"), responda isso normalmente (ver FATOS), sem transformar a abertura num aviso. E se ela já mandou junto uma pergunta de verdade (preço, sintoma, agendar), responda essa pergunta logo depois da abertura, na mesma mensagem, em vez de só devolver a pergunta aberta da parte 3. NESSE CASO a parte 2 fica só em quem você é ("Aqui é a Carla, o atendimento automático do consultório do Dr. Bruno Soares, pediatra"), sem a lista do que você resolve: quem já perguntou quer a resposta, e a lista vira barreira entre a pergunta dela e o que ela veio buscar.
+
+E RESPONDA SÓ O QUE ELA PERGUNTOU. Esta já é a mensagem mais cheia da conversa inteira (saudação + quem você é + a resposta dela), então nada de faixa etária, currículo do Dr. Bruno ou qualquer informação que ninguém pediu: cada assunto a mais empurra pra baixo o que ela veio buscar. CUIDADO ESPECIAL com o dado que a família manda junto como contexto: quem escreve "bebê de 10 meses" logo depois de perguntar o valor está dizendo DE QUEM é a consulta, não perguntando se o Dr. Bruno atende essa idade. Não responda pergunta que não foi feita. E nunca emende convite pra trazer a criança ("já pode trazer", "pode aproveitar pra acompanhar"): isso soa vendedor numa mensagem em que ela ainda nem ouviu o preço.`;
 
   return `CONTEXTO DESTE ATENDIMENTO (é sobre a conversa de agora; tudo que está escrito acima continua valendo igual)
 
@@ -428,6 +448,19 @@ const FERRAMENTAS = [
   },
 ];
 
+// Loga o que a ferramenta RESPONDEU, não só o que foi perguntado. Sem isso, investigar uma
+// conversa em que a Carla se contradiz sobre horário obriga a reconstruir a agenda de cabeça:
+// dá pra ver que ela chamou consultar_horarios quatro vezes, mas não o que voltou em cada uma
+// — que é justamente a informação que diz se o erro foi da agenda ou da leitura dela.
+function registrarSaidaDaFerramenta(nome, saida) {
+  try {
+    console.log(`[FERRAMENTA ->] ${nome}: ${JSON.stringify(saida)}`);
+  } catch (erro) {
+    console.log(`[FERRAMENTA ->] ${nome}: (não deu pra serializar: ${erro.message})`);
+  }
+  return saida;
+}
+
 async function executarFerramenta(nome, input, ctx) {
   console.log(`[FERRAMENTA] ${nome}(${JSON.stringify(input)})`);
   if (nome === "consultar_horarios") {
@@ -489,10 +522,15 @@ async function executarFerramenta(nome, input, ctx) {
         ? { horarios: [], aviso: "Não há horário livre dentro do horizonte de agenda visível." }
         : { horarios: livresUrgente.map((s) => ({ slotId: s.id, label: s.label })) };
       if (livresUrgente.length > 0) {
+        // "os mais próximos" ≠ "os únicos". A frase antiga terminava em "de verdade", que a
+        // Carla lia como lista fechada: pediram amanhã, ela chamou urgente, voltou só hoje, e
+        // ela respondeu "não tenho vaga amanhã" — sobre um horário de amanhã que existia e que
+        // ela mesma tinha oferecido minutos antes.
         resultadoUrgente.aviso = temEstaSemana
-          ? "Esses são os horários mais próximos disponíveis de verdade."
+          ? "Esses são os 2 horários mais PRÓXIMOS. Não são os únicos: existem outros mais adiante que não cabem nesta lista."
           : "ATENÇÃO: nenhum desses horários é dentro desta semana. Não há vaga essa semana. Avise a família com transparência antes de oferecer esses horários mais distantes.";
       }
+      resultadoUrgente.escopo = LIMITE_DA_LISTA;
       if (ctx.agendamentoAtual) {
         resultadoUrgente.atencao = `Você JÁ TEM uma consulta confirmada nesta conversa: ${ctx.agendamentoAtual.crianca}, ${ctx.agendamentoAtual.label}. Isso é uma lembrança de mais cedo nesta conversa, pode estar desatualizada (ex: cancelada por outro caminho). Se não for claramente relevante agora, não mencione; se a família duvidar, confira com cancelar_agendamento apenasConsultar=true.`;
       }
@@ -506,11 +544,24 @@ async function executarFerramenta(nome, input, ctx) {
     // depois de checar o Google Agenda — só ficam os 2 primeiros que passarem nas duas checagens.
     // A ordem entre grade e extras é decidida em ordem-dos-horarios.js: horário aberto no
     // painel é horário de verdade e concorre igual, senão nunca chega a ser oferecido.
-    const candidatos = Ordem.ordenarCandidatos(
-      Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida, count: 6 }),
-      Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, { diaPreferido, periodo, dataPreferida }),
-      { diaPreferido, periodo, dataPreferida },
-    );
+    const filtros = { diaPreferido, periodo, dataPreferida };
+    const pediuAlgo = diaPreferido !== null || periodo !== null || dataPreferida !== null;
+    const slotsGrade = Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { ...filtros, count: 6 });
+    const slotsExtras = Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, filtros);
+    const candidatos = Ordem.ordenarCandidatos(slotsGrade, slotsExtras, filtros);
+
+    // QUEM BATE COM O PEDIDO E QUEM É SÓ ALTERNATIVA. A grade não filtra de verdade: ela põe
+    // na frente o que bate e COMPLETA com o resto até o total pedido (ver ordem-dos-horarios.js).
+    // Isso é de propósito, pra família nunca ficar sem alternativa. O defeito era este resultado
+    // sair com os dois misturados num array só, sem marca nenhuma: um pedido de "amanhã" voltava
+    // "amanhã 9h30" e "hoje 14h" lado a lado, e a Carla oferecia os dois como se os dois fossem
+    // amanhã. Na conversa seguinte a mistura vinha diferente e ela se retratava de um horário
+    // que nunca esteve errado. Agora a alternativa vem separada e rotulada.
+    //
+    // A conta de quem bate mora em ordem-dos-horarios.js, junto da ordenação que a produz,
+    // e por isso roda em teste sem precisar do agenda.js.
+    const idsQueBatem = Ordem.idsQueBatem(slotsGrade, slotsExtras, filtros);
+
     const livres = [];
     for (const c of candidatos) {
       if (livres.length >= 2) break;
@@ -519,9 +570,25 @@ async function executarFerramenta(nome, input, ctx) {
       if (googleLivre === false) continue;
       livres.push(c);
     }
-    const resultado = livres.length === 0
-      ? { horarios: [], aviso: "Não há horário livre nesse critério dentro do horizonte de agenda visível." }
-      : { horarios: livres.map((s) => ({ slotId: s.id, label: s.label })) };
+    const paraIA = (s) => ({ slotId: s.id, label: s.label });
+    const { batem, naoBatem } = Ordem.separar(livres, idsQueBatem, pediuAlgo);
+
+    const resultado = { horarios: batem.map(paraIA) };
+    if (naoBatem.length > 0) {
+      resultado.alternativas = naoBatem.map(paraIA);
+      resultado.sobreAsAlternativas = batem.length === 0
+        ? "ATENÇÃO: NENHUM horário livre no que a família pediu. Os de 'alternativas' são de OUTRO dia ou período. Pode oferecer, mas dizendo que são de outro dia. Nunca ofereça como se fossem o que ela pediu."
+        : "Os de 'alternativas' NÃO são do dia/período que a família pediu. Ofereça primeiro os de 'horarios'; a alternativa só se ela recusar, e sempre dizendo que é outro dia.";
+    }
+    if (batem.length === 0 && naoBatem.length === 0) {
+      resultado.aviso = "Não há horário livre nesse critério dentro do horizonte de agenda visível.";
+    }
+
+    // A LISTA NÃO É A AGENDA INTEIRA. Ela traz no máximo 2, e cada chamada usa um critério
+    // diferente, então duas chamadas seguidas devolvem conjuntos diferentes — todos corretos.
+    // Sem esta linha a Carla lia ausência como inexistência e dizia "não tenho vaga amanhã"
+    // sobre um horário que ela mesma tinha oferecido dois minutos antes.
+    resultado.escopo = LIMITE_DA_LISTA;
     if (ctx.agendamentoAtual) {
       resultado.atencao = `Você JÁ TEM uma consulta confirmada nesta conversa: ${ctx.agendamentoAtual.crianca}, ${ctx.agendamentoAtual.label}. Isso é uma lembrança de mais cedo nesta conversa, pode estar desatualizada (ex: cancelada por outro caminho). Se não for claramente relevante agora, não mencione. Só volte a usar horários se for pra agendar uma consulta ADICIONAL de verdade (outro filho, por exemplo). Se a pergunta da família era sobre outra coisa (forma de pagamento, endereço etc), ignore esses horários e responda o que foi perguntado. Se a família duvidar que essa consulta ainda existe, confira com cancelar_agendamento apenasConsultar=true antes de responder.`;
     }
@@ -853,7 +920,7 @@ async function chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx,
     const resultadosFerramentas = [];
     for (const bloco of resposta.content) {
       if (bloco.type !== "tool_use") continue;
-      const resultado = await executarFerramenta(bloco.name, bloco.input, ctx);
+      const resultado = registrarSaidaDaFerramenta(bloco.name, await executarFerramenta(bloco.name, bloco.input, ctx));
       resultadosFerramentas.push({ type: "tool_result", tool_use_id: bloco.id, content: JSON.stringify(resultado) });
     }
     mensagens.push({ role: "user", content: resultadosFerramentas });
@@ -871,7 +938,10 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
   const api = obterCliente();
   if (!api) {
     return {
-      resposta: "No momento não consigo processar sua mensagem automaticamente. Em breve alguém da equipe te responde por aqui.",
+      // Não existe equipe (ver a regra COMO FALAR DE ESCALONAMENTO). Esta frase escapou da
+      // limpeza porque mora no código, não no prompt, e o teste da identidade só olhava o
+      // prompt. Agora a bateria olha o arquivo inteiro.
+      resposta: "No momento não consigo te responder automaticamente. Já sinalizei no consultório e te retorno assim que possível 😊",
       historico,
       acoes: [],
       cancelamentos: [],

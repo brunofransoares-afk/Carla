@@ -97,4 +97,37 @@ function ordenarCandidatos(grade = [], extras = [], filtros = {}) {
   ];
 }
 
-module.exports = { ordenarCandidatos, bate, espalhar };
+// QUEM BATE COM O PEDIDO, por id.
+//
+// ordenarCandidatos devolve uma lista só, com o que bate na frente e o resto atrás como
+// alternativa. Isso está certo pra ORDEM, mas quem consome a lista precisava saber ONDE
+// termina uma coisa e começa a outra — sem isso um pedido de "amanhã" voltava "amanhã 9h30"
+// e "hoje 14h" no mesmo array, e a Carla oferecia os dois como se os dois fossem amanhã.
+//
+// O bate() sozinho não serve pra essa conta: extra não tem weekday, então bate() reprovaria
+// um extra legítimo num pedido por dia da semana. Os extras já chegam filtrados de quem os
+// buscou, então eles batem por construção. É a mesma divisão que ordenarCandidatos faz por
+// dentro, exposta aqui pra quem precisa rotular o resultado.
+function idsQueBatem(grade = [], extras = [], filtros = {}) {
+  return new Set([
+    ...extras.map((s) => s.id),
+    ...grade.filter((s) => bate(s, filtros)).map((s) => s.id),
+  ]);
+}
+
+// Separa o que vai ser OFERECIDO do que vai ser oferecido COMO ALTERNATIVA.
+//
+// Mora aqui, e não solto dentro do cérebro, porque dentro do cérebro isso só dava pra
+// verificar por grep — e grep não pega a separação sendo desligada por dentro. Aqui roda
+// de verdade em teste, sem precisar do agenda.js.
+//
+// Sem pedido específico não existe alternativa: tudo que voltou é resposta.
+function separar(livres = [], idsQueBatemSet = new Set(), pediuAlgo = false) {
+  if (!pediuAlgo) return { batem: [...livres], naoBatem: [] };
+  return {
+    batem: livres.filter((s) => idsQueBatemSet.has(s.id)),
+    naoBatem: livres.filter((s) => !idsQueBatemSet.has(s.id)),
+  };
+}
+
+module.exports = { ordenarCandidatos, bate, espalhar, idsQueBatem, separar };
