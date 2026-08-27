@@ -9,22 +9,29 @@
     "stop": "pm2 stop carla-bot",
     "restart": "pm2 restart carla-bot",
     "restart:painel": "pm2 restart carla-painel",
-    "restart:tunnel": "pm2 restart carla-tunnel",
     "status": "pm2 status",
     "logs": "pm2 logs carla-bot",
     "logs:painel": "pm2 logs carla-painel",
-    "link": "pm2 logs carla-tunnel --lines 40 --nostream",
+    "check": "node --check server.js && node --check painel-server.js && npm test",
+    "backup": "node scripts/backup-dados.js",
     "dev": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
-    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "@whiskeysockets/baileys": "7.0.0-rc13",
     "googleapis": "^173.0.0",
-    "link-preview-js": "^3.2.0",
-    "qrcode": "^1.5.4"
+    "link-preview-js": "4.0.4",
+    "qrcode": "^1.5.4",
+    "sharp": "0.35.3"
+  },
+  "overrides": {
+    "brace-expansion": "2.1.4"
   }
 }

@@ -169,7 +169,7 @@ const em = (data, hora) => {
   const painel = fs.readFileSync(path.join(__dirname, "..", "painel-server.js"), "utf8");
   ok(/encaminharAoBot\("\/interno\/pagamento-confirmado"/.test(painel),
     "10. marcar pago no painel avisa a família");
-  ok(/if \(ok && pago\)/.test(painel),
+  ok(/if \(ok && pago &&/.test(painel),
     "10. só quando MARCA, nunca ao desmarcar");
 
   const bot = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");

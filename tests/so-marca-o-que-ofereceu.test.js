@@ -65,7 +65,7 @@ const { anotarOferta } = require(path.join(__dirname, "..", "oferta-de-horarios.
   ok(escapes.length === 0,
     `4. todo retorno de horários passa por anotarOferta (achei ${escapes.length} retorno(s) direto(s): ${escapes.join(", ")})`);
 
-  const registros = (fonte.match(/return anotarOferta\(ctx,/g) || []).length;
+  const registros = (fonte.match(/return anotarOfertaComEstado\(ctx,/g) || []).length;
   ok(registros >= 3, `4. os três caminhos de consultar_horarios registram (achei ${registros})`);
 
   ok(/if \(!ctx\.horariosOferecidos\.has\(input\.slotId\)\)/.test(fonte),

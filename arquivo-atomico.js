@@ -13,12 +13,24 @@ function escreverTextoAtomico(caminho, conteudo) {
   const temporario = caminhoTemporario(caminho);
   let descritor = null;
   try {
-    descritor = fs.openSync(temporario, "wx");
+    // Os arquivos guardam conversa, telefone e dados clínicos. O modo nasce restrito em
+    // vez de depender do umask da VPS; o rename preserva essas permissões no arquivo final.
+    descritor = fs.openSync(temporario, "wx", 0o600);
     fs.writeFileSync(descritor, conteudo, "utf8");
     fs.fsyncSync(descritor);
     fs.closeSync(descritor);
     descritor = null;
     fs.renameSync(temporario, caminho);
+    // fsync só no arquivo garante os bytes, mas não necessariamente o rename se a máquina
+    // perder energia naquele instante. Sincronizar o diretório fecha essa última janela.
+    try {
+      const diretorio = fs.openSync(path.dirname(caminho), "r");
+      try { fs.fsyncSync(diretorio); } finally { fs.closeSync(diretorio); }
+    } catch (erro) {
+      // Windows não permite fsync de diretório. O arquivo continua atômico; esta garantia
+      // adicional vale nas VPS Linux onde a Carla roda.
+      if (process.platform !== "win32") throw erro;
+    }
   } finally {
     if (descritor !== null) {
       try { fs.closeSync(descritor); } catch {}

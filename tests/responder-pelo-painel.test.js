@@ -35,7 +35,7 @@ const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-escalada-"))
 fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "storage-node.js"));
 fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
-const IRMA = path.join(RAIZ, "..", "carla-app", "js");
+const IRMA = path.join(RAIZ, "carla-app", "js");
 fs.mkdirSync(IRMA, { recursive: true });
 fs.writeFileSync(path.join(IRMA, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
 fs.writeFileSync(path.join(IRMA, "agenda.js"), [
@@ -147,12 +147,14 @@ const DASH = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8
 {
   const bloco = SERVER.slice(SERVER.indexOf("async function responderEscalada"), SERVER.indexOf("async function processarMensagem"));
   ok(/sessao\.aguardandoHumano = false;/.test(bloco), "5. sai do silêncio: foi a escalada que parou a conversa");
-  ok(/await enviarResposta\(sockAtivo, jid, telefone, resultado\.resposta, true\);/.test(bloco),
+  ok(/await enviarResposta\(sockAtivo, jid, telefone, resultado\.resposta, true, \{ registrarPreco: true \}\);/.test(bloco),
     "5b. e a Carla responde a família sozinha");
   ok(/if \(!alerta\.pergunta\) return \{ ok: false/.test(bloco), "5c. alerta sem pergunta não é respondível");
   ok(/if \(alerta\.respondidoEm\) return \{ ok: true, jaRespondido: true \};/.test(bloco), "5d. e já respondido não repete");
-  ok(/if \(!sockAtivo\) return \{ ok: false, motivo: "Carla desconectada do WhatsApp\." \};/.test(bloco),
-    "5e. com a Carla fora do ar, recusa em vez de perder a resposta em silêncio");
+  const posPersisteResposta = bloco.indexOf("await enviarResposta(sockAtivo, jid, telefone, resultado.resposta");
+  const posFechaAlerta = bloco.indexOf("Storage.responderAlerta(alertaId, respostaNormalizada)");
+  ok(!/if \(!sockAtivo\) return/.test(bloco) && posPersisteResposta >= 0 && posFechaAlerta > posPersisteResposta,
+    "5e. sem WhatsApp, guarda a mensagem e só então fecha o alerta");
   ok(/notificarNovoAgendamento\(sockAtivo, acao, telefone\);/.test(bloco),
     "5f. se ela marcar a consulta nessa volta, o Dr. Bruno é avisado igual");
 }
@@ -185,10 +187,10 @@ const DASH = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8
     "7i. a mesma regra na descrição da ferramenta, que é onde ela olha na hora de preencher");
 
   // O código valida o formato, não confia no que a IA escreveu.
-  ok(/\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(input\.dataPedida \|\| ""\)/.test(CEREBRO),
-    "7d. a data vinda da IA é validada por formato antes de virar alerta");
-  ok(/\(\[01\]\\d\|2\[0-3\]\):\[0-5\]\\d\$\/\.test\(input\.horaPedida \|\| ""\)/.test(CEREBRO),
-    "7e. a hora também");
+  ok(/temData && \(!dataIsoReal\(input\.dataPedida\) \|\| !horaReal\(input\.horaPedida\)\)/.test(CEREBRO),
+    "7d. a data vinda da IA é validada como data real antes de virar alerta");
+  ok(/function horaReal\(valor\)[\s\S]*\^\(\[01\]\\d\|2\[0-3\]\):\[0-5\]\\d\$/.test(CEREBRO),
+    "7e. a hora também é validada como hora real");
 }
 
 // ------------------------------------------------- 8. a tela

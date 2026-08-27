@@ -171,6 +171,28 @@ function configurar() {
   ok(!cc.headers.apikey && !cc.headers.Authorization,
     "9: cancelamento também não manda service role");
 
+  // ------------------- 10. contrato durável: a mesma chave vai no header e no corpo
+  limpar();
+  respostaFalsa = { ok: true, agendamento_id: "ag-idempotente" };
+  await AppAgenda.enviarAgendamentoEstrito({
+    pacienteNome: "Lia", responsavelNome: "Ana", telefone: "+5531900000000",
+    inicio: new Date("2026-08-10T17:30:00Z"), fim: null,
+  }, "spi:marcar:slot-1:v1");
+  eq(chamadas[0].headers["Idempotency-Key"], "spi:marcar:slot-1:v1",
+    "10: chave idempotente segue no header");
+  eq(JSON.parse(chamadas[0].body).chave_idempotencia, "spi:marcar:slot-1:v1",
+    "10: chave também segue no corpo para a Edge Function persistir");
+
+  limpar();
+  erroDeRede = "timeout durável";
+  let estritaRejeitou = false;
+  try {
+    await AppAgenda.cancelarAgendamentoEstrito("ag-novo", "spi:cancelar:slot-1:v1");
+  } catch (erro) {
+    estritaRejeitou = /timeout durável/.test(erro.message);
+  }
+  ok(estritaRejeitou, "10: versão estrita propaga a falha para o reconciliador tentar depois");
+
   // ------------------------------------------------------------- fim
   console.log("app-agenda: " + passou + " passaram, " + falhou + " falharam");
   if (falhou) {

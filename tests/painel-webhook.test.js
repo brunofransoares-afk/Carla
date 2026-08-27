@@ -13,6 +13,7 @@
  * Uso: node tests/painel-webhook.test.js
  */
 const path = require("path");
+const fs = require("fs");
 const { decidir } = require(path.join(__dirname, "..", "painel-webhook.js"));
 
 let passaram = 0;
@@ -31,6 +32,14 @@ function motivoDe(d) { return String((d && d.corpo && d.corpo.motivo) || ""); }
 const SEGREDO = "segredo-do-painel";
 const COMPARTILHADO = "segredo-que-a-carla-usa-com-o-spi";
 const POST = { url: "/webhook/portal-liberado", method: "POST" };
+
+// Com === o comportamento funcional seria igual e os demais testes passariam, por isso esta
+// trava garante que o segredo continue sendo comparado em tempo constante.
+{
+  const fonte = fs.readFileSync(path.join(__dirname, "..", "painel-webhook.js"), "utf8");
+  ok(/compararSegredo\(enviado,\s*s\.valor\)/.test(fonte),
+    "0: webhook deixou de usar comparação de segredo em tempo constante");
+}
 
 // ---- 1. o caminho que tem que funcionar, com o segredo dedicado
 {

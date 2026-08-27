@@ -2,19 +2,41 @@
 // do bot (carla-painel, não carla-bot) justamente pra continuar de pé mesmo quando
 // a Carla estiver desligada — senão não teria como religar ela pela tela.
 
-try { process.loadEnvFile(); } catch { /* sem .env — painel funciona sem senha, só localmente */ }
+try { process.loadEnvFile(); } catch { /* a validação obrigatória abaixo explica o que falta */ }
 
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
-const crypto = require("crypto");
 const { exec } = require("child_process");
+const Seguranca = require(path.join(__dirname, "painel-seguranca.js"));
+const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
+
+const PAINEL_SENHA = String(process.env.PAINEL_SENHA || "");
+if (!PAINEL_SENHA.trim()) {
+  throw new Error("PAINEL_SENHA não configurada: o painel recusou iniciar para não abrir sem senha.");
+}
 
 const Storage = require(path.join(__dirname, "storage-node.js"));
-const GoogleAgenda = require(path.join(__dirname, "google-agenda.js"));
-const AppAgenda = require(path.join(__dirname, "app-agenda.js"));
+const { criarIntegracoesDuraveis } = require(path.join(__dirname, "integracoes-duraveis.js"));
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const PainelWebhook = require(path.join(__dirname, "painel-webhook.js"));
+
+// Painel e bot compartilham a mesma caixa de efeitos. O lock e o lease da caixa garantem
+// que os dois processos possam reconciliar sem executar o mesmo efeito ao mesmo tempo.
+// Assim o painel continua concluindo cancelamentos externos mesmo quando o WhatsApp está
+// desligado, sem voltar às chamadas de rede únicas e irrecuperáveis dentro da rota HTTP.
+const Integracoes = criarIntegracoesDuraveis({
+  aoVincularAppAgendamento: async (slotId, appAgendamentoId) => {
+    if (!Storage.definirAppAgendamentoId(slotId, appAgendamentoId)) {
+      throw new Error(`Agendamento local ${slotId} não encontrado para vínculo SPI.`);
+    }
+  },
+  aoVincularGoogleEvento: async (slotId, googleEventId) => {
+    if (!Storage.definirGoogleEventId(slotId, googleEventId)) {
+      throw new Error(`Agendamento local ${slotId} não encontrado para vínculo Google.`);
+    }
+  },
+});
 
 const PORTA = 3355;
 const NOME_APP_BOT = "carla-bot";
@@ -24,14 +46,18 @@ const NOME_APP_BOT = "carla-bot";
 function statusDoBot() {
   return new Promise((resolve) => {
     exec("pm2 jlist", { windowsHide: true }, (erro, stdout) => {
-      if (erro) return resolve({ rodando: false, existe: false });
+      if (erro) return resolve(StatusWhatsapp.resumir({ rodando: false, existe: false, pid: null }));
       try {
         const lista = JSON.parse(stdout);
         const app = lista.find((a) => a.name === NOME_APP_BOT);
-        if (!app) return resolve({ rodando: false, existe: false });
-        resolve({ rodando: app.pm2_env.status === "online", existe: true });
+        if (!app) return resolve(StatusWhatsapp.resumir({ rodando: false, existe: false, pid: null }));
+        resolve(StatusWhatsapp.resumir({
+          rodando: app.pm2_env.status === "online",
+          existe: true,
+          pid: app.pid,
+        }));
       } catch {
-        resolve({ rodando: false, existe: false });
+        resolve(StatusWhatsapp.resumir({ rodando: false, existe: false, pid: null }));
       }
     });
   });
@@ -56,49 +82,25 @@ function normalizarTelefoneManual(bruto) {
   return "+" + digitos;
 }
 
-function lerCorpoJSON(req) {
-  return new Promise((resolve) => {
-    let corpo = "";
-    req.on("data", (c) => (corpo += c));
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(corpo || "{}"));
-      } catch {
-        resolve({});
-      }
-    });
-  });
-}
+const LIMITE_CORPO = Seguranca.inteiroPositivo(
+  process.env.PAINEL_LIMITE_CORPO_BYTES, Seguranca.LIMITE_CORPO_PADRAO, 1024 * 1024
+);
+const lerCorpoJSON = (req) => Seguranca.lerCorpo(req, { limite: LIMITE_CORPO, json: true });
+const lerCorpoTexto = (req) => Seguranca.lerCorpo(req, { limite: LIMITE_CORPO, json: false });
 
-// Sem PAINEL_SENHA configurada no .env, mantém como sempre foi (só uso local, sem senha).
-// Com senha configurada, exige em qualquer acesso — inclusive local — pra manter só um caminho.
-//
 // Login persistente: depois de autenticar uma vez (com a senha via Basic Auth), o navegador
-// recebe um cookie de sessão que dura 60 dias — assim não pede senha de novo toda hora,
-// principalmente no app salvo na tela do celular (que não guarda o Basic Auth como o Safari
-// normal guarda). O cookie é só um hash da senha, não a senha em texto puro.
+// recebe um token aleatório. Ele só vale na memória deste processo, nunca é derivado da senha
+// e expira; reiniciar o painel encerra todas as sessões existentes.
 const NOME_COOKIE = "carla_painel_sessao";
-const SESSAO_SEGUNDOS = 60 * 24 * 60 * 60; // 60 dias
-
-function tokenDeSessao() {
-  return crypto.createHash("sha256").update(process.env.PAINEL_SENHA).digest("hex");
-}
-
-function lerCookie(req, nome) {
-  const cabecalho = req.headers.cookie || "";
-  const encontrado = cabecalho.split(";").map((c) => c.trim()).find((c) => c.startsWith(nome + "="));
-  return encontrado ? encontrado.slice(nome.length + 1) : null;
-}
-
-function autenticado(req) {
-  const senha = process.env.PAINEL_SENHA;
-  if (!senha) return true;
-  if (lerCookie(req, NOME_COOKIE) === tokenDeSessao()) return true;
-  const cabecalho = req.headers.authorization || "";
-  if (!cabecalho.startsWith("Basic ")) return false;
-  const [, senhaEnviada] = Buffer.from(cabecalho.slice(6), "base64").toString("utf8").split(":");
-  return senhaEnviada === senha;
-}
+const SESSAO_SEGUNDOS = Seguranca.inteiroPositivo(
+  process.env.PAINEL_SESSAO_SEGUNDOS, 7 * 24 * 60 * 60, 60 * 24 * 60 * 60
+);
+const sessoes = Seguranca.criarSessoes({
+  nomeCookie: NOME_COOKIE, ttlMs: SESSAO_SEGUNDOS * 1000,
+});
+const limiteLogin = Seguranca.criarLimitador({ maximo: 10, janelaMs: 15 * 60 * 1000 });
+const limiteApi = Seguranca.criarLimitador({ maximo: 240, janelaMs: 60 * 1000 });
+const limiteWebhook = Seguranca.criarLimitador({ maximo: 60, janelaMs: 60 * 1000 });
 
 const html = fs.readFileSync(path.join(__dirname, "dashboard.html"));
 const PASTA_ICONES = path.join(__dirname, "icons");
@@ -134,7 +136,62 @@ function encaminharAoBot(caminho, corpo) {
   });
 }
 
-const servidor = http.createServer(async (req, res) => {
+async function enfileirarCancelamentoDuravel(agendamento) {
+  await Promise.all([
+    Integracoes.agendarCancelamentoSpi({
+      slotId: agendamento.slotId,
+      appAgendamentoId: agendamento.appAgendamentoId || null,
+    }),
+    Integracoes.agendarCancelamentoGoogle({
+      slotId: agendamento.slotId,
+      eventId: agendamento.googleEventId || null,
+    }),
+  ]);
+  if (!Storage.marcarCancelamentoEnfileirado(agendamento.slotId, { spi: true, google: true })) {
+    throw new Error(`Cancelamento local ${agendamento.slotId} não encontrado para confirmar a fila.`);
+  }
+}
+
+// Se o processo cair depois do COMMIT no SQLite e antes de terminar as duas gravações da
+// caixa, o registro cancelado continua marcado como pendente. Este varredor fecha a janela
+// na volta do painel. Repetições são seguras porque cada integração usa uma chave por slot.
+let recuperandoCancelamentos = false;
+async function recuperarCancelamentosNaoEnfileirados() {
+  if (recuperandoCancelamentos) return;
+  recuperandoCancelamentos = true;
+  try {
+    for (const agendamento of Storage.listarCancelamentosPendentesDeFila()) {
+      try {
+        await enfileirarCancelamentoDuravel(agendamento);
+      } catch (erro) {
+        console.error(`[CANCELAMENTO] Não consegui enfileirar as integrações de ${agendamento.slotId}:`, erro.message);
+      }
+    }
+  } finally {
+    recuperandoCancelamentos = false;
+  }
+}
+
+async function atenderRequisicao(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Content-Security-Policy",
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+    "script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'");
+
+  const cliente = Seguranca.identificarCliente(req);
+  const caminhoPedido = new URL(req.url, "http://painel.local").pathname;
+  if (caminhoPedido.startsWith("/webhook/")) {
+    const limite = limiteWebhook.verificar(cliente);
+    if (!limite.permitido) {
+      res.writeHead(429, { "Content-Type": "application/json; charset=utf-8", "Retry-After": limite.tentarEm });
+      res.end(JSON.stringify({ ok: false, motivo: "Muitas tentativas. Tente novamente depois." }));
+      return;
+    }
+  }
+
   // Porta de máquina (prontuário -> Carla). A decisão de quem entra vive em
   // painel-webhook.js, que é módulo puro e testado; aqui só sobra o encanamento.
   const decisao = PainelWebhook.decidir({
@@ -146,27 +203,48 @@ const servidor = http.createServer(async (req, res) => {
     return;
   }
   if (decisao.tipo === "encaminhar") {
-    let corpo = "";
-    req.on("data", (p) => { corpo += p; });
-    req.on("end", async () => {
-      const r = await encaminharAoBot(decisao.caminho, corpo || "{}");
-      res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(r.texto);
-    });
+    const corpo = await lerCorpoTexto(req);
+    const r = await encaminharAoBot(decisao.caminho, corpo || "{}");
+    res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(r.texto);
     return;
   }
 
-  if (!autenticado(req)) {
-    res.writeHead(401, { "WWW-Authenticate": 'Basic realm="Painel da Carla"' });
-    res.end("Senha necessária.");
+  const autenticacao = sessoes.autenticar(req, PAINEL_SENHA);
+  if (!autenticacao.ok) {
+    const limite = limiteLogin.verificar(cliente);
+    const status = limite.permitido ? 401 : 429;
+    const cabecalhos = limite.permitido
+      ? { "WWW-Authenticate": 'Basic realm="Painel da Carla"' }
+      : { "Retry-After": limite.tentarEm };
+    res.writeHead(status, cabecalhos);
+    res.end(limite.permitido ? "Senha necessária." : "Muitas tentativas. Aguarde e tente novamente.");
     return;
+  }
+  limiteLogin.limpar(cliente);
+
+  if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method || "").toUpperCase()) &&
+      caminhoPedido.startsWith("/api/") && !Seguranca.origemPermitida(req)) {
+    res.writeHead(403, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: false, erro: "Origem da operação recusada." }));
+    return;
+  }
+
+  if (caminhoPedido.startsWith("/api/")) {
+    const limite = limiteApi.verificar(cliente);
+    res.setHeader("X-RateLimit-Remaining", limite.restante);
+    if (!limite.permitido) {
+      res.writeHead(429, { "Content-Type": "application/json; charset=utf-8", "Retry-After": limite.tentarEm });
+      res.end(JSON.stringify({ ok: false, erro: "Muitas operações. Aguarde um minuto." }));
+      return;
+    }
   }
 
   // Renova o cookie de sessão a cada acesso autenticado (sliding expiration) — enquanto
   // usar o painel de tempos em tempos, nunca chega a expirar e pedir senha de novo.
-  if (process.env.PAINEL_SENHA) {
-    res.setHeader("Set-Cookie", `${NOME_COOKIE}=${tokenDeSessao()}; Max-Age=${SESSAO_SEGUNDOS}; Path=/; HttpOnly; SameSite=Lax`);
-  }
+  res.setHeader("Set-Cookie", Seguranca.cookieSeguro(
+    NOME_COOKIE, autenticacao.token, SESSAO_SEGUNDOS
+  ));
 
   if (req.url === "/manifest.json") {
     res.writeHead(200, { "Content-Type": "application/manifest+json; charset=utf-8" });
@@ -386,15 +464,17 @@ const servidor = http.createServer(async (req, res) => {
   if (req.url === "/api/pagamento-toggle" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const pago = !!corpo.pago;
-    const ok = corpo.slotId ? Storage.marcarPagamento(corpo.slotId, pago) : false;
+    const alteracao = corpo.slotId
+      ? Storage.alterarPagamento(corpo.slotId, pago)
+      : { ok: false, alterado: false, agendamento: null };
+    const ok = alteracao.ok;
 
-    // FUNIL, última etapa. Só na marcação, nunca na desmarcação: o registro é append-only e
-    // conta o que aconteceu. Desmarcar é correção de clique errado, não um pagamento que
-    // deixou de existir, e "desfazer" no funil exigiria reescrever linha, que é justamente
-    // o que este formato não faz.
-    if (ok && pago) {
-      const ag = Storage.lerAgendamentos().find((a) => a.slotId === corpo.slotId);
-      if (ag) Eventos.registrar("pagou", ag.telefone, { slotId: corpo.slotId });
+    // O arquivo continua append-only: desmarcar grava um evento compensatório. O agregador
+    // aplica os eventos na ordem e, assim, o painel mostra o estado final sem apagar a
+    // trilha de auditoria nem continuar contando como pago um clique que foi corrigido.
+    if (ok && alteracao.alterado && alteracao.agendamento) {
+      Eventos.registrar(pago ? "pagou" : "pagamento_desmarcado",
+        alteracao.agendamento.telefone, { slotId: corpo.slotId });
     }
 
     // Marcar como pago é o gatilho da confirmação: é o Dr. Bruno dizendo que viu o dinheiro
@@ -404,14 +484,14 @@ const servidor = http.createServer(async (req, res) => {
     // O painel não manda WhatsApp (a conexão vive no processo do bot), então encaminha pra
     // porta interna, igual aos avisos do portal e do guia.
     let avisou = null;
-    if (ok && pago) {
+    if (ok && pago && (alteracao.alterado || !alteracao.agendamento?.pagamentoAvisadoEm)) {
       const r = await encaminharAoBot("/interno/pagamento-confirmado", JSON.stringify({ slotId: corpo.slotId }));
       try { avisou = JSON.parse(r.texto); } catch { avisou = { ok: false, motivo: r.texto }; }
       if (!avisou.ok) console.error(`[PAGAMENTO] Não avisei a família de ${corpo.slotId}: ${r.texto}`);
     }
 
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok, avisou }));
+    res.end(JSON.stringify({ ok, alterado: alteracao.alterado, avisou }));
     return;
   }
 
@@ -472,11 +552,16 @@ const servidor = http.createServer(async (req, res) => {
   if (req.url === "/api/cancelar" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const removido = corpo.slotId ? Storage.cancelarAgendamento(corpo.slotId) : null;
-    if (removido && removido.googleEventId) {
-      await GoogleAgenda.cancelarEvento(removido.googleEventId);
-    }
-    if (removido && removido.appAgendamentoId) {
-      await AppAgenda.cancelarAgendamento(removido.appAgendamentoId);
+    let integracoesEnfileiradas = false;
+    if (removido) {
+      try {
+        await enfileirarCancelamentoDuravel(removido);
+        integracoesEnfileiradas = true;
+      } catch (erro) {
+        // O cancelamento local já está confirmado. Não mentimos que ele falhou: o varredor
+        // acima encontra o marcador ausente e repete o enfileiramento automaticamente.
+        console.error(`[CANCELAMENTO] Cancelado localmente, fila externa pendente para ${removido.slotId}:`, erro.message);
+      }
     }
     // Se a Carla tinha em cache "essa conversa já tem consulta marcada" pra esse
     // telefone, apaga o cache — senão ela continua achando que ainda está marcada
@@ -489,7 +574,7 @@ const servidor = http.createServer(async (req, res) => {
       }
     }
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok: !!removido }));
+    res.end(JSON.stringify({ ok: !!removido, integracoesEnfileiradas }));
     return;
   }
 
@@ -502,6 +587,16 @@ const servidor = http.createServer(async (req, res) => {
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
+}
+
+const servidor = http.createServer((req, res) => {
+  atenderRequisicao(req, res).catch((erro) => {
+    if (res.writableEnded) return;
+    const status = Number(erro && erro.statusCode) || 500;
+    if (status >= 500) console.error("[PAINEL] Falha interna ao atender requisição:", erro);
+    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: false, erro: status >= 500 ? "Erro interno." : erro.message }));
+  });
 });
 
 servidor.on("error", (erro) => {
@@ -515,3 +610,11 @@ servidor.on("error", (erro) => {
 servidor.listen(PORTA, "127.0.0.1", () => {
   console.log(`Painel da Carla disponível em: http://localhost:${PORTA}`);
 });
+
+// O reconciliador executa fora das rotas HTTP. O clique só persiste e enfileira; queda de
+// rede, timeout ou reinício ficam registrados para nova tentativa. Pode coexistir com o
+// reconciliador do bot porque a caixa concede um lease exclusivo por efeito.
+Integracoes.iniciarReconciliacao();
+void recuperarCancelamentosNaoEnfileirados();
+const timerRecuperarCancelamentos = setInterval(recuperarCancelamentosNaoEnfileirados, 60_000);
+if (typeof timerRecuperarCancelamentos.unref === "function") timerRecuperarCancelamentos.unref();

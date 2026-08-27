@@ -108,7 +108,10 @@ function registrar(tipo, telefone, dados = {}, agora = new Date()) {
       telefone: telefone || null,
       ...dados,
     });
-    fs.appendFileSync(ARQ_EVENTOS, linha + "\n", "utf8");
+    fs.appendFileSync(ARQ_EVENTOS, linha + "\n", { encoding: "utf8", mode: 0o600, flag: "a" });
+    try { fs.chmodSync(ARQ_EVENTOS, 0o600); } catch (erroPermissao) {
+      if (process.platform !== "win32") throw erroPermissao;
+    }
     return true;
   } catch (erro) {
     console.error("[EVENTOS] Não consegui registrar:", erro.message);
@@ -164,9 +167,22 @@ const ETAPAS = [
 
 // Monta o funil a partir dos eventos crus. Trabalha por TELEFONE, não por evento: uma
 // família que mandou quinze mensagens é um contato, não quinze.
+//
+// O recorte é de ATIVIDADE: entram famílias que tiveram algum evento dentro do período; o
+// estágio delas é reconstruído com o histórico até o fim do recorte. Isso é necessário para
+// não chamar de "não pago" alguém que pagou antes do primeiro dia selecionado e voltou a
+// conversar agora. Não é uma coorte fixa de quem começou no período. A API e a tela expõem
+// essa semântica para o número não parecer outra coisa.
 function funil({ desde = null, ate = null } = {}) {
-  const eventos = lerEventos({ desde, ate });
+  const atividade = lerEventos({ desde, ate });
+  const telefonesAtivos = new Set(atividade.filter((e) => e.telefone).map((e) => e.telefone));
+  // Sem filtro, já temos o histórico inteiro. Com filtro, buscamos também o que veio antes
+  // apenas para os telefones ativos no recorte; eventos posteriores a `ate` nunca vazam.
+  const eventos = (desde || ate)
+    ? lerEventos({ ate }).filter((e) => e.telefone && telefonesAtivos.has(e.telefone))
+    : atividade;
   const porTelefone = new Map();
+  const pagamentosAbertos = new Map();
 
   function doTelefone(tel) {
     if (!porTelefone.has(tel)) {
@@ -195,11 +211,30 @@ function funil({ desde = null, ate = null } = {}) {
     if (e.tipo === "preco_informado") c.recebeuPreco = true;
     if (e.tipo === "horarios_oferecidos") c.recebeuHorario = true;
     if (e.tipo === "agendou") c.agendou = true;
-    if (e.tipo === "pagou") c.pagou = true;
+    if (e.tipo === "pagou") {
+      if (!pagamentosAbertos.has(e.telefone)) pagamentosAbertos.set(e.telefone, new Set());
+      pagamentosAbertos.get(e.telefone).add(e.slotId || "__legado_sem_slot__");
+    }
+    if (e.tipo === "pagamento_desmarcado") {
+      const abertos = pagamentosAbertos.get(e.telefone);
+      if (abertos) {
+        if (e.slotId) abertos.delete(e.slotId);
+        else abertos.clear();
+      }
+      // Para desmarcar pagamento a consulta necessariamente já foi agendada. Preservar
+      // essa etapa evita que o evento compensatório crie um contato solto no topo.
+      c.agendou = true;
+    }
     if (e.tipo === "escalou") c.escalou = true;
   }
 
   const contatos = [...porTelefone.values()];
+
+  // Pagamento é estado, não apenas ocorrência histórica. Um mesmo telefone pode ter dois
+  // filhos: desmarcar o pagamento de um slot não apaga o pagamento válido do outro.
+  for (const c of contatos) {
+    c.pagou = (pagamentosAbertos.get(c.telefone)?.size || 0) > 0;
+  }
 
   // Quem agendou obviamente recebeu horário, e quem recebeu horário soube o valor (a regra
   // NUNCA CONFIRME SEM TER INFORMADO O VALOR garante isso). Sem essa normalização um evento
@@ -238,6 +273,11 @@ function funil({ desde = null, ate = null } = {}) {
   const fecharam = particulares.filter((c) => c.agendou).length;
 
   return {
+    semantica: {
+      chave: "atividade_no_periodo",
+      rotulo: "Atividade no período",
+      explicacao: "Famílias com algum evento no período; o estágio acumulado delas é reconstruído até o fim do recorte.",
+    },
     etapas,
     maiorQueda,
     porPergunta,

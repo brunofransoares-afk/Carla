@@ -9,6 +9,9 @@
 try { process.loadEnvFile(); } catch { /* sem .env ainda — roda normalmente, só sem o reforço de IA */ }
 
 const path = require("path");
+// Instala a redação antes de qualquer integração carregar ou escrever logs. Assim telefone,
+// e-mail, texto clínico e segredos não acabam persistidos pelo PM2 em caso de erro.
+require(path.join(__dirname, "log-seguro.js")).instalarConsoleSeguro();
 const http = require("http");
 const qrcode = require("qrcode");
 const {
@@ -19,8 +22,8 @@ const {
   normalizeMessageContent,
 } = require("@whiskeysockets/baileys");
 
-require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
-const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"));
+require(path.join(__dirname, "carla-app", "js", "config.js"));
+const Agenda = require(path.join(__dirname, "carla-app", "js", "agenda.js"));
 const Storage = require(path.join(__dirname, "storage-node.js"));
 const CerebroIA = require(path.join(__dirname, "cerebro-ia.js"));
 const Avisos = require(path.join(__dirname, "avisos-texto.js"));
@@ -29,13 +32,28 @@ const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"))
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
 const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
+const EstadoAtendimento = require(path.join(__dirname, "estado-atendimento.js"));
+const TriagemEmergencia = require(path.join(__dirname, "triagem-emergencia.js"));
+const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
 const { criarFilaPorChave } = require(path.join(__dirname, "fila-por-chave.js"));
 const { criarCaixaDeSaida } = require(path.join(__dirname, "caixa-de-saida.js"));
+const { criarIntegracoesDuraveis } = require(path.join(__dirname, "integracoes-duraveis.js"));
 
 const ATRASO_RESPOSTA_MS = 3000;
 const PORTA_TRAVA = 3357;
 const HORA_LEMBRETES = 8; // manda os lembretes automáticos a partir das 8h
 const AGUARDANDO_HUMANO_EXPIRA_MS = 2 * 60 * 60 * 1000; // 2 horas
+const LIMITE_CORPO_INTERNO_BYTES = 64 * 1024;
+const LIMITE_TEXTO_ENTRADA = Math.min(Math.max(Number(process.env.CARLA_MAX_TEXTO_ENTRADA) || 8000, 500), 20000);
+const LIMITE_MENSAGENS_POR_MINUTO = Math.min(Math.max(Number(process.env.CARLA_MAX_MENSAGENS_MINUTO) || 30, 5), 120);
+
+const integracoes = criarIntegracoesDuraveis({
+  aoVincularAppAgendamento: async (slotId, appAgendamentoId) =>
+    Storage.definirAppAgendamentoId(slotId, appAgendamentoId),
+  aoVincularGoogleEvento: async (slotId, googleEventId) =>
+    Storage.definirGoogleEventId(slotId, googleEventId),
+});
+const pararReconciliadorIntegracoes = integracoes.iniciarReconciliacao();
 
 // Avisa a família que o guia foi liberado. Espelha o avisarPortalLiberado de propósito —
 // mesmas travas, mesma ordem — porque as duas mensagens falham do mesmo jeito.
@@ -64,7 +82,8 @@ async function avisarGuiaLiberadoNaFila({ telefone, email }) {
   if (agendamento && agendamento.guiaAvisadoEm) return { ok: true, jaAvisado: true };
 
   const porta = Avisos.checarAviso({ endereco: endereco, nomeDaVariavel: "GUIA_URL",
-    conectado: !!sockAtivo, agendamento: agendamento, email: email });
+    // A caixa de saída aceita o aviso mesmo durante uma reconexão e entrega depois.
+    conectado: true, agendamento: agendamento, email: email });
   if (!porta.ok) return porta;
 
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
@@ -73,6 +92,7 @@ async function avisarGuiaLiberadoNaFila({ telefone, email }) {
   await enviarResposta(sockAtivo, jid, agendamento.telefone, texto, true, {
     chaveIdempotencia: `guia:${agendamento.slotId}`,
     efeitoAposEnvio: { tipo: "marcar_guia", slotId: agendamento.slotId },
+    registrarNoHistorico: true,
   });
   console.log(`[GUIA] Avisei ${agendamento.telefone} sobre o guia de ${agendamento.crianca}`);
   return { ok: true };
@@ -115,10 +135,12 @@ async function avisarPagamentoConfirmadoNaFila(slotId) {
   if (!slotId) return { ok: false, motivo: "Sem slotId." };
   const a = Storage.acharAgendamentoPorSlot(slotId);
   if (!a) return { ok: false, motivo: `Não achei agendamento com slotId ${slotId}.` };
+  if (a.estado !== "pago" || !a.pago) {
+    return { ok: false, motivo: "Esse agendamento não está marcado como pago." };
+  }
   // O botão do painel é um interruptor, e clique repetido acontece. Sem esta trava a
   // família receberia a mesma confirmação duas vezes.
   if (a.pagamentoAvisadoEm) return { ok: true, jaAvisado: true };
-  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp." };
   if (!String(a.telefone || "").startsWith("+")) return { ok: false, motivo: "Sem telefone de WhatsApp." };
 
   const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
@@ -143,9 +165,15 @@ async function avisarPagamentoConfirmadoNaFila(slotId) {
 
   const texto = `Pagamento recebido! 😊\n\nA consulta de ${primeiroNome(a.crianca)} está confirmada para ${a.diaLabel}.\n\nEndereço: Rua Ranulpho Alvarenga Ferreira, 61${pedido}\n\nQualquer coisa até lá, é só me chamar por aqui.`;
 
+  // O fato do pagamento vem do painel e vale mesmo se o WhatsApp estiver reconectando.
+  // A mensagem fica na caixa de saída, mas a próxima conversa já não pode tratar a consulta
+  // como uma mera reserva aguardando Pix.
+  registrarPagamentoNaSessao(a.telefone, a);
+
   await enviarResposta(sockAtivo, jid, a.telefone, texto, true, {
     chaveIdempotencia: `pagamento:${slotId}`,
     efeitoAposEnvio: { tipo: "marcar_pagamento", slotId },
+    registrarNoHistorico: true,
   });
   console.log(`[PAGAMENTO] Avisei ${a.telefone} que a consulta de ${a.crianca} está confirmada`);
   return { ok: true };
@@ -173,7 +201,7 @@ async function avisarPortalLiberadoNaFila({ telefone, email }) {
   // "usando este mesmo e-mail: undefined". Prometer acesso com endereço em branco é pior
   // que não mandar: quem lê tenta, não consegue, e conclui que o portal não funciona.
   const porta = Avisos.checarAviso({ endereco: endereco, nomeDaVariavel: "PORTAL_URL",
-    conectado: !!sockAtivo, agendamento: agendamento, email: email });
+    conectado: true, agendamento: agendamento, email: email });
   if (!porta.ok) return porta;
 
   const jid = agendamento.telefone.replace("+", "") + "@s.whatsapp.net";
@@ -183,9 +211,38 @@ async function avisarPortalLiberadoNaFila({ telefone, email }) {
   await enviarResposta(sockAtivo, jid, agendamento.telefone, texto, true, {
     chaveIdempotencia: `portal:${agendamento.slotId}`,
     efeitoAposEnvio: { tipo: "marcar_portal", slotId: agendamento.slotId },
+    registrarNoHistorico: true,
   });
   console.log(`[PORTAL] Avisei ${agendamento.telefone} sobre o portal de ${agendamento.crianca}`);
   return { ok: true };
+}
+
+function lerCorpoJsonInterno(req, res, aoReceber) {
+  let corpo = "";
+  let bytes = 0;
+  let excedeu = false;
+  req.on("data", (parte) => {
+    bytes += Buffer.byteLength(parte);
+    if (bytes > LIMITE_CORPO_INTERNO_BYTES) {
+      if (!excedeu) {
+        excedeu = true;
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, motivo: "Corpo da requisição grande demais." }));
+      }
+      return;
+    }
+    corpo += parte;
+  });
+  req.on("end", () => {
+    if (excedeu) return;
+    let dados;
+    try { dados = JSON.parse(corpo || "{}"); } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, motivo: "JSON inválido." }));
+      return;
+    }
+    void aoReceber(dados);
+  });
 }
 
 // Não serve mais o painel (isso agora é o processo separado painel-server.js, que fica
@@ -198,11 +255,7 @@ function iniciarTravaInstancia() {
     // pra cá o que precisa da conexão do WhatsApp. Só escuta em 127.0.0.1 (ver listen
     // no fim desta função), então nada da internet chega aqui direto.
     if (req.method === "POST" && req.url === "/interno/guia-liberado") {
-      let corpo = "";
-      req.on("data", (p) => { corpo += p; });
-      req.on("end", async () => {
-        let dados = {};
-        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+      lerCorpoJsonInterno(req, res, async (dados) => {
         try {
           const r = await avisarGuiaLiberado({ telefone: dados.telefone, email: dados.email });
           res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
@@ -218,11 +271,7 @@ function iniciarTravaInstancia() {
     // O Dr. Bruno apertou "Pago" no painel. Quem tem a conexão do WhatsApp é este
     // processo, então o painel encaminha pra cá.
     if (req.method === "POST" && req.url === "/interno/pagamento-confirmado") {
-      let corpo = "";
-      req.on("data", (p) => { corpo += p; });
-      req.on("end", async () => {
-        let dados = {};
-        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+      lerCorpoJsonInterno(req, res, async (dados) => {
         try {
           const r = await avisarPagamentoConfirmado(dados.slotId);
           res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
@@ -236,11 +285,7 @@ function iniciarTravaInstancia() {
       return;
     }
     if (req.method === "POST" && req.url === "/interno/portal-liberado") {
-      let corpo = "";
-      req.on("data", (p) => { corpo += p; });
-      req.on("end", async () => {
-        let dados = {};
-        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+      lerCorpoJsonInterno(req, res, async (dados) => {
         try {
           const r = await avisarPortalLiberado({ telefone: dados.telefone, email: dados.email });
           res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
@@ -254,11 +299,7 @@ function iniciarTravaInstancia() {
       return;
     }
     if (req.method === "POST" && req.url === "/interno/reaquecer") {
-      let corpo = "";
-      req.on("data", (p) => { corpo += p; });
-      req.on("end", async () => {
-        let dados = {};
-        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+      lerCorpoJsonInterno(req, res, async (dados) => {
         try {
           const r = await reaquecerLead(dados.telefone);
           res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
@@ -273,11 +314,7 @@ function iniciarTravaInstancia() {
     }
 
     if (req.method === "POST" && req.url === "/interno/resposta-do-doutor") {
-      let corpo = "";
-      req.on("data", (p) => { corpo += p; });
-      req.on("end", async () => {
-        let dados = {};
-        try { dados = JSON.parse(corpo || "{}"); } catch { /* corpo inválido vira busca vazia */ }
+      lerCorpoJsonInterno(req, res, async (dados) => {
         try {
           const r = await responderEscalada(dados.alertaId, dados.resposta);
           res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
@@ -312,6 +349,27 @@ function iniciarTravaInstancia() {
 const DEBOUNCE_MS = 6000;
 const buffers = new Map(); // telefone -> { textos, jid, timer }
 const filaMensagens = criarFilaPorChave();
+const entradasRecentes = new Map(); // telefone -> timestamps do último minuto
+const avisosDeTaxa = new Map();
+
+function permitirMensagemDoTelefone(telefone, agora = Date.now()) {
+  const desde = agora - 60_000;
+  const recentes = (entradasRecentes.get(telefone) || []).filter((t) => t >= desde);
+  if (recentes.length >= LIMITE_MENSAGENS_POR_MINUTO) {
+    entradasRecentes.set(telefone, recentes);
+    return false;
+  }
+  recentes.push(agora);
+  entradasRecentes.set(telefone, recentes);
+  return true;
+}
+
+function deveAvisarLimiteDeTaxa(telefone, agora = Date.now()) {
+  const ultimo = avisosDeTaxa.get(telefone) || 0;
+  if (agora - ultimo < 60_000) return false;
+  avisosDeTaxa.set(telefone, agora);
+  return true;
+}
 
 // O WhatsApp pode reentregar a mesma mensagem depois de uma reconexão (ex: instabilidade de
 // rede) — se isso acontecer fora da janela do debounce acima, viraria um segundo
@@ -346,7 +404,7 @@ function telefoneDoJid(jid, remoteJidAlt) {
   return jidComTelefone ? normalizarTelefone(jidComTelefone) : `lid:${jid.split("@")[0]}`;
 }
 
-function agendarProcessamento(sock, jid, telefone, texto) {
+function agendarProcessamento(jid, telefone, texto) {
   let buffer = buffers.get(telefone);
   if (!buffer) {
     buffer = { textos: [], jid, timer: null };
@@ -360,8 +418,15 @@ function agendarProcessamento(sock, jid, telefone, texto) {
     const textoCombinado = buffer.textos.join("\n");
     buffers.delete(telefone);
     filaMensagens.enfileirar(telefone, async () => {
-      await reenviarPendentesDoTelefone(sock, telefone);
-      return processarMensagem(sock, buffer.jid, telefone, textoCombinado);
+      // O socket que recebeu a mensagem pode ter caído durante os seis segundos de
+      // debounce. Usa a conexão atual; sem conexão, processa mesmo assim e deixa a resposta
+      // na caixa durável para a próxima abertura.
+      const conexao = sockAtivo;
+      if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
+      if (textoCombinado.length > LIMITE_TEXTO_ENTRADA) {
+        return processarFormatoNaoEntendido(conexao, buffer.jid, telefone, "texto_longo");
+      }
+      return processarMensagem(conexao, buffer.jid, telefone, textoCombinado);
     }).catch((erro) => {
       console.error("Erro ao processar mensagem:", erro);
     });
@@ -369,14 +434,113 @@ function agendarProcessamento(sock, jid, telefone, texto) {
 }
 
 function sessaoPadrao(telefone) {
-  return { telefone, historico: [], aguardandoHumano: false, aguardandoHumanoDesde: null, recadoDoDoutor: null };
+  return {
+    telefone,
+    historico: [],
+    aguardandoHumano: false,
+    aguardandoHumanoDesde: null,
+    recadoDoDoutor: null,
+    estadoAtendimento: EstadoAtendimento.reiniciarConversa(),
+    triagemPendente: null,
+    ultimoAgendamento: null,
+  };
+}
+
+function normalizarSessao(telefone, existente) {
+  const sessao = { ...sessaoPadrao(telefone), ...(existente || {}) };
+  sessao.historico = Array.isArray(sessao.historico) ? sessao.historico : [];
+  sessao.estadoAtendimento = EstadoAtendimento.normalizar(sessao.estadoAtendimento);
+  return sessao;
+}
+
+function resumoDeAgendamento(agendamento) {
+  if (!agendamento) return null;
+  return {
+    slotId: agendamento.slotId,
+    crianca: agendamento.crianca,
+    label: agendamento.diaLabel || agendamento.label,
+    data: agendamento.data,
+    horario: agendamento.horario,
+    pago: !!agendamento.pago,
+    estado: agendamento.estado,
+  };
+}
+
+function agendamentoAtualReal(telefone, now = new Date()) {
+  return Storage.proximaConsultaDoTelefone(telefone, now);
+}
+
+function sincronizarUltimoAgendamento(sessao, telefone, now = new Date()) {
+  const atual = agendamentoAtualReal(telefone, now);
+  sessao.ultimoAgendamento = resumoDeAgendamento(atual);
+  const estado = EstadoAtendimento.normalizar(sessao.estadoAtendimento);
+  if (atual && atual.pago) {
+    sessao.estadoAtendimento = EstadoAtendimento.registrarPagamento(estado);
+  } else if (atual && estado.etapa === EstadoAtendimento.ETAPAS.PAGO) {
+    // O botão do painel pode ter sido desfeito desde a última mensagem. A agenda real é a
+    // fonte de verdade; a sessão não pode continuar chamando de confirmada uma reserva.
+    sessao.estadoAtendimento = EstadoAtendimento.registrarReserva(estado);
+  } else if (!atual && [EstadoAtendimento.ETAPAS.PAGO,
+    EstadoAtendimento.ETAPAS.AGUARDANDO_PAGAMENTO].includes(estado.etapa)) {
+    sessao.estadoAtendimento = EstadoAtendimento.reiniciarConversa();
+  }
+  return atual;
+}
+
+function anexarRespostaFixaNoHistorico(telefone, texto, agora = new Date()) {
+  const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
+  const historico = sessao.historico || [];
+  const ultima = historico[historico.length - 1];
+  if (!(ultima && ultima.role === "assistant" && ultima.content === texto)) {
+    sessao.historico = [...historico, { role: "assistant", content: texto }].slice(-24);
+  }
+  sessao.ultimaAtividade = agora.toISOString();
+  Storage.salvarSessao(telefone, sessao);
+}
+
+function registrarPagamentoNaSessao(telefone, agendamento) {
+  const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
+  sessao.estadoAtendimento = EstadoAtendimento.registrarPagamento(sessao.estadoAtendimento);
+  sessao.ultimoAgendamento = resumoDeAgendamento(agendamento || agendamentoAtualReal(telefone));
+  Storage.salvarSessao(telefone, sessao);
+}
+
+function precoParticularInformado(texto) {
+  const conteudo = String(texto || "");
+  if (!/atendimento\s+(?:é\s+|eh\s+)?particular|consulta\s+(?:é\s+|eh\s+)?particular|particular[^\n]{0,100}R\$/i.test(conteudo)) return null;
+  const valores = new Set();
+  if (/R\$\s*550(?:[.,]00)?\b/i.test(conteudo)) valores.add(55000);
+  if (/R\$\s*800(?:[.,]00)?\b/i.test(conteudo)) valores.add(80000);
+  return valores.size === 1 ? [...valores][0] : null;
+}
+
+function combinarEfeitos(...efeitos) {
+  const validos = efeitos.flat().filter(Boolean);
+  if (validos.length === 0) return null;
+  if (validos.length === 1) return validos[0];
+  return { tipo: "multiplos", efeitos: validos };
 }
 
 function aplicarEfeitoAposEnvio(efeito) {
   if (!efeito || !efeito.tipo) return;
-  if (efeito.tipo === "marcar_guia") Storage.marcarGuiaAvisado(efeito.slotId);
+  if (efeito.tipo === "multiplos") {
+    for (const item of efeito.efeitos || []) aplicarEfeitoAposEnvio(item);
+  }
+  else if (efeito.tipo === "registrar_preco") {
+    const sessao = normalizarSessao(efeito.telefone, Storage.obterSessao(efeito.telefone));
+    sessao.estadoAtendimento = EstadoAtendimento.registrarPreco(
+      sessao.estadoAtendimento, efeito.valorCentavos, new Date());
+    Storage.salvarSessao(efeito.telefone, sessao);
+    Eventos.registrar("preco_informado", efeito.telefone, { valorCentavos: efeito.valorCentavos }, new Date());
+  }
+  else if (efeito.tipo === "marcar_guia") Storage.marcarGuiaAvisado(efeito.slotId);
   else if (efeito.tipo === "marcar_portal") Storage.marcarPortalAvisado(efeito.slotId);
   else if (efeito.tipo === "marcar_pagamento") Storage.marcarPagamentoAvisado(efeito.slotId);
+  else if (efeito.tipo === "marcar_reaquecimento") {
+    const sessao = normalizarSessao(efeito.telefone, Storage.obterSessao(efeito.telefone));
+    if (!sessao.reaquecidoEm) sessao.reaquecidoEm = efeito.em || new Date().toISOString();
+    Storage.salvarSessao(efeito.telefone, sessao);
+  }
   else if (efeito.tipo === "marcar_lembrete") Storage.marcarLembreteEnviado(efeito.slotId, efeito.lembrete);
   else if (efeito.tipo === "marcar_apresentacao") {
     if (Storage.marcarApresentacao(efeito.telefone)) {
@@ -405,29 +569,91 @@ async function reenviarMensagensPendentes(sock) {
   if (falhas > 0) console.error(`[CAIXA DE SAÍDA] ${falhas} conversa(s) continuam pendentes de envio.`);
 }
 
-async function enviarResposta(sock, jid, telefone, texto, semAtraso, { efeitoAposEnvio = null, chaveIdempotencia = null } = {}) {
+async function reconciliarPagamentosSemAviso() {
+  const pendentes = Storage.lerAgendamentos().filter((a) =>
+    a.estado === "pago" && a.pago && !a.pagamentoAvisadoEm
+      && String(a.telefone || "").startsWith("+"));
+  for (const agendamento of pendentes) {
+    const resultado = await avisarPagamentoConfirmado(agendamento.slotId);
+    if (!resultado.ok) {
+      console.error(`[PAGAMENTO] Confirmação pendente de ${agendamento.slotId}: ${resultado.motivo}`);
+    }
+  }
+}
+
+async function enviarResposta(sock, jid, telefone, texto, semAtraso, {
+  efeitoAposEnvio = null,
+  chaveIdempotencia = null,
+  registrarNoHistorico = false,
+  registrarPreco = false,
+  aposPersistir = null,
+} = {}) {
   // Persiste ANTES do atraso de digitação e da rede. Se o processo cair em qualquer ponto,
   // a mensagem será reenviada na próxima conexão em vez de desaparecer.
-  const pendente = Storage.registrarMensagemPendente({ telefone, jid, texto, efeitoAposEnvio, chaveIdempotencia });
+  const valorCentavos = registrarPreco ? precoParticularInformado(texto) : null;
+  const efeitos = combinarEfeitos(
+    efeitoAposEnvio,
+    valorCentavos ? { tipo: "registrar_preco", telefone, valorCentavos } : null,
+  );
+  const pendente = Storage.registrarMensagemPendente({
+    telefone, jid, texto, efeitoAposEnvio: efeitos, chaveIdempotencia,
+  });
+  if (registrarNoHistorico) anexarRespostaFixaNoHistorico(telefone, texto);
+  if (typeof aposPersistir === "function") await aposPersistir(pendente);
+  // WhatsApp desconectado não desfaz uma decisão já tomada. A mensagem fica durável e a
+  // connection.update a entrega assim que uma nova sessão abrir.
+  if (!sock) return { ok: true, pendente: true, id: pendente.id };
   if (!semAtraso) {
     await sock.presenceSubscribe(jid).catch(() => {});
     await sock.sendPresenceUpdate("composing", jid).catch(() => {});
     await new Promise((r) => setTimeout(r, ATRASO_RESPOSTA_MS));
     await sock.sendPresenceUpdate("paused", jid).catch(() => {});
   }
-  return caixaDeSaida.tentarEnviar(sock, pendente);
+  try {
+    await caixaDeSaida.tentarEnviar(sock, pendente);
+    return { ok: true, enviada: true, id: pendente.id };
+  } catch (erro) {
+    // tentarEnviar já registrou a falha. Não converte a queda da rede em perda do efeito:
+    // quem chamou pode seguir, porque o reenvio automático tem tudo de que precisa.
+    return { ok: true, pendente: true, id: pendente.id, motivo: erro.message };
+  }
 }
 
 // Áudio (mensagem de voz ou arquivo de áudio) — a Carla ainda não consegue ouvir, então só
 // pede, de forma fixa e educada, pra mandar por escrito. Sempre determinístico, nunca passa
 // pela IA. Respeita silêncio manual e atendimento humano em andamento, igual mensagem de texto.
 const PEDIDO_MANDAR_POR_ESCRITO = "Oi 😊 Por aqui eu ainda não consigo ouvir áudio. Poderia me mandar por escrito, por favor? Assim consigo te ajudar certinho.";
+const PEDIDO_DESCREVER_MIDIA = "Oi 😊 Recebi a mídia, mas preciso que você me diga por escrito o que quer que eu observe ou resolva. Assim consigo te ajudar certinho.";
+const PEDIDO_REENVIAR_FORMATO = "Oi 😊 Recebi sua mensagem, mas ela veio num formato que eu ainda não consigo ler. Pode me mandar em texto, por favor?";
+const PEDIDO_DIVIDIR_TEXTO = "Oi 😊 Essa mensagem ficou grande demais para eu analisar com segurança. Pode dividir em duas ou três mensagens menores, por favor?";
+const AVISO_MUITAS_MENSAGENS = "Recebi suas mensagens 😊 Vou processar o que já chegou. Aguarde um instante antes de mandar mais, por favor.";
 
 async function processarAudioRecebido(sock, jid, telefone) {
   if (Storage.contatoSilenciado(telefone)) return;
   const sessao = Storage.obterSessao(telefone);
   if (sessao && sessao.aguardandoHumano) return;
-  await enviarResposta(sock, jid, telefone, PEDIDO_MANDAR_POR_ESCRITO, false);
+  await enviarResposta(sock, jid, telefone, PEDIDO_MANDAR_POR_ESCRITO, false, {
+    registrarNoHistorico: true,
+  });
+}
+
+async function processarFormatoNaoEntendido(sock, jid, telefone, tipo = "desconhecido") {
+  if (Storage.contatoSilenciado(telefone)) return;
+  const sessao = Storage.obterSessao(telefone);
+  if (sessao && sessao.aguardandoHumano) return;
+  const texto = tipo === "midia"
+    ? PEDIDO_DESCREVER_MIDIA
+    : tipo === "texto_longo"
+      ? PEDIDO_DIVIDIR_TEXTO
+      : tipo === "taxa"
+        ? AVISO_MUITAS_MENSAGENS
+        : PEDIDO_REENVIAR_FORMATO;
+  await enviarResposta(sock, jid, telefone, texto, true, {
+    chaveIdempotencia: tipo === "taxa"
+      ? `limite-taxa:${telefone}:${Math.floor(Date.now() / 60_000)}`
+      : null,
+    registrarNoHistorico: true,
+  });
 }
 
 // Avisa o Dr. Bruno por WhatsApp (mensagem de verdade, não notificação de navegador — mais
@@ -504,6 +730,169 @@ async function notificarAtencao(sock, { tipo, telefoneFamilia, texto, crianca, p
   }
 }
 
+function intervaloDoSlot(slot) {
+  const [ano, mes, dia] = String(slot.date || slot.data || "").split("-").map(Number);
+  const [hora, minuto] = String(slot.time || slot.horario || "").split(":").map(Number);
+  const inicio = new Date(ano, mes - 1, dia, hora, minuto);
+  const duracao = (global.CARLA_CONFIG && global.CARLA_CONFIG.duracaoConsultaMin) || 60;
+  return { inicio, fim: new Date(inicio.getTime() + duracao * 60_000) };
+}
+
+async function enfileirarIntegracoesDaReserva(acao, telefone) {
+  // slot.id identifica a vaga da grade; slotId identifica ESTA reserva. Depois que um
+  // horário vencido é reaberto, só o segundo continua sendo único e seguro para retries.
+  const slotId = acao?.slotId || acao?.agendamento?.slotId || acao?.slot?.id;
+  const agendamento = slotId ? Storage.acharAgendamentoPorSlot(slotId) : null;
+  if (!agendamento) {
+    console.error(`[EFEITOS] Reserva sem agendamento local correspondente: ${slotId || "sem slot"}.`);
+    return null;
+  }
+  const { inicio, fim } = intervaloDoSlot(agendamento);
+
+  const criacaoSpi = await integracoes.caixa.obter(`spi:marcar:${agendamento.slotId}`);
+  if (!agendamento.appAgendamentoId && !criacaoSpi) {
+    await integracoes.agendarCriacaoSpi({
+      slotId: agendamento.slotId,
+      dados: {
+        pacienteNome: agendamento.crianca,
+        responsavelNome: agendamento.responsavel,
+        telefone: agendamento.telefone || telefone,
+        dataNascimento: agendamento.criancaDataNascimento || null,
+        email: agendamento.responsavelEmail || null,
+        inicio,
+        fim,
+        observacoes: "Agendado pela Carla (WhatsApp)",
+      },
+    });
+  }
+
+  // Compatibilidade durante a transição: uma reserva antiga pode já ter sido criada no
+  // Google pelo caminho legado. Nesse caso não cria uma segunda; reservas novas chegam sem
+  // ID e usam sempre o ID determinístico da caixa durável.
+  const criacaoGoogle = await integracoes.caixa.obter(`google:criar:${agendamento.slotId}`);
+  if (!agendamento.googleEventId && !criacaoGoogle) {
+    await integracoes.agendarCriacaoGoogle({
+      slotId: agendamento.slotId,
+      inicio,
+      fim,
+      titulo: `Consulta - ${agendamento.crianca}`,
+      descricao: `Responsável: ${agendamento.responsavel}\nTelefone: ${agendamento.telefone || telefone}\nAgendado pela Carla (WhatsApp)`,
+    });
+  }
+
+  if (agendamento.responsavelEmail || agendamento.criancaDataNascimento) {
+    await integracoes.registrarDadosPaciente({
+      slotId: agendamento.slotId,
+      appAgendamentoId: agendamento.appAgendamentoId || undefined,
+      email: agendamento.responsavelEmail || undefined,
+      dataNascimento: agendamento.criancaDataNascimento || undefined,
+    });
+  }
+  return agendamento;
+}
+
+async function enfileirarDadosDoPaciente(dados, telefone) {
+  if (!dados || (!dados.email && !dados.dataNascimento)) return null;
+  const slotId = dados.slotId || agendamentoAtualReal(telefone)?.slotId;
+  if (!slotId) {
+    console.error("[EFEITOS] Dados do paciente sem slotId; ficaram guardados localmente, mas não foram enviados ao SPI.");
+    return null;
+  }
+  const agendamento = Storage.acharAgendamentoPorSlot(slotId);
+  return integracoes.registrarDadosPaciente({
+    slotId,
+    appAgendamentoId: agendamento?.appAgendamentoId || undefined,
+    email: dados.email || undefined,
+    dataNascimento: dados.dataNascimento || undefined,
+  });
+}
+
+async function enfileirarCancelamentoExterno(cancelado) {
+  if (!cancelado?.slotId) return null;
+  const criacaoSpi = await integracoes.caixa.obter(`spi:marcar:${cancelado.slotId}`);
+  const criacaoGoogle = await integracoes.caixa.obter(`google:criar:${cancelado.slotId}`);
+  const agendouSpi = !!cancelado.appAgendamentoId || !!criacaoSpi;
+  const agendouGoogle = !!cancelado.googleEventId || !!criacaoGoogle;
+  if (agendouSpi) {
+    await integracoes.agendarCancelamentoSpi({
+      slotId: cancelado.slotId,
+      appAgendamentoId: cancelado.appAgendamentoId || undefined,
+    });
+  }
+  if (agendouGoogle) {
+    await integracoes.agendarCancelamentoGoogle({
+      slotId: cancelado.slotId,
+      eventId: cancelado.googleEventId || undefined,
+    });
+  }
+  return { agendouSpi, agendouGoogle };
+}
+
+// Fecha a janela de queda entre a reserva SQLite e a gravação dos efeitos externos. Só
+// reservas criadas já sob este contrato entram aqui; registros legados podem existir no
+// Google/SPI sem IDs locais e não são recriados no escuro.
+async function reconciliarReservasAtivasSemEfeito() {
+  let recuperadas = 0;
+  for (const agendamento of Storage.lerAgendamentos().filter((a) => a.integracoesDuraveis)) {
+    try {
+      const spi = await integracoes.caixa.obter(`spi:marcar:${agendamento.slotId}`);
+      const google = await integracoes.caixa.obter(`google:criar:${agendamento.slotId}`);
+      const faltava = (!agendamento.appAgendamentoId && !spi)
+        || (!agendamento.googleEventId && !google);
+      if (faltava) {
+        await enfileirarIntegracoesDaReserva({ slotId: agendamento.slotId }, agendamento.telefone);
+        recuperadas++;
+      }
+    } catch (erro) {
+      console.error(`[EFEITOS] Não consegui reconciliar a reserva ${agendamento.slotId}:`, erro.message);
+    }
+  }
+  if (recuperadas) console.log(`[EFEITOS] ${recuperadas} reserva(s) recuperada(s) após falha intermediária.`);
+  return recuperadas;
+}
+
+let limpandoReservasVencidas = false;
+async function limparReservasVencidas() {
+  if (limpandoReservasVencidas) return;
+  limpandoReservasVencidas = true;
+  try {
+    await reconciliarReservasAtivasSemEfeito();
+    const vencidas = Storage.listarVencimentosPendentesDeLimpeza(new Date());
+    for (const reserva of vencidas) await enfileirarCancelamentoExterno(reserva);
+    if (vencidas.length) await integracoes.reconciliar({ limite: 50 });
+
+    for (const reserva of vencidas) {
+      const criacaoSpi = await integracoes.caixa.obter(`spi:marcar:${reserva.slotId}`);
+      const cancelamentoSpi = await integracoes.caixa.obter(`spi:cancelar:${reserva.slotId}`);
+      const eventId = reserva.googleEventId || integracoes.eventIdGoogleDoSlot(reserva.slotId);
+      const criacaoGoogle = await integracoes.caixa.obter(`google:criar:${reserva.slotId}`);
+      const cancelamentoGoogle = await integracoes.caixa.obter(`google:cancelar:${eventId}`);
+      const spiConcluido = (!reserva.appAgendamentoId && !criacaoSpi)
+        || cancelamentoSpi?.estado === "concluido";
+      const googleConcluido = (!reserva.googleEventId && !criacaoGoogle)
+        || cancelamentoGoogle?.estado === "concluido";
+      if (spiConcluido && googleConcluido) {
+        Storage.marcarVencimentoSincronizado(reserva.slotId, {
+          spi: agendamentoEstado(cancelamentoSpi),
+          google: agendamentoEstado(cancelamentoGoogle),
+        });
+      }
+    }
+  } catch (erro) {
+    console.error("[VENCIMENTOS] Falha ao reconciliar reservas vencidas:", erro.message);
+  } finally {
+    limpandoReservasVencidas = false;
+  }
+}
+
+function agendamentoEstado(efeito) {
+  return efeito ? efeito.estado : "não necessário";
+}
+
+const timerReservasVencidas = setInterval(() => { void limparReservasVencidas(); }, 60_000);
+if (typeof timerReservasVencidas.unref === "function") timerReservasVencidas.unref();
+void limparReservasVencidas();
+
 // O Dr. Bruno respondeu SIM ou NÃO pelo painel, e a Carla volta na conversa com isso. Ele não
 // precisa assumir e digitar: era esse o custo de toda escalada até agora.
 //
@@ -524,47 +913,69 @@ async function responderEscaladaNaFila(alertaId, resposta) {
   if (!alerta) return { ok: false, motivo: "Não achei esse alerta." };
   if (alerta.respondidoEm) return { ok: true, jaRespondido: true };
   if (!alerta.pergunta) return { ok: false, motivo: "Esse alerta não tem pergunta pra responder." };
-  if (!sockAtivo) return { ok: false, motivo: "Carla desconectada do WhatsApp." };
 
   const telefone = alerta.telefone;
   const jid = telefone.replace("+", "") + "@s.whatsapp.net";
-  const gravado = Storage.responderAlerta(alertaId, resposta);
-  if (gravado && gravado.jaRespondido) return { ok: true, jaRespondido: true };
+  const respostaNormalizada = String(resposta == null ? "" : resposta).trim().slice(0, 300);
+  if (!respostaNormalizada) return { ok: false, motivo: "Resposta vazia." };
 
-  const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
+  const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
   // Tira do silêncio: foi a escalada que parou a conversa, e ela acabou de ser resolvida.
   sessao.aguardandoHumano = false;
   sessao.aguardandoHumanoDesde = null;
-  sessao.recadoDoDoutor = { pergunta: alerta.pergunta, resposta: gravado.resposta };
-  Storage.salvarSessao(telefone, sessao);
+  sessao.recadoDoDoutor = { pergunta: alerta.pergunta, resposta: respostaNormalizada };
 
   // A API precisa de um turno da família pra responder. Este texto é só o gatilho; o que vale
   // está no contexto, e o prompt manda ignorar qualquer "recado" que venha pela conversa.
   const gatilho = "(o Dr. Bruno respondeu o que você perguntou a ele)";
   try {
+    const consultaReal = agendamentoAtualReal(telefone);
+    sincronizarUltimoAgendamento(sessao, telefone);
     const resultado = await CerebroIA.responder({
       telefone, texto: gatilho, historico: sessao.historico || [], now: new Date(),
       idsOcupados: Storage.idsOcupados(),
-      agendamentoAtual: sessao.ultimoAgendamento || null,
+      agendamentoAtual: resumoDeAgendamento(consultaReal),
       pacienteConhecido: Storage.ehPacienteConhecido(telefone),
       portalJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.portalAvisadoEm),
       guiaJaLiberado: Storage.lerAgendamentos().some((a) => a.telefone === telefone && a.guiaAvisadoEm),
       horariosOferecidos: sessao.horariosOferecidos || [],
-      consultaProxima: Storage.proximaConsultaDoTelefone(telefone),
+      consultaProxima: consultaReal ? {
+        crianca: consultaReal.crianca,
+        diaLabel: consultaReal.diaLabel,
+        ehHoje: consultaReal.data === Agenda.toDateStr(new Date()),
+      } : null,
       recadoDoDoutor: sessao.recadoDoDoutor,
+      estadoAtendimento: sessao.estadoAtendimento,
+      triagemPendente: sessao.triagemPendente,
     });
     sessao.historico = resultado.historico;
     sessao.horariosOferecidos = resultado.horariosOferecidos;
+    sessao.estadoAtendimento = EstadoAtendimento.normalizar(
+      resultado.estadoAtendimento || sessao.estadoAtendimento);
+    sessao.triagemPendente = resultado.triagemPendente ?? sessao.triagemPendente;
     sessao.ultimaAtividade = new Date().toISOString();
-    Storage.salvarSessao(telefone, sessao);
 
     for (const acao of resultado.acoes || []) {
       console.log(`[AGENDADO] ${acao.responsavel} / ${acao.crianca} em ${acao.slot.label}`);
+      await enfileirarIntegracoesDaReserva(acao, telefone);
       notificarNovoAgendamento(sockAtivo, acao, telefone);
     }
-    if (!resultado.resposta) return { ok: true, semResposta: true };
-    await enviarResposta(sockAtivo, jid, telefone, resultado.resposta, true);
-    console.log(`[RESPOSTA DO DOUTOR] ${telefone}: "${gravado.resposta}" para "${alerta.pergunta}"`);
+    for (const cancelado of resultado.cancelamentos || []) {
+      await enfileirarCancelamentoExterno(cancelado);
+    }
+    if (resultado.dadosDoPaciente) {
+      await enfileirarDadosDoPaciente(resultado.dadosDoPaciente, telefone);
+    }
+    sincronizarUltimoAgendamento(sessao, telefone);
+    Storage.salvarSessao(telefone, sessao);
+
+    if (!resultado.resposta) return { ok: false, motivo: "A Carla não produziu a resposta da família." };
+    await enviarResposta(sockAtivo, jid, telefone, resultado.resposta, true, { registrarPreco: true });
+    // Só agora o alerta vira respondido: antes disso a resposta ainda não estava sequer na
+    // caixa de saída, e uma queda criava um alerta fechado sem mensagem para a família.
+    const gravado = Storage.responderAlerta(alertaId, respostaNormalizada);
+    if (!gravado) return { ok: false, motivo: "Não consegui concluir o alerta." };
+    console.log(`[RESPOSTA DO DOUTOR] ${telefone}: "${respostaNormalizada}" para "${alerta.pergunta}"`);
     return { ok: true };
   } catch (erro) {
     console.error("[RESPOSTA DO DOUTOR] Erro ao retomar a conversa:", erro.message);
@@ -585,9 +996,16 @@ async function responderEscaladaNaFila(alertaId, resposta) {
 // e ressuscitar a conversa traria esse defeito de volta junto com a memória.
 async function reaquecerLead(telefone) {
   if (!telefone) return { ok: false, motivo: "Sem telefone." };
+  return filaMensagens.enfileirar(telefone, () => reaquecerLeadNaFila(telefone));
+}
+
+async function reaquecerLeadNaFila(telefone) {
+  if (!telefone) return { ok: false, motivo: "Sem telefone." };
   const jid = telefone.replace("+", "") + "@s.whatsapp.net";
-  const sessao = Storage.obterSessao(telefone);
-  if (!sessao) return { ok: false, motivo: "Esse número nunca falou com a Carla." };
+  const sessaoExistente = Storage.obterSessao(telefone);
+  if (!sessaoExistente) return { ok: false, motivo: "Esse número nunca falou com a Carla." };
+  const sessao = normalizarSessao(telefone, sessaoExistente);
+  const ancoraReaquecimento = sessao.ultimaAtividade || "sem-atividade";
 
   const agora = new Date();
   const doFunil = Eventos.funil().contatos.find((c) => c.telefone === telefone) || {};
@@ -605,6 +1023,7 @@ async function reaquecerLead(telefone) {
     respondeuAlgumaVez,
   }, agora);
   if (!veredito.pode) return { ok: false, motivo: veredito.motivo };
+  sincronizarUltimoAgendamento(sessao, telefone, agora);
 
   const reaquecimento = {
     fatos: Reaquecimento.montarContexto({
@@ -631,18 +1050,43 @@ async function reaquecerLead(telefone) {
       consultaProxima: null,
       recadoDoDoutor: null,
       reaquecimento,
+      estadoAtendimento: sessao.estadoAtendimento,
+      triagemPendente: sessao.triagemPendente,
     });
     if (!resultado.resposta) return { ok: false, motivo: "A Carla não produziu mensagem." };
 
-    // Marca ANTES de enviar. Se o envio falhar, o pior caso é uma família não reaquecida;
-    // marcar depois arriscaria mandar duas vezes num duplo clique, que é o erro caro aqui.
+    // A fila por telefone impede dois cliques simultâneos neste processo. A marca abaixo só
+    // é gravada depois que a mensagem já existe na caixa durável; assim uma queda nunca
+    // deixa "reaquecido" sem haver mensagem para entregar.
     sessao.reaquecidoEm = agora.toISOString();
     sessao.historico = resultado.historico;
+    sessao.horariosOferecidos = resultado.horariosOferecidos || [];
+    sessao.estadoAtendimento = EstadoAtendimento.normalizar(
+      resultado.estadoAtendimento || sessao.estadoAtendimento);
+    sessao.triagemPendente = resultado.triagemPendente ?? sessao.triagemPendente;
     sessao.ultimaAtividade = agora.toISOString();
-    Storage.salvarSessao(telefone, sessao);
-    Eventos.registrar("reaquecido", telefone, {}, agora);
 
-    await enviarResposta(sockAtivo, jid, telefone, resultado.resposta, true);
+    for (const acao of resultado.acoes || []) {
+      await enfileirarIntegracoesDaReserva(acao, telefone);
+      notificarNovoAgendamento(sockAtivo, acao, telefone);
+    }
+    for (const cancelado of resultado.cancelamentos || []) {
+      await enfileirarCancelamentoExterno(cancelado);
+    }
+    if (resultado.dadosDoPaciente) {
+      await enfileirarDadosDoPaciente(resultado.dadosDoPaciente, telefone);
+    }
+    sincronizarUltimoAgendamento(sessao, telefone, agora);
+
+    await enviarResposta(sockAtivo, jid, telefone, resultado.resposta, true, {
+      registrarPreco: true,
+      chaveIdempotencia: `reaquecimento:${telefone}:${ancoraReaquecimento}`,
+      efeitoAposEnvio: { tipo: "marcar_reaquecimento", telefone, em: agora.toISOString() },
+      aposPersistir: () => {
+        Storage.salvarSessao(telefone, sessao);
+        Eventos.registrar("reaquecido", telefone, {}, agora);
+      },
+    });
     console.log(`[REAQUECIDO] ${telefone}: "${resultado.resposta.slice(0, 80)}"`);
     return { ok: true, mensagem: resultado.resposta };
   } catch (erro) {
@@ -655,7 +1099,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   // Lido ANTES de qualquer coisa criar sessão: é o que diz se este número já falou com a
   // Carla alguma vez. Vira o topo do funil, e só pode ser contado uma vez por número.
   const jaTeveSessao = !!Storage.obterSessao(telefone);
-  const sessao = Storage.obterSessao(telefone) || sessaoPadrao(telefone);
+  const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
   const now = new Date();
 
   // Depois de horas de silêncio, o que a família disser é assunto novo. Sem isso a Carla
@@ -669,22 +1113,60 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     sessao.horariosOferecidos = [];
     // O recado do Dr. Bruno era sobre aquela conversa. Numa conversa nova ele não vale mais.
     sessao.recadoDoDoutor = null;
+    sessao.estadoAtendimento = EstadoAtendimento.reiniciarConversa();
+    sessao.triagemPendente = null;
   }
 
-  // 1) Emergência sempre primeiro, sempre determinística — nunca passa pela IA.
-  if (CerebroIA.pareceEmergencia(texto)) {
+  // 1) Triagem sempre primeiro, sempre determinística — nunca passa pela IA. Sinais
+  // objetivos orientam emergência já; frases ambíguas fazem UMA pergunta de confirmação e
+  // essa pendência fica na sessão, em vez de o modelo precisar adivinhar o que perguntou.
+  const avaliacaoEmergencia = CerebroIA.avaliarEmergencia(texto);
+  const confirmouPerigoPendente = !!sessao.triagemPendente
+    && TriagemEmergencia.respostaConfirmaPerigo(texto);
+  const negouPerigoPendente = !!sessao.triagemPendente
+    && /\b(?:não|nao|negativo|nenhum|normal|melhorou|passou)\b/i.test(texto);
+
+  if (avaliacaoEmergencia.nivel === "emergencia" || confirmouPerigoPendente) {
     Storage.registrarAlertaUrgencia({ telefone, mensagem: texto, tipo: "emergencia" });
     console.log(`[ALERTA: URGÊNCIA] ${telefone}: "${texto}"`);
     // Antes de responder a família, pra já estar a caminho. Não é aguardada.
     notificarAtencao(sock, { tipo: "emergencia", telefoneFamilia: telefone, texto });
-    const respostaEmergencia = "Isso parece ser uma emergência.\n\nPor favor, leve a criança agora para o pronto-socorro mais próximo.\n\nVou avisar o Dr. Bruno sobre esse contato assim que possível.";
-    sessao.historico = [...(sessao.historico || []), { role: "user", content: texto }, { role: "assistant", content: respostaEmergencia }].slice(-24);
+    const respostaEmergencia = TriagemEmergencia.respostaDeEmergencia();
+    sessao.historico = [...(sessao.historico || []), { role: "user", content: texto }].slice(-24);
+    sessao.triagemPendente = null;
     sessao.aguardandoHumano = false;
     sessao.aguardandoHumanoDesde = null;
     sessao.ultimaAtividade = now.toISOString();
     sessao.ultimaMensagem = texto.slice(0, 140);
     Storage.salvarSessao(telefone, sessao);
-    await enviarResposta(sock, jid, telefone, respostaEmergencia, semAtraso);
+    await enviarResposta(sock, jid, telefone, respostaEmergencia, semAtraso, {
+      registrarNoHistorico: true,
+    });
+    return;
+  }
+
+  if (sessao.triagemPendente && !negouPerigoPendente) {
+    const pergunta = TriagemEmergencia.respostaDeConfirmacao();
+    sessao.historico = [...(sessao.historico || []), { role: "user", content: texto }].slice(-24);
+    sessao.ultimaAtividade = now.toISOString();
+    sessao.ultimaMensagem = texto.slice(0, 140);
+    Storage.salvarSessao(telefone, sessao);
+    await enviarResposta(sock, jid, telefone, pergunta, semAtraso, { registrarNoHistorico: true });
+    return;
+  }
+  if (negouPerigoPendente) sessao.triagemPendente = null;
+
+  if (avaliacaoEmergencia.nivel === "confirmar") {
+    const pergunta = TriagemEmergencia.respostaDeConfirmacao();
+    sessao.triagemPendente = {
+      termo: avaliacaoEmergencia.termo,
+      criadaEm: now.toISOString(),
+    };
+    sessao.historico = [...(sessao.historico || []), { role: "user", content: texto }].slice(-24);
+    sessao.ultimaAtividade = now.toISOString();
+    sessao.ultimaMensagem = texto.slice(0, 140);
+    Storage.salvarSessao(telefone, sessao);
+    await enviarResposta(sock, jid, telefone, pergunta, semAtraso, { registrarNoHistorico: true });
     return;
   }
 
@@ -746,9 +1228,13 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   }, now);
 
   const idsOcupados = Storage.idsOcupados();
+  const consultaReal = agendamentoAtualReal(telefone, now);
+  sincronizarUltimoAgendamento(sessao, telefone, now);
   const resultado = await CerebroIA.responder({
     telefone, texto, historico: sessao.historico || [], now, idsOcupados,
-    agendamentoAtual: sessao.ultimoAgendamento || null,
+    // Nunca confia no cache da conversa para afirmar que uma consulta existe: cancelamento,
+    // vencimento ou pagamento podem ter acontecido no painel desde a última mensagem.
+    agendamentoAtual: resumoDeAgendamento(consultaReal),
     pacienteConhecido: Storage.ehPacienteConhecido(telefone),
     // Se ela precisa dizer, NESTA mensagem, que é o atendimento automático.
     //
@@ -777,21 +1263,20 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // isso a Carla trata quem tem consulta hoje como contato novo, porque o histórico da
     // conversa de ontem já expirou.
     consultaProxima: (() => {
-      const c = Storage.proximaConsultaDoTelefone(telefone, now);
+      const c = consultaReal;
       return c ? { crianca: c.crianca, diaLabel: c.diaLabel, ehHoje: c.data === Agenda.toDateStr(now) } : null;
     })(),
+    estadoAtendimento: sessao.estadoAtendimento,
+    triagemPendente: sessao.triagemPendente,
   });
 
   sessao.historico = resultado.historico;
+  sessao.estadoAtendimento = EstadoAtendimento.normalizar(
+    resultado.estadoAtendimento || sessao.estadoAtendimento);
+  sessao.triagemPendente = resultado.triagemPendente ?? sessao.triagemPendente;
   const horariosAntes = (sessao.horariosOferecidos || []).length;
   sessao.horariosOferecidos = resultado.horariosOferecidos || [];
 
-  // FUNIL, etapa do valor. Lê o TEXTO que sai, não uma flag da IA: é o que a família de
-  // fato recebeu. Sem isso eu dependeria de a IA se lembrar de sinalizar, que é justamente
-  // o tipo de coisa que ela esquece. Os dois valores possíveis estão nos FATOS do prompt.
-  if (resultado.resposta && /R\$\s?(550|800)/.test(resultado.resposta)) {
-    Eventos.registrar("preco_informado", telefone, {}, now);
-  }
   // Etapa do horário: a lista de ofertas cresceu nesta rodada, ou seja, a ferramenta
   // devolveu horário e ele foi parar na mensagem.
   if ((resultado.horariosOferecidos || []).length > horariosAntes) {
@@ -802,17 +1287,26 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
 
   for (const acao of resultado.acoes || []) {
     console.log(`[AGENDADO] ${acao.responsavel} / ${acao.crianca} em ${acao.slot.label}`);
-    sessao.ultimoAgendamento = { crianca: acao.crianca, label: acao.slot.label };
+    await enfileirarIntegracoesDaReserva(acao, telefone);
+    const reservado = Storage.acharAgendamentoPorSlot(
+      acao.slotId || acao.agendamento?.slotId || acao.slot.id);
+    sessao.ultimoAgendamento = resumoDeAgendamento(reservado);
     Eventos.registrar("agendou", telefone, { crianca: acao.crianca, quando: acao.slot.label }, now);
     notificarNovoAgendamento(sock, acao, telefone);
   }
 
   for (const cancelado of resultado.cancelamentos || []) {
+    await enfileirarCancelamentoExterno(cancelado);
     console.log(`[CANCELADO PELA IA] ${telefone} — ${cancelado.crianca} em ${cancelado.label}`);
     Eventos.registrar("cancelou", telefone, { crianca: cancelado.crianca }, now);
   }
 
+  // Recalcula inclusive depois de um cancelamento. Assim uma consulta apagada ou vencida
+  // nunca continua parecendo ativa só porque estava guardada na sessão.
+  sincronizarUltimoAgendamento(sessao, telefone, now);
+
   if (resultado.dadosDoPaciente) {
+    await enfileirarDadosDoPaciente(resultado.dadosDoPaciente, telefone);
     console.log(`[DADOS DO PORTAL] ${telefone}: ${JSON.stringify(resultado.dadosDoPaciente)}`);
     notificarDadosDoPaciente(sock, resultado.dadosDoPaciente, sessao.ultimoAgendamento, telefone);
   }
@@ -854,10 +1348,15 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     && !Storage.ehPacienteNoPainel(telefone)
     && !Storage.jaSeApresentou(telefone);
   await enviarResposta(sock, jid, telefone, resultado.resposta, semAtraso,
-    precisaMarcarApresentacao ? {
-      chaveIdempotencia: `apresentacao:${telefone}`,
-      efeitoAposEnvio: { tipo: "marcar_apresentacao", telefone },
-    } : {});
+    {
+      ...(precisaMarcarApresentacao ? {
+        chaveIdempotencia: `apresentacao:${telefone}`,
+        efeitoAposEnvio: { tipo: "marcar_apresentacao", telefone },
+      } : {}),
+      // O estado e o funil só avançam quando a mensagem efetivamente deixa a caixa. Se o
+      // WhatsApp cair, o efeito acompanha a mensagem e roda no reenvio — nunca antes.
+      registrarPreco: true,
+    });
 }
 
 // Lembretes automáticos: aviso 1 semana antes e confirmação no dia da consulta. Só manda
@@ -870,10 +1369,12 @@ async function enviarLembretes(sock) {
     const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
     const texto = `Olá! Passando pra lembrar que a consulta de ${a.crianca} com o Dr. Bruno está agendada para ${a.diaLabel}.\n\nSe precisar remarcar, é só me avisar por aqui 😊`;
     try {
-      await enviarResposta(sock, jid, a.telefone, texto, true, {
-        chaveIdempotencia: `lembrete:semanaAntes:${a.slotId}`,
-        efeitoAposEnvio: { tipo: "marcar_lembrete", slotId: a.slotId, lembrete: "semanaAntes" },
-      });
+      await filaMensagens.enfileirar(a.telefone, () =>
+        enviarResposta(sock, jid, a.telefone, texto, true, {
+          chaveIdempotencia: `lembrete:semanaAntes:${a.slotId}`,
+          efeitoAposEnvio: { tipo: "marcar_lembrete", slotId: a.slotId, lembrete: "semanaAntes" },
+          registrarNoHistorico: true,
+        }));
       console.log(`[LEMBRETE 1 semana antes] ${a.telefone} — ${a.crianca} em ${a.diaLabel}`);
     } catch (erro) {
       console.error(`[LEMBRETE] Falhou ao avisar ${a.telefone}:`, erro.message);
@@ -884,10 +1385,12 @@ async function enviarLembretes(sock) {
     const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
     const texto = `Bom dia! Só confirmando: hoje é o dia da consulta de ${a.crianca} com o Dr. Bruno, às ${Agenda.formatHora(a.horario)}.\n\nEndereço: ${CARLA_CONFIG.endereco}\n\nAté já! 😊`;
     try {
-      await enviarResposta(sock, jid, a.telefone, texto, true, {
-        chaveIdempotencia: `lembrete:diaDaConsulta:${a.slotId}`,
-        efeitoAposEnvio: { tipo: "marcar_lembrete", slotId: a.slotId, lembrete: "diaDaConsulta" },
-      });
+      await filaMensagens.enfileirar(a.telefone, () =>
+        enviarResposta(sock, jid, a.telefone, texto, true, {
+          chaveIdempotencia: `lembrete:diaDaConsulta:${a.slotId}`,
+          efeitoAposEnvio: { tipo: "marcar_lembrete", slotId: a.slotId, lembrete: "diaDaConsulta" },
+          registrarNoHistorico: true,
+        }));
       console.log(`[LEMBRETE dia da consulta] ${a.telefone} — ${a.crianca} às ${a.horario}`);
     } catch (erro) {
       console.error(`[LEMBRETE] Falhou ao avisar ${a.telefone}:`, erro.message);
@@ -897,6 +1400,9 @@ async function enviarLembretes(sock) {
 
 let sockAtivo = null;
 let ultimoDiaLembretesEnviados = null;
+let geracaoConexao = 0;
+let tentativaReconexao = 0;
+let timerReconexao = null;
 
 function checarLembretes() {
   if (!sockAtivo) return;
@@ -908,7 +1414,13 @@ function checarLembretes() {
   enviarLembretes(sockAtivo).catch((erro) => console.error("[LEMBRETE] Erro geral:", erro.message));
 }
 
-setInterval(checarLembretes, 15 * 60 * 1000);
+const timerLembretes = setInterval(checarLembretes, 15 * 60 * 1000);
+// O painel distingue "processo vivo" de "WhatsApp realmente conectado". Um pulso curto
+// também denuncia processo travado: se esta gravação parar por três minutos, a tela avisa.
+const timerStatusWhatsapp = setInterval(() => {
+  if (sockAtivo) StatusWhatsapp.registrar("conectado");
+}, 60_000);
+if (typeof timerStatusWhatsapp.unref === "function") timerStatusWhatsapp.unref();
 
 // Se o processo for reiniciado (ex: "npm run restart") bem no meio da janela de espera de
 // alguém que acabou de mandar mensagem, o buffer em memória seria perdido pra sempre —
@@ -934,6 +1446,12 @@ let encerrando = false;
 async function encerrarComCalma(sinal) {
   if (encerrando) return;
   encerrando = true;
+  clearInterval(timerReservasVencidas);
+  clearInterval(timerLembretes);
+  clearInterval(timerStatusWhatsapp);
+  if (timerReconexao) clearTimeout(timerReconexao);
+  pararReconciliadorIntegracoes();
+  StatusWhatsapp.registrar("parando");
   if (buffers.size > 0) {
     console.log(`[${sinal}] Encerrando — respondendo ${buffers.size} mensagem(ns) pendente(s) antes de sair...`);
     await flushBuffersPendentes();
@@ -947,7 +1465,36 @@ async function encerrarComCalma(sinal) {
 process.on("SIGINT", () => encerrarComCalma("SIGINT"));
 process.on("SIGTERM", () => encerrarComCalma("SIGTERM"));
 
+// O monitor registra e deixa o comportamento padrão do Node encerrar o processo. O PM2
+// então reinicia, sem transformar uma exceção fatal em um processo aparentemente vivo.
+process.on("uncaughtExceptionMonitor", (erro, origem) => {
+  console.error(`[FATAL] Exceção não capturada (${origem}):`, erro);
+});
+process.on("unhandledRejection", (motivo) => {
+  console.error("[FATAL] Promise rejeitada sem tratamento:", motivo);
+  throw motivo instanceof Error ? motivo : new Error(String(motivo));
+});
+
+function agendarReconexao(motivo = "conexão encerrada") {
+  if (encerrando || timerReconexao) return;
+  StatusWhatsapp.registrar("reconectando");
+  const base = Math.min(60000, 2000 * (2 ** Math.min(tentativaReconexao, 5)));
+  const atraso = base + Math.floor(Math.random() * 1000);
+  tentativaReconexao++;
+  console.log(`[WHATSAPP] Nova tentativa em ${Math.ceil(atraso / 1000)}s (${motivo}).`);
+  timerReconexao = setTimeout(() => {
+    timerReconexao = null;
+    iniciar().catch((erro) => {
+      console.error("[WHATSAPP] Falha ao iniciar conexão:", erro.message);
+      agendarReconexao("falha ao iniciar");
+    });
+  }, atraso);
+}
+
 async function iniciar() {
+  if (encerrando) return;
+  StatusWhatsapp.registrar("conectando");
+  const geracao = ++geracaoConexao;
   const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, "data", "auth"));
   // O WhatsApp rejeita versões antigas do protocolo antes mesmo de gerar o QR. A versão
   // embutida no pacote pode ficar defasada sem haver uma nova publicação no npm, então
@@ -1015,21 +1562,34 @@ async function iniciar() {
     }
 
     if (connection === "close") {
-      sockAtivo = null;
+      if (geracao !== geracaoConexao) return;
+      if (sockAtivo === sock) sockAtivo = null;
       const codigo = lastDisconnect?.error?.output?.statusCode;
       const deveReconectar = codigo !== DisconnectReason.loggedOut;
-      console.log("Conexão encerrada.", deveReconectar ? "Reconectando..." : "Sessão desconectada — apague a pasta data/auth e rode de novo pra gerar um novo QR code.");
-      if (deveReconectar) iniciar();
+      StatusWhatsapp.registrar(deveReconectar ? "reconectando" : "sessao_desconectada");
+      console.log("Conexão encerrada.", deveReconectar ? "A reconexão automática foi agendada." : "Sessão desconectada — apague a pasta data/auth e rode de novo pra gerar um novo QR code.");
+      if (deveReconectar) agendarReconexao(`código ${codigo || "desconhecido"}`);
     } else if (connection === "open") {
+      if (geracao !== geracaoConexao) return;
       console.log("Carla está conectada e respondendo no WhatsApp!");
       sockAtivo = sock;
-      reenviarMensagensPendentes(sock).catch((erro) =>
-        console.error("[CAIXA DE SAÍDA] Erro geral ao reenviar mensagens:", erro.message));
-      checarLembretes();
+      StatusWhatsapp.registrar("conectado");
+      tentativaReconexao = 0;
+      if (timerReconexao) {
+        clearTimeout(timerReconexao);
+        timerReconexao = null;
+      }
+      (async () => {
+        await reenviarMensagensPendentes(sock);
+        await reconciliarPagamentosSemAviso();
+        checarLembretes();
+      })().catch((erro) =>
+        console.error("[RECONCILIAÇÃO] Erro ao retomar pendências após conectar:", erro.message));
     }
   });
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (geracao !== geracaoConexao) return;
     if (type !== "notify") return;
 
     for (const msg of messages) {
@@ -1055,6 +1615,17 @@ async function iniciar() {
 
       Storage.registrarContatoWhatsapp(telefone, { pushName: msg.pushName || null });
 
+      if (!permitirMensagemDoTelefone(telefone)) {
+        if (deveAvisarLimiteDeTaxa(telefone)) {
+          filaMensagens.enfileirar(telefone, async () => {
+            const conexao = sockAtivo;
+            if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
+            return processarFormatoNaoEntendido(conexao, jid, telefone, "taxa");
+          }).catch((erro) => console.error("[LIMITE] Erro ao avisar a família:", erro.message));
+        }
+        continue;
+      }
+
       // Desembrulha ANTES de qualquer decisão. Mensagem temporária, ver uma vez e documento
       // com legenda vêm com o conteúdo de verdade uma camada abaixo, então olhar msg.message
       // direto fazia até o áudio de quem usa mensagem temporária passar batido.
@@ -1064,8 +1635,9 @@ async function iniciar() {
 
       if (conteudo.audioMessage) {
         filaMensagens.enfileirar(telefone, async () => {
-          await reenviarPendentesDoTelefone(sock, telefone);
-          return processarAudioRecebido(sock, jid, telefone);
+          const conexao = sockAtivo;
+          if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
+          return processarAudioRecebido(conexao, jid, telefone);
         }).catch((erro) => {
           console.error("Erro ao processar áudio:", erro.message);
         });
@@ -1080,18 +1652,31 @@ async function iniciar() {
       if (!texto.trim()) {
         if (TextoDaMensagem.ehRecadoDeSistema(conteudo)) continue;
         if (TextoDaMensagem.ehMidiaSemTexto(conteudo)) {
-          console.log(`[MÍDIA SEM TEXTO] ${telefone}: ${TextoDaMensagem.tipoDe(conteudo)} — ninguém responde isso hoje.`);
+          console.log(`[MÍDIA SEM TEXTO] ${telefone}: ${TextoDaMensagem.tipoDe(conteudo)} — pedindo descrição em texto.`);
+          filaMensagens.enfileirar(telefone, async () => {
+            const conexao = sockAtivo;
+            if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
+            return processarFormatoNaoEntendido(conexao, jid, telefone, "midia");
+          }).catch((erro) => console.error("Erro ao processar mídia:", erro.message));
           continue;
         }
         console.warn(`[SEM TEXTO] ${telefone}: não consegui ler o texto de uma mensagem do tipo ${TextoDaMensagem.tipoDe(conteudo)}.`);
+        filaMensagens.enfileirar(telefone, async () => {
+          const conexao = sockAtivo;
+          if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
+          return processarFormatoNaoEntendido(conexao, jid, telefone, "desconhecido");
+        }).catch((erro) => console.error("Erro ao processar formato desconhecido:", erro.message));
         continue;
       }
 
       console.log(`[RECEBIDA] ${telefone} (jid: ${jid}): ${texto}`);
-      agendarProcessamento(sock, jid, telefone, texto);
+      agendarProcessamento(jid, telefone, texto);
     }
   });
 }
 
 iniciarTravaInstancia();
-iniciar();
+iniciar().catch((erro) => {
+  console.error("[WHATSAPP] Falha inicial de conexão:", erro.message);
+  agendarReconexao("falha inicial");
+});

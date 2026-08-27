@@ -29,7 +29,7 @@ const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-teste-")), "
 fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "storage-node.js"));
 fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
-const IRMA = path.join(RAIZ, "..", "carla-app", "js");
+const IRMA = path.join(RAIZ, "carla-app", "js");
 fs.mkdirSync(IRMA, { recursive: true });
 fs.writeFileSync(path.join(IRMA, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
 fs.writeFileSync(path.join(IRMA, "agenda.js"), `
@@ -89,6 +89,7 @@ Storage.reservar({ slot: slot("s-hoje", HOJE, "09:30"), responsavel: "Guilherme"
     "5. o Dr. Bruno marcar como não-paciente continua valendo mais que ter consulta");
 }
 
+Storage._fecharBancoAgendamentosParaTeste();
 fs.rmSync(path.dirname(RAIZ), { recursive: true, force: true });
 console.log(erros.map((e) => "  FALHA " + e).join("\n"));
 console.log(`quem-tem-consulta: ${passou} passaram, ${falhou} falharam`);

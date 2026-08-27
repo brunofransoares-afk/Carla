@@ -203,7 +203,7 @@ const x = (date, time) => ({ id: `extra-${date}-${time}`, date, time, label: `${
   ok(/\[FERRAMENTA ->\]/.test(CEREBRO), "10b. com prefixo próprio, pra dar pra filtrar no pm2 logs");
   ok(/registrarSaidaDaFerramenta\(bloco\.name, await executarFerramenta\(/.test(CEREBRO),
     "10c. no ponto por onde TODA ferramenta passa, não caso a caso");
-  ok(/catch \(erro\) \{\n    console\.log\(`\[FERRAMENTA ->\] \$\{nome\}: \(não deu pra serializar/.test(CEREBRO),
+  ok(/catch \(erro\) \{\s*console\.log\(`\[FERRAMENTA ->\] \$\{nome\}: \(não deu pra serializar/.test(CEREBRO),
     "10d. e um log que nunca derruba a resposta da família se o objeto não serializar");
 }
 

@@ -40,7 +40,7 @@ fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ
 // roda em máquina onde carla-app não existe, que é o caso hoje: a pasta não está em git
 // nenhum e já sumiu de um ambiente. As três funções abaixo são as únicas que storage-node
 // chama de Agenda; se um dia chamar mais, o require quebra aqui e alguém fica sabendo.
-const IRMA = path.join(RAIZ, "..", "carla-app", "js");
+const IRMA = path.join(RAIZ, "carla-app", "js");
 fs.mkdirSync(IRMA, { recursive: true });
 fs.writeFileSync(path.join(IRMA, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
 fs.writeFileSync(path.join(IRMA, "agenda.js"), [

@@ -75,12 +75,12 @@ function contexto(extra = {}) {
 // A unidade só protege produção se o catch do cérebro realmente passar por ela.
 {
   const cerebro = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
-  ok(/return recuperarAposFalha\(\{ historico, texto, ctx \}\);/.test(cerebro),
+  ok(/return recuperarAposFalha\(\{ historico: historicoSeguro, texto: textoSeguro, ctx \}\);/.test(cerebro),
     "o catch do cérebro usa a recuperação com o contexto que executou as ferramentas");
   ok(/ctx\.acoesRealizadas\.push\(acaoRealizada\)/.test(cerebro),
     "a reserva é registrada no contexto assim que a persistência local dá certo");
-  ok(/if \(googleEventId\) await GoogleAgenda\.cancelarEvento\(googleEventId\);\s*throw erro;/.test(cerebro),
-    "falha ao persistir localmente desfaz o evento já criado no Google");
+  ok(!/GoogleAgenda\.criarEvento|AppAgenda\.enviarAgendamento/.test(cerebro),
+    "o cérebro não cria efeito externo antes da reserva local; servidor e fila durável fazem isso depois");
 }
 
 console.log(`\nrecuperacao-apos-falha: ${passou} passaram, ${falhou} falharam`);

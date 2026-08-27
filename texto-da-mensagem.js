@@ -75,6 +75,11 @@ function desembrulhar(conteudo) {
 function textoDe(conteudo) {
   const c = desembrulhar(conteudo);
   if (!c || typeof c !== "object") return "";
+  const template = c.templateMessage && (
+    c.templateMessage.hydratedTemplate
+    || c.templateMessage.hydratedFourRowTemplate
+    || c.templateMessage.fourRowTemplate
+  );
   const candidatos = [
     c.conversation,
     c.extendedTextMessage && c.extendedTextMessage.text,
@@ -86,6 +91,16 @@ function textoDe(conteudo) {
     c.buttonsResponseMessage && c.buttonsResponseMessage.selectedDisplayText,
     c.listResponseMessage && c.listResponseMessage.title,
     c.templateButtonReplyMessage && c.templateButtonReplyMessage.selectedDisplayText,
+    // Modelos enviados por contas comerciais. O texto pode vir no corpo hidratado ou no
+    // título; ambos são conteúdo legível, não recado interno do protocolo.
+    template && template.hydratedContentText,
+    template && template.contentText,
+    template && template.hydratedTitleText,
+    template && template.titleText,
+    // Pedido compartilhado por uma conta comercial. `message` é a observação visível;
+    // algumas versões só preenchem `orderTitle`.
+    c.orderMessage && c.orderMessage.message,
+    c.orderMessage && c.orderMessage.orderTitle,
   ];
   for (const t of candidatos) {
     if (typeof t === "string" && t.trim()) return t;
@@ -110,6 +125,11 @@ function ehRecadoDeSistema(conteudo) {
   if (c.protocolMessage && !c.protocolMessage.editedMessage) return true;
   if (c.senderKeyDistributionMessage && Object.keys(c).length === 1) return true;
   if (c.messageContextInfo && Object.keys(c).length === 1) return true;
+  // `secretEncryptedMessage` é material de sincronização/chave, não uma mensagem escrita
+  // pela família. Costuma chegar acompanhado apenas de messageContextInfo.
+  const chaves = Object.keys(c).filter((k) => c[k] != null);
+  if (c.secretEncryptedMessage
+    && chaves.every((k) => k === "secretEncryptedMessage" || k === "messageContextInfo")) return true;
   if (c.reactionMessage) return true;
   return false;
 }
@@ -124,4 +144,25 @@ function ehMidiaSemTexto(conteudo) {
   return !!(c.imageMessage || c.videoMessage || c.stickerMessage || c.documentMessage);
 }
 
-module.exports = { textoDe, tipoDe, desembrulhar, ehRecadoDeSistema, ehMidiaSemTexto, EMBRULHOS, MAX_CAMADAS };
+// Uma classificação única evita que o servidor aplique os testes numa ordem diferente e
+// volte a silenciar um formato novo. `nao_suportado` é mensagem de gente que chegou, mas
+// cujo conteúdo ainda não sabemos ler; deve receber resposta fixa/alerta, nunca `continue`.
+function classificar(conteudo) {
+  const texto = textoDe(conteudo);
+  const tipo = tipoDe(conteudo);
+  if (texto) return { categoria: "texto", texto, tipo };
+  if (ehRecadoDeSistema(conteudo)) return { categoria: "sistema", texto: "", tipo };
+  if (ehMidiaSemTexto(conteudo)) return { categoria: "midia_sem_texto", texto: "", tipo };
+  return { categoria: "nao_suportado", texto: "", tipo };
+}
+
+module.exports = {
+  textoDe,
+  tipoDe,
+  desembrulhar,
+  ehRecadoDeSistema,
+  ehMidiaSemTexto,
+  classificar,
+  EMBRULHOS,
+  MAX_CAMADAS,
+};

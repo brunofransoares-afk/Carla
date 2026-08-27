@@ -5,16 +5,18 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { DatabaseSync } = require("node:sqlite");
 const { escreverTextoAtomico, escreverJSONAtomico, lerJSONSeguro } = require("./arquivo-atomico.js");
 
 // Garante CARLA_CONFIG (global) antes do Agenda, que depende dele — precisa disso aqui
 // porque o painel (painel-server.js) usa este arquivo sem nunca ter carregado config.js.
-require(path.join(__dirname, "..", "carla-app", "js", "config.js"));
-const Agenda = require(path.join(__dirname, "..", "carla-app", "js", "agenda.js"));
+require(path.join(__dirname, "carla-app", "js", "config.js"));
+const Agenda = require(path.join(__dirname, "carla-app", "js", "agenda.js"));
 
 const DIR_DADOS = path.join(__dirname, "data");
 const ARQ_AGENDAMENTOS = path.join(DIR_DADOS, "agendamentos.json");
 const ARQ_AGENDAMENTOS_CSV = path.join(DIR_DADOS, "agendamentos.csv");
+const ARQ_AGENDAMENTOS_DB = path.join(DIR_DADOS, "agendamentos.sqlite");
 const ARQ_ALERTAS = path.join(DIR_DADOS, "alertas.json");
 const ARQ_SESSOES = path.join(DIR_DADOS, "sessoes.json");
 const ARQ_BLOQUEIOS = path.join(DIR_DADOS, "bloqueios.json");
@@ -41,8 +43,318 @@ function escreverJSON(caminho, dados) {
   escreverJSONAtomico(caminho, dados);
 }
 
-function lerAgendamentos() {
-  return lerJSON(ARQ_AGENDAMENTOS, []);
+// Bot e painel são processos separados. A troca atômica impede arquivo pela metade, mas
+// sozinha não impede o clássico "os dois leram a versão A e o último apagou a mudança do
+// primeiro". Toda atualização de um JSON compartilhado passa por este lock curto e relê o
+// arquivo somente depois de obtê-lo.
+function comLockArquivo(lock, trabalho, descricao = "arquivo") {
+  const limite = Date.now() + 10000;
+  while (true) {
+    try {
+      const fd = fs.openSync(lock, "wx", 0o600);
+      try {
+        fs.writeFileSync(fd, `${process.pid}\n${new Date().toISOString()}\n`, "utf8");
+        fs.fsyncSync(fd);
+        return trabalho();
+      } finally {
+        try { fs.closeSync(fd); } catch {}
+        try { fs.unlinkSync(lock); } catch {}
+      }
+    } catch (erro) {
+      const disputaWindows = process.platform === "win32"
+        && erro && ["EPERM", "EACCES"].includes(erro.code);
+      if (!erro || (erro.code !== "EEXIST" && !disputaWindows)) throw erro;
+      try {
+        if (Date.now() - fs.statSync(lock).mtimeMs > 30000) fs.unlinkSync(lock);
+      } catch (falha) {
+        const transitorioWindows = process.platform === "win32"
+          && falha && ["EPERM", "EACCES"].includes(falha.code);
+        if (falha && falha.code !== "ENOENT" && !transitorioWindows) throw falha;
+      }
+      if (Date.now() >= limite) throw new Error(`Tempo esgotado aguardando lock de ${descricao}`);
+      Atomics.wait(ESPERA_LOCK, 0, 0, 10);
+    }
+  }
+}
+
+function atualizarJSON(caminho, padrao, alterar) {
+  garantirPasta();
+  return comLockArquivo(`${caminho}.lock`, () => {
+    const dados = lerJSON(caminho, padrao);
+    const resultado = alterar(dados);
+    escreverJSON(caminho, dados);
+    return resultado;
+  }, path.basename(caminho));
+}
+
+// -----------------------------------------------------------------------------
+// Agenda transacional
+//
+// Bot e painel são dois processos diferentes. Escrita atômica evita JSON quebrado, mas
+// não impede os dois de lerem a mesma versão e um apagar a mudança do outro. Por isso os
+// agendamentos — a parte em que perder um campo significa pagamento/ficha/horário errado —
+// passam a ter o SQLite como fonte de verdade. O JSON continua sendo exportado para leitura,
+// backup e rollback humano, mas nunca é usado como fonte depois da migração inicial.
+//
+// node:sqlite faz parte do Node usado em produção (22+), então não acrescenta dependência.
+const ESTADOS_AGENDAMENTO = new Set(["reservado", "pago", "vencido", "cancelado"]);
+const ESTADOS_ATIVOS = new Set(["reservado", "pago"]);
+const PAGAMENTO_IMEDIATO_MINUTOS = Math.max(1, Number(process.env.PAGAMENTO_IMEDIATO_TOLERANCIA_MIN) || 30);
+let bancoAgendamentos = null;
+const ESPERA_LOCK = new Int32Array(new SharedArrayBuffer(4));
+
+function chaveHorarioReal(data, horario) {
+  return `${String(data || "").trim()}T${String(horario || "").trim()}`;
+}
+
+function limiteDePagamento({ data, horario }, criadoEm = new Date()) {
+  const [ano, mes, dia] = String(data || "").split("-").map(Number);
+  const [hora = 0, minuto = 0] = String(horario || "00:00").split(":").map(Number);
+  if (![ano, mes, dia, hora, minuto].every(Number.isFinite)) {
+    return new Date(criadoEm.getTime() + PAGAMENTO_IMEDIATO_MINUTOS * 60000);
+  }
+
+  const limite = new Date(ano, mes - 1, dia);
+  if (String(horario) >= "12:00") {
+    limite.setHours(12, 0, 0, 0);
+  } else {
+    limite.setDate(limite.getDate() - 1);
+    limite.setHours(23, 59, 59, 999);
+  }
+
+  // Reserva feita depois do prazo ainda precisa de uma janela curta para o Pix/cartão
+  // "agora". Sem esta tolerância ela nasceria vencida no mesmo milissegundo.
+  if (limite <= criadoEm) {
+    return new Date(criadoEm.getTime() + PAGAMENTO_IMEDIATO_MINUTOS * 60000);
+  }
+  return limite;
+}
+
+function estadoLegado(item) {
+  if (ESTADOS_AGENDAMENTO.has(item && item.estado)) return item.estado;
+  if (item && item.canceladoEm) return "cancelado";
+  if (item && item.vencidoEm) return "vencido";
+  return item && item.pago ? "pago" : "reservado";
+}
+
+function normalizarAgendamento(item, now = new Date()) {
+  const copia = { ...(item || {}) };
+  // Antes desta separação, `slotId` identificava ao mesmo tempo a vaga da grade e a
+  // consulta. Registros legados mantêm sua identidade e ganham explicitamente a vaga que
+  // ocupavam. Reservas novas recebem um slotId próprio em reservar().
+  if (!copia.agendaSlotId && copia.slotId) copia.agendaSlotId = copia.slotId;
+  copia.estado = estadoLegado(copia);
+  copia.pago = copia.estado === "pago";
+  if (!copia.expiresAt && copia.expiraEm) copia.expiresAt = copia.expiraEm;
+  if (copia.estado === "reservado" && !copia.expiresAt) {
+    const criado = new Date(copia.registradoEm || now);
+    const base = Number.isNaN(criado.getTime()) ? now : criado;
+    copia.expiresAt = limiteDePagamento(copia, base).toISOString();
+  }
+  if (copia.estado !== "reservado") copia.expiresAt = null;
+  return copia;
+}
+
+function materializarLinha(linha) {
+  const item = JSON.parse(linha.payload_json);
+  const slotLegado = item.slotId || linha.slot_id;
+  item.slotId = linha.slot_id;
+  if (!item.agendaSlotId) item.agendaSlotId = slotLegado;
+  item.estado = linha.estado;
+  item.expiresAt = linha.expires_at || null;
+  item.pago = linha.estado === "pago";
+  if (linha.estado === "vencido" && !item.vencidoEm) item.vencidoEm = linha.updated_at;
+  if (linha.estado === "cancelado" && !item.canceladoEm) item.canceladoEm = linha.updated_at;
+  return item;
+}
+
+function iniciarBancoAgendamentos() {
+  if (bancoAgendamentos) return bancoAgendamentos;
+  garantirPasta();
+  const db = new DatabaseSync(ARQ_AGENDAMENTOS_DB);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA synchronous = FULL");
+  db.exec("PRAGMA busy_timeout = 10000");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agenda_meta (
+      chave TEXT PRIMARY KEY,
+      valor TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS agendamentos (
+      slot_id TEXT PRIMARY KEY,
+      horario_real TEXT NOT NULL,
+      estado TEXT NOT NULL CHECK (estado IN ('reservado','pago','vencido','cancelado')),
+      expires_at TEXT,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS agendamentos_horario_ativo
+      ON agendamentos(horario_real)
+      WHERE estado IN ('reservado','pago');
+    CREATE INDEX IF NOT EXISTS agendamentos_estado_expira
+      ON agendamentos(estado, expires_at);
+  `);
+  bancoAgendamentos = db;
+  migrarAgendamentosDoJSON(db);
+  return db;
+}
+
+function emTransacao(db, trabalho) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const resultado = trabalho();
+    db.exec("COMMIT");
+    return resultado;
+  } catch (erro) {
+    try { db.exec("ROLLBACK"); } catch {}
+    throw erro;
+  }
+}
+
+function migrarAgendamentosDoJSON(db) {
+  emTransacao(db, () => {
+    const feita = db.prepare("SELECT valor FROM agenda_meta WHERE chave = ?").get("json_importado_v1");
+    if (feita) return;
+
+    const antigos = lerJSON(ARQ_AGENDAMENTOS, []);
+    if (!Array.isArray(antigos)) throw new Error("agendamentos.json precisa conter uma lista");
+    if (fs.existsSync(ARQ_AGENDAMENTOS)) {
+      const copia = `${ARQ_AGENDAMENTOS}.antes-sqlite-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+      fs.copyFileSync(ARQ_AGENDAMENTOS, copia, fs.constants.COPYFILE_EXCL);
+    }
+
+    const inserir = db.prepare(`
+      INSERT INTO agendamentos
+        (slot_id, horario_real, estado, expires_at, payload_json, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const now = new Date();
+    for (const antigo of antigos) {
+      if (!antigo || !antigo.slotId || !antigo.data || !antigo.horario) continue;
+      const item = normalizarAgendamento(antigo, now);
+      const atualizado = item.registradoEm || now.toISOString();
+      try {
+        inserir.run(
+          item.slotId,
+          chaveHorarioReal(item.data, item.horario),
+          item.estado,
+          item.expiresAt,
+          JSON.stringify(item),
+          atualizado,
+        );
+      } catch (erro) {
+        if (!String(erro && erro.message).includes("UNIQUE constraint failed")) throw erro;
+        if (db.prepare("SELECT 1 FROM agendamentos WHERE slot_id = ?").get(item.slotId)) continue;
+        // JSON antigo já podia conter grade + extra no mesmo momento. A primeira reserva
+        // permanece ativa; a duplicada é preservada para auditoria, mas nasce vencida.
+        item.estado = "vencido";
+        item.pago = false;
+        item.expiresAt = null;
+        item.vencidoEm = now.toISOString();
+        inserir.run(item.slotId, chaveHorarioReal(item.data, item.horario), item.estado, null, JSON.stringify(item), now.toISOString());
+      }
+    }
+    db.prepare("INSERT INTO agenda_meta (chave, valor) VALUES (?, ?)")
+      .run("json_importado_v1", now.toISOString());
+  });
+  vencerReservasNoBanco(db, new Date(), false);
+  exportarAgendaLegada(db);
+}
+
+function vencerReservasNoBanco(db, now = new Date(), exportar = true) {
+  const iso = now.toISOString();
+  const existe = db.prepare(`
+    SELECT 1 FROM agendamentos
+     WHERE estado = 'reservado' AND expires_at IS NOT NULL AND expires_at <= ?
+     LIMIT 1
+  `).get(iso);
+  if (!existe) return 0;
+  const resultado = emTransacao(db, () => db.prepare(`
+    UPDATE agendamentos
+       SET estado = 'vencido', expires_at = NULL, updated_at = ?
+     WHERE estado = 'reservado' AND expires_at IS NOT NULL AND expires_at <= ?
+  `).run(iso, iso));
+  if (exportar && Number(resultado.changes) > 0) exportarAgendaLegada(db);
+  return Number(resultado.changes);
+}
+
+function listarDoBanco({ incluirInativos = false, now = new Date() } = {}) {
+  const db = iniciarBancoAgendamentos();
+  vencerReservasNoBanco(db, now);
+  const sql = incluirInativos
+    ? "SELECT * FROM agendamentos ORDER BY rowid"
+    : "SELECT * FROM agendamentos WHERE estado IN ('reservado','pago') ORDER BY rowid";
+  return db.prepare(sql).all().map(materializarLinha);
+}
+
+function comLockDeExportacao(trabalho) {
+  const lock = `${ARQ_AGENDAMENTOS}.export.lock`;
+  return comLockArquivo(lock, trabalho, "exportação da agenda");
+}
+
+function exportarAgendaLegada(db = iniciarBancoAgendamentos()) {
+  comLockDeExportacao(() => {
+    // A consulta acontece DEPOIS de obter o lock: se outro processo já terminou uma
+    // atualização, este espelho necessariamente inclui a versão mais nova também.
+    const ativos = db.prepare("SELECT * FROM agendamentos WHERE estado IN ('reservado','pago') ORDER BY rowid")
+      .all().map(materializarLinha);
+    escreverJSON(ARQ_AGENDAMENTOS, ativos);
+    reescreverCSV(ativos);
+  });
+}
+
+function lerAgendamentos(now = new Date()) {
+  return listarDoBanco({ now });
+}
+
+function lerTodosAgendamentos(now = new Date()) {
+  return listarDoBanco({ incluirInativos: true, now });
+}
+
+function atualizarAgendamento(slotId, alterar) {
+  const db = iniciarBancoAgendamentos();
+  vencerReservasNoBanco(db, new Date());
+  const resultado = emTransacao(db, () => {
+    const linha = db.prepare("SELECT * FROM agendamentos WHERE slot_id = ?").get(slotId);
+    if (!linha) return null;
+    const item = materializarLinha(linha);
+    const alterado = alterar(item);
+    if (alterado === false) return false;
+    const final = normalizarAgendamento(item);
+    const agora = new Date().toISOString();
+    db.prepare(`
+      UPDATE agendamentos
+         SET horario_real = ?, estado = ?, expires_at = ?, payload_json = ?, updated_at = ?
+       WHERE slot_id = ?
+    `).run(chaveHorarioReal(final.data, final.horario), final.estado, final.expiresAt, JSON.stringify(final), agora, slotId);
+    return final;
+  });
+  if (resultado !== null && resultado !== false) exportarAgendaLegada(db);
+  return resultado;
+}
+
+function vencerReservas(now = new Date()) {
+  return vencerReservasNoBanco(iniciarBancoAgendamentos(), now);
+}
+
+function listarVencimentosPendentesDeLimpeza(now = new Date()) {
+  vencerReservas(now);
+  return lerTodosAgendamentos().filter((a) => a.estado === "vencido" && !a.vencimentoSincronizadoEm);
+}
+
+function marcarVencimentoSincronizado(slotId, detalhes = null) {
+  const atualizado = atualizarAgendamento(slotId, (item) => {
+    if (item.estado !== "vencido") return false;
+    item.vencimentoSincronizadoEm = new Date().toISOString();
+    item.vencimentoSincronizacao = detalhes || null;
+  });
+  return !!atualizado;
+}
+
+function fecharBancoAgendamentosParaTeste() {
+  if (!bancoAgendamentos) return;
+  bancoAgendamentos.close();
+  bancoAgendamentos = null;
 }
 
 // Dias bloqueados contam como "ocupados" pra todos os horários daquele dia — assim o
@@ -50,7 +362,10 @@ function lerAgendamentos() {
 // que bloqueio existe, só enxerga que não sobrou vaga nesse dia. Reservas já feitas
 // num dia que depois foi bloqueado continuam valendo (bloqueio só afeta vaga nova).
 function idsOcupados(now = new Date()) {
-  const reais = lerAgendamentos().map((a) => a.slotId);
+  // A agenda pergunta "quais vagas da grade estão ocupadas?", não "quais são os IDs das
+  // consultas?". Separar os dois permite reservar a mesma vaga novamente depois de um
+  // cancelamento/vencimento sem reutilizar a identidade nem as chaves dos efeitos externos.
+  const reais = lerAgendamentos(now).map((a) => a.agendaSlotId || a.slotId);
   const bloqueios = new Set(lerBloqueios());
   const dosBloqueios = bloqueios.size === 0
     ? []
@@ -65,12 +380,12 @@ function lerBloqueiosHorarios() {
 }
 
 function alternarBloqueioHorario(slotId) {
-  const lista = lerBloqueiosHorarios();
-  const idx = lista.indexOf(slotId);
-  if (idx >= 0) lista.splice(idx, 1);
-  else lista.push(slotId);
-  escreverJSON(ARQ_BLOQUEIOS_HORARIOS, lista);
-  return lista;
+  return atualizarJSON(ARQ_BLOQUEIOS_HORARIOS, [], (lista) => {
+    const idx = lista.indexOf(slotId);
+    if (idx >= 0) lista.splice(idx, 1);
+    else lista.push(slotId);
+    return lista;
+  });
 }
 
 // HORÁRIOS EXTRAS — horários liberados na mão pelo painel, fora da grade padrão do
@@ -114,7 +429,14 @@ function listarSlotsExtras(now = new Date()) {
 // "todos os horários que existem", pra um extra poder ser oferecido e confirmado igual
 // a qualquer outro.
 function slotsPossiveisComExtras(now = new Date()) {
-  return [...Agenda.gerarSlotsPossiveis(now), ...listarSlotsExtras(now)];
+  const unicos = new Map();
+  // A grade vem primeiro: se alguém abriu um extra exatamente em cima dela, preservamos o
+  // slot canônico da grade e descartamos só a representação duplicada do extra.
+  for (const slot of [...Agenda.gerarSlotsPossiveis(now), ...listarSlotsExtras(now)]) {
+    const chave = chaveHorarioReal(slot.date, slot.time);
+    if (!unicos.has(chave)) unicos.set(chave, slot);
+  }
+  return [...unicos.values()];
 }
 
 // Extras realmente livres pra oferecer: tira os já ocupados/bloqueados e, quando pedido,
@@ -122,7 +444,9 @@ function slotsPossiveisComExtras(now = new Date()) {
 function extrasDisponiveis(now = new Date(), ocupados = new Set(), filtros = {}) {
   const { diaPreferido = null, periodo = null, dataPreferida = null } = filtros;
   const bloqueados = new Set(lerBloqueios());
+  const grade = new Set(Agenda.gerarSlotsPossiveis(now).map((s) => chaveHorarioReal(s.date, s.time)));
   return listarSlotsExtras(now).filter((s) => {
+    if (grade.has(chaveHorarioReal(s.date, s.time))) return false;
     if (ocupados.has(s.id)) return false;
     if (bloqueados.has(s.date)) return false;
     if (dataPreferida && s.date !== dataPreferida) return false;
@@ -140,32 +464,37 @@ function extrasDisponiveis(now = new Date(), ocupados = new Set(), filtros = {})
 }
 
 function adicionarHorarioExtra(data, hora) {
-  const lista = lerHorariosExtras();
-  if (!lista.some((e) => e.data === data && e.hora === hora)) {
-    lista.push({ data, hora });
-  }
-  escreverJSON(ARQ_HORARIOS_EXTRAS, lista);
-  return lista;
+  return atualizarJSON(ARQ_HORARIOS_EXTRAS, [], (lista) => {
+    if (!lista.some((e) => e.data === data && e.hora === hora)) {
+      lista.push({ data, hora });
+    }
+    return lista;
+  });
 }
 
 function removerHorarioExtra(slotId) {
-  const lista = lerHorariosExtras().filter((e) => `extra-${e.data}-${e.hora}` !== slotId);
-  escreverJSON(ARQ_HORARIOS_EXTRAS, lista);
-  return lista;
+  return atualizarJSON(ARQ_HORARIOS_EXTRAS, [], (lista) => {
+    for (let i = lista.length - 1; i >= 0; i--) {
+      if (`extra-${lista[i].data}-${lista[i].hora}` === slotId) lista.splice(i, 1);
+    }
+    return lista;
+  });
 }
 
 // Todos os horários de um dia específico, já cruzados com agendamento real, bloqueio do
 // dia inteiro e bloqueio individual — pro painel mostrar e deixar bloquear um por um.
 // Inclui os horários extras liberados na mão pra esse dia.
 function listarHorariosDoDia(dataStr, now = new Date()) {
-  const agendamentos = lerAgendamentos();
+  const agendamentos = lerAgendamentos(now);
   const diaTodoBloqueado = lerBloqueios().includes(dataStr);
   const bloqueiosHorarios = new Set(lerBloqueiosHorarios());
   const horarios = slotsPossiveisComExtras(now)
     .filter((s) => s.date === dataStr)
     .sort((a, b) => a.time.localeCompare(b.time))
     .map((s) => {
-      const agendamento = agendamentos.find((a) => a.slotId === s.id);
+      const agendamento = agendamentos.find((a) =>
+        (a.agendaSlotId || a.slotId) === s.id
+          || chaveHorarioReal(a.data, a.horario) === chaveHorarioReal(s.date, s.time));
       return {
         slotId: s.id,
         time: s.time,
@@ -186,15 +515,12 @@ function lerBloqueios() {
 // Alterna o bloqueio de um dia (AAAA-MM-DD): se já estava bloqueado, desbloqueia; senão,
 // bloqueia. Retorna a lista atualizada de dias bloqueados.
 function alternarBloqueioDia(data) {
-  const lista = lerBloqueios();
-  const idx = lista.indexOf(data);
-  if (idx >= 0) {
-    lista.splice(idx, 1);
-  } else {
-    lista.push(data);
-  }
-  escreverJSON(ARQ_BLOQUEIOS, lista);
-  return lista;
+  return atualizarJSON(ARQ_BLOQUEIOS, [], (lista) => {
+    const idx = lista.indexOf(data);
+    if (idx >= 0) lista.splice(idx, 1);
+    else lista.push(data);
+    return lista;
+  });
 }
 
 function formatarDataBR(isoDate) {
@@ -225,13 +551,14 @@ function reescreverCSV(lista) {
 // antes de escolher horário. Sem este bolso o dado sumia — e a Carla ainda respondia
 // "anotado". Fica guardado por telefone até a reserva acontecer, e é consumido lá.
 function guardarDadosPendentes(telefone, { email = null, dataNascimento = null } = {}) {
-  const todos = lerJSON(ARQ_DADOS_PENDENTES, {});
-  const atual = todos[telefone] || {};
-  if (email) atual.email = email;
-  if (dataNascimento) atual.dataNascimento = dataNascimento;
-  atual.registradoEm = new Date().toISOString();
-  todos[telefone] = atual;
-  escreverJSON(ARQ_DADOS_PENDENTES, todos);
+  return atualizarJSON(ARQ_DADOS_PENDENTES, {}, (todos) => {
+    const atual = todos[telefone] || {};
+    if (email) atual.email = email;
+    if (dataNascimento) atual.dataNascimento = dataNascimento;
+    atual.registradoEm = new Date().toISOString();
+    todos[telefone] = atual;
+    return { ...atual };
+  });
 }
 
 function lerDadosPendentes(telefone) {
@@ -239,29 +566,36 @@ function lerDadosPendentes(telefone) {
 }
 
 function limparDadosPendentes(telefone) {
-  const todos = lerJSON(ARQ_DADOS_PENDENTES, {});
-  if (!todos[telefone]) return;
-  delete todos[telefone];
-  escreverJSON(ARQ_DADOS_PENDENTES, todos);
+  return atualizarJSON(ARQ_DADOS_PENDENTES, {}, (todos) => {
+    if (!todos[telefone]) return false;
+    delete todos[telefone];
+    return true;
+  });
 }
 
 // Retorna false se o horário já tiver sido reservado por outra família (nunca deixa
 // duplicar). Quando dá certo devolve o agendamento criado, porque quem chama precisa
 // saber se veio e-mail/nascimento junto (do bolso de pendentes) pra mandar pro prontuário.
-function reservar({ slot, responsavel, crianca, telefone, googleEventId = null }) {
-  const lista = lerAgendamentos();
-  if (lista.some((a) => a.slotId === slot.id)) return false;
+function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, expiraEm = null, expiresAt = null }) {
   // O que a família adiantou antes de ter horário entra aqui, no agendamento certo.
   const pendentes = lerDadosPendentes(telefone);
+  const agora = new Date();
+  const expiracaoRecebida = new Date(expiresAt || expiraEm || "");
+  const expiracao = Number.isNaN(expiracaoRecebida.getTime())
+    ? limiteDePagamento({ data: slot.date, horario: slot.time }, agora)
+    : expiracaoRecebida;
   const item = {
-    slotId: slot.id,
+    // slotId é a identidade desta RESERVA e nunca volta a ser usado. agendaSlotId é a vaga
+    // da grade, que pode ser ocupada novamente quando esta reserva ficar inativa.
+    slotId: `reserva-${crypto.randomUUID()}`,
+    agendaSlotId: slot.id,
     data: slot.date,
     horario: slot.time,
     diaLabel: slot.label,
     responsavel,
     crianca,
     telefone,
-    registradoEm: new Date().toISOString(),
+    registradoEm: agora.toISOString(),
     lembretes: { semanaAntes: false, diaDaConsulta: false },
     googleEventId,
     appAgendamentoId: null,
@@ -271,10 +605,33 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null }
     // prazo-de-pagamento.js). Nasce false e só o Dr. Bruno vira, pelo painel, porque não
     // existe integração que avise que o Pix caiu.
     pago: false,
+    estado: "reservado",
+    expiresAt: expiracao.toISOString(),
+    // Permite ao reconciliador distinguir reservas novas, que devem ter efeitos duráveis,
+    // de registros legados/manuais que podem já existir fora daqui sem IDs locais.
+    integracoesDuraveis: true,
   };
-  lista.push(item);
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
-  reescreverCSV(lista);
+  const db = iniciarBancoAgendamentos();
+  vencerReservasNoBanco(db, agora);
+  try {
+    emTransacao(db, () => {
+      db.prepare(`
+        INSERT INTO agendamentos
+          (slot_id, horario_real, estado, expires_at, payload_json, updated_at)
+        VALUES (?, ?, 'reservado', ?, ?, ?)
+      `).run(
+        item.slotId,
+        chaveHorarioReal(item.data, item.horario),
+        item.expiresAt,
+        JSON.stringify(item),
+        agora.toISOString(),
+      );
+    });
+  } catch (erro) {
+    if (String(erro && erro.message).includes("UNIQUE constraint failed")) return false;
+    throw erro;
+  }
+  exportarAgendaLegada(db);
   if (pendentes) limparDadosPendentes(telefone);
   return item;
 }
@@ -282,11 +639,37 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null }
 // Preenche o id do registro criado no Sistema Pediátrico Integrado depois que o envio (fora
 // do fluxo síncrono do agendamento) responde — assim dá pra cancelar lá também depois.
 function definirAppAgendamentoId(slotId, appAgendamentoId) {
-  const lista = lerAgendamentos();
-  const item = lista.find((a) => a.slotId === slotId);
-  if (!item) return;
-  item.appAgendamentoId = appAgendamentoId;
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  const atualizado = atualizarAgendamento(slotId, (item) => {
+    item.appAgendamentoId = appAgendamentoId;
+  });
+  return atualizado || undefined;
+}
+
+// Mesmo contrato do vínculo com o SPI, agora para o Google Calendar. A criação externa é
+// assíncrona e pode terminar depois de a família cancelar; por isso o setter aceita também
+// registros inativos e preserva o ID no histórico. O cancelamento durável encontra esse ID
+// mesmo quando os efeitos terminam fora de ordem.
+function definirGoogleEventId(slotId, googleEventId) {
+  const atualizado = atualizarAgendamento(slotId, (item) => {
+    item.googleEventId = googleEventId;
+  });
+  return atualizado || undefined;
+}
+
+// O cancelamento local e a gravação na caixa durável são dois arquivos diferentes. Este
+// marcador permite ao painel retomar a segunda metade depois de uma queda exatamente entre
+// as duas escritas. Os efeitos têm chave idempotente, então repetir o enfileiramento é seguro.
+function listarCancelamentosPendentesDeFila() {
+  return lerTodosAgendamentos().filter((a) => a.estado === "cancelado" && !a.cancelamentoEnfileiradoEm);
+}
+
+function marcarCancelamentoEnfileirado(slotId, detalhes = null) {
+  const atualizado = atualizarAgendamento(slotId, (item) => {
+    if (item.estado !== "cancelado") return false;
+    item.cancelamentoEnfileiradoEm = new Date().toISOString();
+    item.cancelamentoEnfileirado = detalhes || null;
+  });
+  return !!atualizado;
 }
 
 // Agendamentos com telefone de verdade (não placeholder tipo "(a confirmar)") que ainda não
@@ -301,17 +684,18 @@ function agendamentosProntosParaLembrete(hojeStr, tipo) {
   }
   return lerAgendamentos().filter((a) =>
     typeof a.telefone === "string" && a.telefone.startsWith("+")
+    && a.estado === "pago"
     && a.data === dataAlvo
     && !(a.lembretes && a.lembretes[tipo])
   );
 }
 
 function marcarLembreteEnviado(slotId, tipo) {
-  const lista = lerAgendamentos();
-  const item = lista.find((a) => a.slotId === slotId);
-  if (!item) return;
-  item.lembretes = { semanaAntes: false, diaDaConsulta: false, ...(item.lembretes || {}), [tipo]: true };
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
+  const atualizado = atualizarAgendamento(slotId, (item) => {
+    if (item.estado !== "pago") return false;
+    item.lembretes = { semanaAntes: false, diaDaConsulta: false, ...(item.lembretes || {}), [tipo]: true };
+  });
+  return !!atualizado;
 }
 
 // Guarda e-mail do responsável e data de nascimento da criança no agendamento mais
@@ -322,11 +706,33 @@ function marcarLembreteEnviado(slotId, tipo) {
 // mandar esses dados pro prontuário, e é aqui que se sabe em qual agendamento eles
 // entraram. Continua devolvendo `false` quando não há agendamento pra ligar, então um
 // `if (!guardado)` do lado de quem chama segue valendo.
-function registrarDadosDoPaciente(telefone, { email = null, dataNascimento = null } = {}) {
-  const lista = lerAgendamentos();
-  // O mais recente primeiro: uma família pode ter marcado pra dois filhos, e os dados
-  // pertencem ao agendamento que acabou de ser feito.
-  const item = [...lista].reverse().find((a) => a.telefone === telefone);
+function registrarDadosDoPacientePorSlot(slotId, { email = null, dataNascimento = null } = {}) {
+  if (!slotId) return false;
+  const encontrado = acharAgendamentoPorSlot(slotId);
+  if (!encontrado) return false;
+  const emailNovo = !!email && email !== encontrado.responsavelEmail;
+  const dataNova = !!dataNascimento && dataNascimento !== encontrado.criancaDataNascimento;
+  if (!emailNovo && !dataNova) return { semNovidade: true, agendamento: encontrado };
+
+  return atualizarAgendamento(slotId, (item) => {
+    if (!ESTADOS_ATIVOS.has(item.estado)) return false;
+    if (emailNovo) item.responsavelEmail = email;
+    if (dataNova) item.criancaDataNascimento = dataNascimento;
+  }) || false;
+}
+
+function registrarDadosDoPaciente(
+  telefone,
+  { email = null, dataNascimento = null, slotId: slotIdLegado = null } = {},
+  { slotId = null } = {},
+) {
+  // O terceiro argumento é o contrato novo. Aceitar slotId dentro dos dados deixa a
+  // transição compatível com chamadas que já tenham começado a adotar a identidade antes
+  // desta assinatura, sem voltar ao perigoso "pega o mais recente".
+  const alvoExplicito = slotId || slotIdLegado;
+  if (alvoExplicito) return registrarDadosDoPacientePorSlot(alvoExplicito, { email, dataNascimento });
+  const candidatos = lerAgendamentos().filter((a) => a.telefone === telefone);
+  const item = candidatos[0] || null;
   // Sem agendamento ainda: guarda no bolso de pendentes em vez de perder o dado. O
   // `pendente: true` avisa quem chamou que não há o que mandar pro prontuário AGORA —
   // isso acontece na reserva, quando o agendamento finalmente existe.
@@ -334,20 +740,21 @@ function registrarDadosDoPaciente(telefone, { email = null, dataNascimento = nul
     guardarDadosPendentes(telefone, { email, dataNascimento });
     return { pendente: true };
   }
+  // Compatibilidade segura: telefone sozinho continua funcionando quando só existe uma
+  // consulta ativa. Com irmãos, escolher silenciosamente seria pior que pedir contexto.
+  if (candidatos.length > 1) {
+    return {
+      ambiguo: true,
+      motivo: "Há mais de um agendamento ativo neste telefone; informe slotId.",
+      agendamentos: candidatos.map((a) => ({ slotId: a.slotId, crianca: a.crianca, data: a.data, horario: a.horario })),
+    };
+  }
   // Nada de novo: a Carla reviu a conversa, achou o e-mail que ELA MESMA escreveu numa
   // mensagem anterior e chamou a ferramenta de novo com o mesmo dado. Gravar de novo não
   // faz mal, mas quem chama dispara um WhatsApp pro Dr. Bruno a cada gravação — e ele
   // recebia o mesmo aviso duas vezes. Aqui a repetição morre, no código, sem depender do
   // modelo perceber que já tinha feito isso.
-  const emailNovo = !!email && email !== item.responsavelEmail;
-  const dataNova = !!dataNascimento && dataNascimento !== item.criancaDataNascimento;
-  if (!emailNovo && !dataNova) return { semNovidade: true, agendamento: item };
-
-  if (emailNovo) item.responsavelEmail = email;
-  if (dataNova) item.criancaDataNascimento = dataNascimento;
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
-  reescreverCSV(lista);
-  return item;
+  return registrarDadosDoPacientePorSlot(item.slotId, { email, dataNascimento });
 }
 
 // Acha o agendamento mais recente de um e-mail de responsável. É como o prontuário
@@ -367,65 +774,97 @@ function acharAgendamentoPorEmail(email) {
 // existe integração que avise quando o Pix cai, então a única fonte de verdade é ele
 // olhando o extrato. Desligar tem que funcionar igual a ligar, porque errar a linha do
 // clique é o tipo de coisa que acontece no celular.
+function alterarPagamento(slotId, pago, detalhes = null) {
+  const agora = new Date();
+  let semMudanca = false;
+  const atualizado = atualizarAgendamento(slotId, (item) => {
+    if (!ESTADOS_ATIVOS.has(item.estado)) return false;
+    const jaEstaComoPedido = pago ? item.estado === "pago" : item.estado === "reservado";
+    if (jaEstaComoPedido) {
+      semMudanca = true;
+      return false;
+    }
+    item.estado = pago ? "pago" : "reservado";
+    item.pago = !!pago;
+    item.pagoEm = item.pago ? agora.toISOString() : null;
+    item.pagamento = item.pago && detalhes ? detalhes : null;
+    item.expiresAt = item.pago ? null : limiteDePagamento(item, agora).toISOString();
+    // Se um clique em "Pago" foi desfeito, um pagamento futuro é uma confirmação nova.
+    // A marca antiga não pode impedir a nova mensagem, e uma confirmação ainda na caixa de
+    // saída não pode ser entregue depois que o pagamento deixou de valer.
+    if (!item.pago) item.pagamentoAvisadoEm = null;
+  });
+  if (!atualizado && !semMudanca) return { ok: false, alterado: false, agendamento: null };
+  if (!pago && !semMudanca) removerMensagemPendentePorChave(`pagamento:${slotId}`);
+  return {
+    ok: true,
+    alterado: !semMudanca,
+    agendamento: atualizado || acharAgendamentoPorSlot(slotId),
+  };
+}
+
 function marcarPagamento(slotId, pago, detalhes = null) {
-  const lista = lerAgendamentos();
-  const item = lista.find((a) => a.slotId === slotId);
-  if (!item) return false;
-  item.pago = !!pago;
-  item.pagoEm = item.pago ? new Date().toISOString() : null;
-  item.pagamento = item.pago && detalhes ? detalhes : null;
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
-  reescreverCSV(lista);
-  return true;
+  return alterarPagamento(slotId, pago, detalhes).ok;
 }
 
 // Marca que a família já recebeu a mensagem de "pagamento confirmado". Sem isso, um
 // clique repetido no botão do painel mandaria a mesma mensagem de novo.
 function marcarPagamentoAvisado(slotId) {
-  const lista = lerAgendamentos();
-  const item = lista.find((a) => a.slotId === slotId);
-  if (!item) return false;
-  item.pagamentoAvisadoEm = new Date().toISOString();
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
-  return true;
+  return !!atualizarAgendamento(slotId, (item) => {
+    if (item.estado !== "pago") return false;
+    if (item.pagamentoAvisadoEm) return false;
+    item.pagamentoAvisadoEm = new Date().toISOString();
+  });
 }
 
 function acharAgendamentoPorSlot(slotId) {
   return lerAgendamentos().find((a) => a.slotId === slotId) || null;
 }
 
+function selecionarAgendamento({ slotId = null, telefone = null, email = null, incluirInativos = false } = {}) {
+  const lista = incluirInativos ? lerTodosAgendamentos() : lerAgendamentos();
+  if (slotId) return lista.find((a) => a.slotId === slotId) || null;
+  if (email) {
+    const alvo = String(email).trim().toLowerCase();
+    return [...lista].reverse().find((a) => String(a.responsavelEmail || "").trim().toLowerCase() === alvo) || null;
+  }
+  if (telefone) return [...lista].reverse().find((a) => a.telefone === telefone) || null;
+  return null;
+}
+
 function marcarPortalAvisado(slotId) {
-  const lista = lerAgendamentos();
-  const item = lista.find((a) => a.slotId === slotId);
-  if (!item) return false;
-  item.portalAvisadoEm = new Date().toISOString();
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
-  return true;
+  return !!atualizarAgendamento(slotId, (item) => {
+    if (!ESTADOS_ATIVOS.has(item.estado)) return false;
+    if (item.portalAvisadoEm) return false;
+    item.portalAvisadoEm = new Date().toISOString();
+  });
 }
 
 // Mesma coisa para o guia. Marca separada da do portal de propósito: são dois envios
 // independentes, e a família pode receber um sem o outro (o portal é do consultório, o
 // guia é um produto). Uma marca só faria o segundo botão sumir junto com o primeiro.
 function marcarGuiaAvisado(slotId) {
-  const lista = lerAgendamentos();
-  const item = lista.find((a) => a.slotId === slotId);
-  if (!item) return false;
-  item.guiaAvisadoEm = new Date().toISOString();
-  escreverJSON(ARQ_AGENDAMENTOS, lista);
-  return true;
+  return !!atualizarAgendamento(slotId, (item) => {
+    if (!ESTADOS_ATIVOS.has(item.estado)) return false;
+    if (item.guiaAvisadoEm) return false;
+    item.guiaAvisadoEm = new Date().toISOString();
+  });
 }
 
-// Cancela (apaga) um agendamento pelo slotId. Retorna o registro removido (inclui
-// googleEventId, se tiver, pra quem chamar poder cancelar o evento na agenda também),
-// ou null se não encontrar.
+// Cancela um agendamento pelo slotId. Ele some das consultas ativas, mas fica no banco com
+// estado cancelado para auditoria. Retorna o registro (inclui ids externos para limpeza),
+// ou null se não encontrar/ele já estiver inativo.
 function cancelarAgendamento(slotId) {
-  const lista = lerAgendamentos();
-  const removido = lista.find((a) => a.slotId === slotId);
+  const removido = acharAgendamentoPorSlot(slotId);
   if (!removido) return null;
-  const nova = lista.filter((a) => a.slotId !== slotId);
-  escreverJSON(ARQ_AGENDAMENTOS, nova);
-  reescreverCSV(nova);
-  return removido;
+  const agora = new Date().toISOString();
+  const cancelado = atualizarAgendamento(slotId, (item) => {
+    item.estado = "cancelado";
+    item.pago = false;
+    item.expiresAt = null;
+    item.canceladoEm = agora;
+  });
+  return cancelado || null;
 }
 
 function lerAlertas() {
@@ -440,7 +879,6 @@ function lerAlertas() {
 // não tem. Com elas o botão "Sim" do painel cria o horário extra junto, senão a Carla
 // prometeria um horário que a ferramenta ia recusar na hora de marcar.
 function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", pergunta = null, dataPedida = null, horaPedida = null }) {
-  const lista = lerAlertas();
   const registro = {
     // Precisa de identidade pra o painel conseguir responder um alerta específico. Os alertas
     // antigos não têm, e tudo bem: não dá pra responder alerta de antes desta mudança.
@@ -452,8 +890,7 @@ function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", perg
     if (dataPedida) registro.dataPedida = dataPedida;
     if (horaPedida) registro.horaPedida = horaPedida;
   }
-  lista.push(registro);
-  escreverJSON(ARQ_ALERTAS, lista);
+  atualizarJSON(ARQ_ALERTAS, [], (lista) => { lista.push(registro); });
   return registro;
 }
 
@@ -465,18 +902,18 @@ function acharAlerta(id) {
 // foi respondido: o painel abre no celular e no computador, e clique repetido acontece. Sem
 // esta trava a família receberia duas mensagens dizendo a mesma coisa.
 function responderAlerta(id, resposta) {
-  const lista = lerAlertas();
-  const alerta = lista.find((a) => a.id === id);
-  if (!alerta) return null;
-  if (alerta.respondidoEm) return { ...alerta, jaRespondido: true };
-  alerta.respondidoEm = new Date().toISOString();
-  alerta.resposta = String(resposta == null ? "" : resposta).trim().slice(0, 300);
-  escreverJSON(ARQ_ALERTAS, lista);
-  return alerta;
+  return atualizarJSON(ARQ_ALERTAS, [], (lista) => {
+    const alerta = lista.find((a) => a.id === id);
+    if (!alerta) return null;
+    if (alerta.respondidoEm) return { ...alerta, jaRespondido: true };
+    alerta.respondidoEm = new Date().toISOString();
+    alerta.resposta = String(resposta == null ? "" : resposta).trim().slice(0, 300);
+    return { ...alerta };
+  });
 }
 
 function limparAlertas() {
-  escreverJSON(ARQ_ALERTAS, []);
+  atualizarJSON(ARQ_ALERTAS, [], (lista) => { lista.splice(0, lista.length); });
 }
 
 // Sessões por telefone: pra Carla não "esquecer" uma conversa em andamento se o bot reiniciar.
@@ -508,28 +945,25 @@ function historicoExpirou(sessao, now = new Date()) {
 }
 
 function salvarSessao(telefone, sessao) {
-  const sessoes = lerSessoes();
-  sessoes[telefone] = sessao;
-  escreverJSON(ARQ_SESSOES, sessoes);
+  atualizarJSON(ARQ_SESSOES, {}, (sessoes) => { sessoes[telefone] = sessao; });
 }
 
 // Tira o telefone do estado "aguardando humano" pelo painel — útil quando você já resolveu
 // por fora e quer que a Carla volte a responder esse número sozinha antes das 2h automáticas.
 function retomarAtendimento(telefone) {
-  const sessao = obterSessao(telefone);
-  if (!sessao) return false;
-  sessao.aguardandoHumano = false;
-  sessao.aguardandoHumanoDesde = null;
-  salvarSessao(telefone, sessao);
-  return true;
+  return atualizarJSON(ARQ_SESSOES, {}, (sessoes) => {
+    const sessao = sessoes[telefone];
+    if (!sessao) return false;
+    sessao.aguardandoHumano = false;
+    sessao.aguardandoHumanoDesde = null;
+    return true;
+  });
 }
 
 // Apaga a sessão inteira desse telefone (histórico, aguardando humano, último agendamento
 // lembrado etc) — a próxima mensagem desse número é tratada como se fosse a primeira vez.
 function limparConversa(telefone) {
-  const sessoes = lerSessoes();
-  delete sessoes[telefone];
-  escreverJSON(ARQ_SESSOES, sessoes);
+  return atualizarJSON(ARQ_SESSOES, {}, (sessoes) => delete sessoes[telefone]);
 }
 
 // Caixa de saída durável. A sessão pode avançar depois de uma reserva ou cancelamento, mas
@@ -540,55 +974,67 @@ function listarMensagensPendentes(telefone = null) {
 }
 
 function registrarMensagemPendente({ telefone, jid, texto, efeitoAposEnvio = null, chaveIdempotencia = null }) {
-  const lista = listarMensagensPendentes();
-  if (chaveIdempotencia) {
-    const existente = lista.find((m) => m.chaveIdempotencia === chaveIdempotencia);
-    if (existente) return existente;
-  }
-  const item = {
-    id: crypto.randomUUID(),
-    telefone,
-    jid,
-    texto,
-    criadaEm: new Date().toISOString(),
-    enviadaEm: null,
-    tentativas: 0,
-    ultimoErro: null,
-    efeitoAposEnvio,
-    chaveIdempotencia,
-  };
-  lista.push(item);
-  escreverJSON(ARQ_MENSAGENS_PENDENTES, lista);
-  return item;
+  return atualizarJSON(ARQ_MENSAGENS_PENDENTES, [], (lista) => {
+    if (chaveIdempotencia) {
+      const existente = lista.find((m) => m.chaveIdempotencia === chaveIdempotencia);
+      if (existente) return existente;
+    }
+    const item = {
+      id: crypto.randomUUID(),
+      telefone,
+      jid,
+      texto,
+      criadaEm: new Date().toISOString(),
+      enviadaEm: null,
+      tentativas: 0,
+      ultimoErro: null,
+      efeitoAposEnvio,
+      chaveIdempotencia,
+    };
+    lista.push(item);
+    return item;
+  });
 }
 
 function marcarMensagemPendenteEnviada(id) {
-  const lista = listarMensagensPendentes();
-  const item = lista.find((m) => m.id === id);
-  if (!item) return null;
-  if (!item.enviadaEm) item.enviadaEm = new Date().toISOString();
-  item.ultimoErro = null;
-  escreverJSON(ARQ_MENSAGENS_PENDENTES, lista);
-  return item;
+  return atualizarJSON(ARQ_MENSAGENS_PENDENTES, [], (lista) => {
+    const item = lista.find((m) => m.id === id);
+    if (!item) return null;
+    if (!item.enviadaEm) item.enviadaEm = new Date().toISOString();
+    item.ultimoErro = null;
+    return { ...item };
+  });
 }
 
 function marcarFalhaMensagemPendente(id, erro) {
-  const lista = listarMensagensPendentes();
-  const item = lista.find((m) => m.id === id);
-  if (!item) return false;
-  item.tentativas = (item.tentativas || 0) + 1;
-  item.ultimoErro = String(erro && erro.message ? erro.message : erro || "erro desconhecido").slice(0, 300);
-  item.ultimaTentativaEm = new Date().toISOString();
-  escreverJSON(ARQ_MENSAGENS_PENDENTES, lista);
-  return true;
+  return atualizarJSON(ARQ_MENSAGENS_PENDENTES, [], (lista) => {
+    const item = lista.find((m) => m.id === id);
+    if (!item) return false;
+    item.tentativas = (item.tentativas || 0) + 1;
+    item.ultimoErro = String(erro && erro.message ? erro.message : erro || "erro desconhecido").slice(0, 300);
+    item.ultimaTentativaEm = new Date().toISOString();
+    return true;
+  });
 }
 
 function removerMensagemPendente(id) {
-  const lista = listarMensagensPendentes();
-  const nova = lista.filter((m) => m.id !== id);
-  if (nova.length === lista.length) return false;
-  escreverJSON(ARQ_MENSAGENS_PENDENTES, nova);
-  return true;
+  return atualizarJSON(ARQ_MENSAGENS_PENDENTES, [], (lista) => {
+    const indice = lista.findIndex((m) => m.id === id);
+    if (indice < 0) return false;
+    lista.splice(indice, 1);
+    return true;
+  });
+}
+
+function removerMensagemPendentePorChave(chaveIdempotencia) {
+  if (!chaveIdempotencia) return false;
+  return atualizarJSON(ARQ_MENSAGENS_PENDENTES, [], (lista) => {
+    const antes = lista.length;
+    for (let i = lista.length - 1; i >= 0; i--) {
+      if (lista[i].chaveIdempotencia === chaveIdempotencia) lista.splice(i, 1);
+    }
+    return lista.length !== antes;
+  });
 }
 
 // Últimos contatos pro painel: um por telefone, ordenado do mais recente pro mais antigo.
@@ -623,15 +1069,17 @@ function lerContatosWhatsappMapa() {
 }
 
 function registrarContatoWhatsapp(telefone, { nomeSalvo, pushName } = {}) {
-  const contatos = lerContatosWhatsappMapa();
-  const atual = contatos[telefone] || { nomeSalvo: null, pushName: null };
-  const novo = {
-    nomeSalvo: nomeSalvo || atual.nomeSalvo || null,
-    pushName: pushName || atual.pushName || null,
-  };
-  if (novo.nomeSalvo === atual.nomeSalvo && novo.pushName === atual.pushName) return; // nada novo
-  contatos[telefone] = novo;
-  escreverJSON(ARQ_CONTATOS_WHATSAPP, contatos);
+  return atualizarJSON(ARQ_CONTATOS_WHATSAPP, {}, (contatos) => {
+    const atual = contatos[telefone] || { nomeSalvo: null, pushName: null };
+    const novo = {
+      ...atual,
+      nomeSalvo: nomeSalvo || atual.nomeSalvo || null,
+      pushName: pushName || atual.pushName || null,
+    };
+    if (novo.nomeSalvo === atual.nomeSalvo && novo.pushName === atual.pushName) return false;
+    contatos[telefone] = novo;
+    return true;
+  });
 }
 
 // Pacientes marcados manualmente pelo painel — cobre o caso do sinal automático (nome salvo
@@ -652,24 +1100,28 @@ function lerNaoPacientesManuais() {
 // Marca como paciente: tira da lista de "não-paciente" (se estava) e, se não for um contato
 // já salvo com nome, adiciona na lista de pacientes manuais. Sempre resulta em paciente.
 function marcarPacienteManual(telefone) {
-  const naoPacientes = lerNaoPacientesManuais().filter((t) => t !== telefone);
-  escreverJSON(ARQ_NAO_PACIENTES_MANUAIS, naoPacientes);
-  const lista = lerPacientesManuais();
-  if (!lista.includes(telefone)) lista.push(telefone);
-  escreverJSON(ARQ_PACIENTES_MANUAIS, lista);
-  return lista;
+  return comLockArquivo(path.join(DIR_DADOS, "classificacao-paciente.lock"), () => {
+    const naoPacientes = lerNaoPacientesManuais().filter((t) => t !== telefone);
+    const lista = lerPacientesManuais();
+    if (!lista.includes(telefone)) lista.push(telefone);
+    escreverJSON(ARQ_NAO_PACIENTES_MANUAIS, naoPacientes);
+    escreverJSON(ARQ_PACIENTES_MANUAIS, lista);
+    return lista;
+  }, "classificação de paciente");
 }
 
 // Remove a marcação de paciente: tira da lista de pacientes manuais E adiciona na lista de
 // "não-paciente" (que sobrepõe o nomeSalvo). Sempre resulta em não-paciente, mesmo pra quem
 // estava salvo com nome na agenda.
 function desmarcarPacienteManual(telefone) {
-  const lista = lerPacientesManuais().filter((t) => t !== telefone);
-  escreverJSON(ARQ_PACIENTES_MANUAIS, lista);
-  const naoPacientes = lerNaoPacientesManuais();
-  if (!naoPacientes.includes(telefone)) naoPacientes.push(telefone);
-  escreverJSON(ARQ_NAO_PACIENTES_MANUAIS, naoPacientes);
-  return lista;
+  return comLockArquivo(path.join(DIR_DADOS, "classificacao-paciente.lock"), () => {
+    const lista = lerPacientesManuais().filter((t) => t !== telefone);
+    const naoPacientes = lerNaoPacientesManuais();
+    if (!naoPacientes.includes(telefone)) naoPacientes.push(telefone);
+    escreverJSON(ARQ_PACIENTES_MANUAIS, lista);
+    escreverJSON(ARQ_NAO_PACIENTES_MANUAIS, naoPacientes);
+    return lista;
+  }, "classificação de paciente");
 }
 
 // Exatamente o que o painel mostra como "Paciente": salvo com nome na agenda do celular do
@@ -695,12 +1147,12 @@ function jaSeApresentou(telefone) {
 }
 
 function marcarApresentacao(telefone, quando = new Date()) {
-  const contatos = lerJSON(ARQ_CONTATOS_WHATSAPP, {});
-  const atual = contatos[telefone] || { nomeSalvo: null, pushName: null };
-  if (atual.apresentadaEm) return false;
-  contatos[telefone] = { ...atual, apresentadaEm: quando.toISOString() };
-  escreverJSON(ARQ_CONTATOS_WHATSAPP, contatos);
-  return true;
+  return atualizarJSON(ARQ_CONTATOS_WHATSAPP, {}, (contatos) => {
+    const atual = contatos[telefone] || { nomeSalvo: null, pushName: null };
+    if (atual.apresentadaEm) return false;
+    contatos[telefone] = { ...atual, apresentadaEm: quando.toISOString() };
+    return true;
+  });
 }
 
 // true quando o telefone está salvo com nome na agenda do celular do Dr. Bruno (sinal
@@ -724,7 +1176,7 @@ function ehPacienteConhecido(telefone) {
 // perguntar como pode ajudar, pra quem ela lembrou de manhã.
 function proximaConsultaDoTelefone(telefone, now = new Date()) {
   const hoje = Agenda.toDateStr(now);
-  return lerAgendamentos()
+  return lerAgendamentos(now)
     .filter((a) => a.telefone === telefone && a.data >= hoje)
     .sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario))[0] || null;
 }
@@ -791,22 +1243,28 @@ function contatoSilenciado(telefone) {
 }
 
 function silenciarContato(telefone) {
-  const lista = lerContatosSilenciados();
-  if (!lista.includes(telefone)) lista.push(telefone);
-  escreverJSON(ARQ_SILENCIADOS, lista);
-  return lista;
+  return atualizarJSON(ARQ_SILENCIADOS, [], (lista) => {
+    if (!lista.includes(telefone)) lista.push(telefone);
+    return lista;
+  });
 }
 
 function dessilenciarContato(telefone) {
-  const lista = lerContatosSilenciados().filter((t) => t !== telefone);
-  escreverJSON(ARQ_SILENCIADOS, lista);
-  return lista;
+  return atualizarJSON(ARQ_SILENCIADOS, [], (lista) => {
+    for (let i = lista.length - 1; i >= 0; i--) {
+      if (lista[i] === telefone) lista.splice(i, 1);
+    }
+    return lista;
+  });
 }
 
 module.exports = {
-  registrarDadosDoPaciente, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
-  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, marcarPagamentoAvisado, acharAgendamentoPorSlot, historicoExpirou, proximaConsultaDoTelefone,
-  lerAgendamentos, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, lerAlertas, registrarAlertaUrgencia, acharAlerta, responderAlerta,
+  registrarDadosDoPaciente, registrarDadosDoPacientePorSlot, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
+  acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, alterarPagamento, marcarPagamentoAvisado, acharAgendamentoPorSlot, selecionarAgendamento, historicoExpirou, proximaConsultaDoTelefone,
+  lerAgendamentos, lerTodosAgendamentos, vencerReservas, listarVencimentosPendentesDeLimpeza, marcarVencimentoSincronizado, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, definirGoogleEventId,
+  listarCancelamentosPendentesDeFila, marcarCancelamentoEnfileirado,
+  lerAlertas, registrarAlertaUrgencia, acharAlerta, responderAlerta,
+  _fecharBancoAgendamentosParaTeste: fecharBancoAgendamentosParaTeste,
   limparAlertas, formatarDataBR, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,
@@ -820,5 +1278,5 @@ module.exports = {
   lerPacientesManuais, lerNaoPacientesManuais, marcarPacienteManual, desmarcarPacienteManual,
   retomarAtendimento, limparConversa,
   listarMensagensPendentes, registrarMensagemPendente, marcarMensagemPendenteEnviada,
-  marcarFalhaMensagemPendente, removerMensagemPendente,
+  marcarFalhaMensagemPendente, removerMensagemPendente, removerMensagemPendentePorChave,
 };
