@@ -721,15 +721,17 @@
 
     const rota = statusAtual.rodando ? "/api/desligar" : "/api/ligar";
     try {
-      await fetch(rota, { method: "POST" });
+      const resp = await fetch(rota, { method: "POST" });
+      const resultado = await resp.json();
+      if (!resp.ok || !resultado.ok) {
+        throw new Error(resultado.erro || "O servidor não confirmou a mudança de estado da Carla.");
+      }
     } catch (e) {
-      // ignora — a atualização de status abaixo já vai refletir o estado real
-    }
-    // Dá um tempinho pro PM2 aplicar a mudança antes de checar de novo.
-    setTimeout(async () => {
-      await atualizarStatusBot();
+      alert(e.message || "Não foi possível alterar o estado da Carla. Tente novamente.");
+    } finally {
       acaoEmAndamento = false;
-    }, 1500);
+      await atualizarStatusBot();
+    }
   });
 
   document.getElementById("btn-limpar-alertas").addEventListener("click", async () => {
