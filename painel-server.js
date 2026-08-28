@@ -73,15 +73,6 @@ function rodarComandoPm2(comando) {
   });
 }
 
-// Aceita o número digitado em qualquer formato (com espaço, parênteses, com ou sem DDI)
-// e devolve sempre no formato que a Carla usa de verdade ("+55..."), assumindo Brasil
-// quando não vier DDI — evita silenciar o número errado por causa de formatação.
-function normalizarTelefoneManual(bruto) {
-  let digitos = String(bruto || "").replace(/\D/g, "");
-  if (digitos.length <= 11) digitos = "55" + digitos;
-  return "+" + digitos;
-}
-
 const LIMITE_CORPO = Seguranca.inteiroPositivo(
   process.env.PAINEL_LIMITE_CORPO_BYTES, Seguranca.LIMITE_CORPO_PADRAO, 1024 * 1024
 );
@@ -444,10 +435,15 @@ async function atenderRequisicao(req, res) {
 
   if (req.url === "/api/silenciar" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
-    const telefone = corpo.telefone ? normalizarTelefoneManual(corpo.telefone) : null;
-    const silenciados = telefone ? Storage.silenciarContato(telefone) : Storage.lerContatosSilenciados();
+    const telefone = Seguranca.normalizarTelefoneManual(corpo.telefone);
+    if (!telefone) {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: false, erro: "Telefone inválido." }));
+      return;
+    }
+    const silenciados = Storage.silenciarContato(telefone);
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok: true, silenciados }));
+    res.end(JSON.stringify({ ok: true, telefone, silenciados }));
     return;
   }
 
@@ -497,10 +493,15 @@ async function atenderRequisicao(req, res) {
 
   if (req.url === "/api/marcar-paciente" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
-    const telefone = corpo.telefone ? normalizarTelefoneManual(corpo.telefone) : null;
-    const pacientes = telefone ? Storage.marcarPacienteManual(telefone) : Storage.lerPacientesManuais();
+    const telefone = Seguranca.normalizarTelefoneManual(corpo.telefone);
+    if (!telefone) {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: false, erro: "Telefone inválido." }));
+      return;
+    }
+    const pacientes = Storage.marcarPacienteManual(telefone);
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok: true, pacientesManuais: pacientes }));
+    res.end(JSON.stringify({ ok: true, telefone, pacientesManuais: pacientes }));
     return;
   }
 

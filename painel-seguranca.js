@@ -10,6 +10,25 @@ function inteiroPositivo(valor, padrao, maximo) {
   return Math.min(n, maximo);
 }
 
+// Números vindos da lista de contatos já chegam no formato internacional do WhatsApp.
+// O sinal de "+" é informação: removê-lo antes de decidir o DDI transformava, por exemplo,
+// +1 619... em +55 16... porque ambos têm 11 dígitos sem formatação. Sem "+" (digitação
+// manual), números nacionais de até 11 dígitos continuam assumindo Brasil.
+function normalizarTelefoneManual(bruto) {
+  const texto = String(bruto || "").trim();
+  if (!texto) return null;
+
+  const prefixoMais = texto.startsWith("+");
+  const prefixoZeroZero = texto.startsWith("00");
+  let digitos = texto.replace(/\D/g, "");
+  if (prefixoZeroZero) digitos = digitos.slice(2);
+  if (!prefixoMais && !prefixoZeroZero && digitos.length <= 11) digitos = "55" + digitos;
+
+  // E.164 admite no máximo 15 dígitos e código de país nunca começa por zero.
+  if (digitos.length < 8 || digitos.length > 15 || digitos.startsWith("0")) return null;
+  return "+" + digitos;
+}
+
 // Os hashes deixam os dois buffers com o mesmo tamanho. Assim até uma senha com tamanho
 // diferente passa pela comparação de tempo constante, sem lançar nem revelar onde divergiu.
 function compararSegredo(recebido, esperado) {
@@ -171,6 +190,7 @@ module.exports = {
   criarLimitador,
   criarSessoes,
   identificarCliente,
+  normalizarTelefoneManual,
   origemPermitida,
   inteiroPositivo,
   lerCorpo,

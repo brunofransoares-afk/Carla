@@ -993,9 +993,10 @@
         body: JSON.stringify({ telefone }),
       });
       const resultado = await resp.json();
+      if (!resp.ok || !resultado.ok) throw new Error(resultado.erro || "Não foi possível alterar o silêncio.");
       silenciadosAtuais = new Set(resultado.silenciados || []);
     } catch (e) {
-      // ignora — se falhar, o estado simplesmente não muda e o usuário pode tentar de novo
+      alert(e.message || "Não foi possível alterar o silêncio deste contato.");
     }
     atualizar();
   }
@@ -1094,10 +1095,11 @@
         body: JSON.stringify({ telefone: valor }),
       });
       const resultado = await resp.json();
+      if (!resp.ok || !resultado.ok) throw new Error(resultado.erro || "Não foi possível silenciar o número.");
       silenciadosAtuais = new Set(resultado.silenciados || []);
       input.value = "";
     } catch (e) {
-      // ignora — se falhar, o usuário pode tentar de novo
+      alert(e.message || "Não foi possível silenciar o número.");
     }
     atualizar();
   });
