@@ -41,11 +41,13 @@ function configurado() {
 // A única credencial que sai deste servidor para o SPI é o segredo dedicado. Nunca usa
 // service_role, nem como fallback: fallback de uma chave estreita para a chave mestra
 // desfaria justamente a proteção que esta ponte existe para dar.
-function headersFuncao() {
-  return {
+function headersFuncao(chaveIdempotencia) {
+  const headers = {
     "Content-Type": "application/json",
     "X-Carla-Secret": segredoIntegracao(),
   };
+  if (chaveIdempotencia) headers["Idempotency-Key"] = chaveIdempotencia;
+  return headers;
 }
 
 function urlFuncao() {
@@ -94,13 +96,17 @@ function requestJson(url, method, corpo, headers) {
   });
 }
 
-// dados: { pacienteNome, responsavelNome, dataNascimento, telefone, inicio (Date), fim (Date), observacoes }
-// Devolve o id do registro criado lá (pra poder cancelar depois), ou null se não deu certo.
-async function enviarAgendamento(dados) {
-  if (!configurado()) return null;
-  try {
-    const corpo = JSON.stringify({
+function exigirConfiguracao() {
+  if (!configurado()) throw new Error("Integração com o Sistema Pediátrico Integrado não configurada.");
+}
+
+// Versões "estritas" propagam a falha. São usadas pela caixa durável, que precisa distinguir
+// sucesso de indisponibilidade para manter o trabalho pendente e tentar de novo depois.
+async function enviarAgendamentoEstrito(dados, chaveIdempotencia) {
+  exigirConfiguracao();
+  const corpo = JSON.stringify({
       acao: "marcar",
+      chave_idempotencia: chaveIdempotencia || undefined,
       paciente_nome: dados.pacienteNome,
       responsavel_nome: dados.responsavelNome || null,
       data_nascimento: dados.dataNascimento || null,
@@ -110,9 +116,19 @@ async function enviarAgendamento(dados) {
       observacoes: dados.observacoes || null,
       origem: "carla",
       status: "agendado",
-    });
-    const resultado = await requestJson(urlFuncao(), "POST", corpo, headersFuncao());
-    return resultado?.agendamento_id || null;
+  });
+  const resultado = await requestJson(urlFuncao(), "POST", corpo, headersFuncao(chaveIdempotencia));
+  const id = resultado?.agendamento_id || null;
+  if (!id) throw new Error("SPI respondeu sem agendamento_id.");
+  return id;
+}
+
+// dados: { pacienteNome, responsavelNome, dataNascimento, telefone, inicio (Date), fim (Date), observacoes }
+// Devolve o id do registro criado lá (pra poder cancelar depois), ou null se não deu certo.
+async function enviarAgendamento(dados, chaveIdempotencia) {
+  if (!configurado()) return null;
+  try {
+    return await enviarAgendamentoEstrito(dados, chaveIdempotencia);
   } catch (erro) {
     console.error("[APP AGENDA] Erro ao enviar agendamento pro Sistema Pediátrico Integrado:", erro.message);
     return null;
@@ -120,11 +136,21 @@ async function enviarAgendamento(dados) {
 }
 
 // Marca o registro como cancelado lá (não apaga — mantém o histórico no prontuário).
-async function cancelarAgendamento(appAgendamentoId) {
+async function cancelarAgendamentoEstrito(appAgendamentoId, chaveIdempotencia) {
+  exigirConfiguracao();
+  if (!appAgendamentoId) throw new Error("appAgendamentoId é obrigatório para cancelar no SPI.");
+  const corpo = JSON.stringify({
+    acao: "cancelar",
+    chave_idempotencia: chaveIdempotencia || undefined,
+    agendamento_id: appAgendamentoId,
+  });
+  return requestJson(urlFuncao(), "POST", corpo, headersFuncao(chaveIdempotencia));
+}
+
+async function cancelarAgendamento(appAgendamentoId, chaveIdempotencia) {
   if (!configurado() || !appAgendamentoId) return;
   try {
-    const corpo = JSON.stringify({ acao: "cancelar", agendamento_id: appAgendamentoId });
-    await requestJson(urlFuncao(), "POST", corpo, headersFuncao());
+    await cancelarAgendamentoEstrito(appAgendamentoId, chaveIdempotencia);
   } catch (erro) {
     console.error("[APP AGENDA] Erro ao cancelar agendamento no Sistema Pediátrico Integrado:", erro.message);
   }
@@ -148,36 +174,52 @@ async function cancelarAgendamento(appAgendamentoId) {
 //
 // dados: { appAgendamentoId, dataNascimento, email } — os dois últimos são opcionais,
 // mas pelo menos um precisa vir (a família pode responder um por vez).
-async function completarDadosDoPaciente(dados) {
-  if (!configurado()) return null;
+async function completarDadosDoPacienteEstrito(dados, chaveIdempotencia) {
+  exigirConfiguracao();
   if (!dados || !dados.appAgendamentoId) {
-    // Sem o id do registro de lá não há o que completar. Acontece se o espelho do
-    // agendamento falhou antes (ou está desligado); os dados continuam no CSV.
-    console.warn("[APP AGENDA] Não mandei e-mail/nascimento pro prontuário: agendamento sem appAgendamentoId.");
-    return null;
+    throw new Error("appAgendamentoId é obrigatório para completar o paciente no SPI.");
   }
   if (!dados.dataNascimento && !dados.email) return null;
 
-  try {
-    const corpo = JSON.stringify({
+  const corpo = JSON.stringify({
       acao: "completar",
+      chave_idempotencia: chaveIdempotencia || undefined,
       agendamento_id: dados.appAgendamentoId,
       data_nascimento: dados.dataNascimento || undefined,
       responsavel_email: dados.email || undefined,
-    });
-    const resposta = await requestJson(urlFuncao(), "POST", corpo, headersFuncao());
+  });
+  const resposta = await requestJson(urlFuncao(), "POST", corpo, headersFuncao(chaveIdempotencia));
 
-    // A função responde 200 mesmo quando não deu pra criar a ficha (nome ambíguo, SQL
-    // pendente). Logar o motivo é o que evita achar que funcionou quando não funcionou.
-    if (resposta && resposta.portal && resposta.portal !== "criado_aguardando_ok" && resposta.portal !== "ja_liberado") {
-      console.warn(`[APP AGENDA] Prontuário recebeu os dados mas o portal não saiu: ${resposta.portal}` +
-        (resposta.sem_ficha_porque ? ` (${resposta.sem_ficha_porque})` : ""));
-    }
-    return resposta;
+  // A função responde 200 mesmo quando não deu pra criar a ficha (nome ambíguo, SQL
+  // pendente). Logar o motivo é o que evita achar que funcionou quando não funcionou.
+  if (resposta && resposta.portal && resposta.portal !== "criado_aguardando_ok" && resposta.portal !== "ja_liberado") {
+    console.warn(`[APP AGENDA] Prontuário recebeu os dados mas o portal não saiu: ${resposta.portal}` +
+      (resposta.sem_ficha_porque ? ` (${resposta.sem_ficha_porque})` : ""));
+  }
+  return resposta;
+}
+
+async function completarDadosDoPaciente(dados, chaveIdempotencia) {
+  if (!configurado()) return null;
+  if (!dados || !dados.appAgendamentoId) {
+    // O caminho legado continua fail-open. O reconciliador durável usa a versão estrita
+    // e só executa quando o vínculo externo já estiver persistido.
+    console.warn("[APP AGENDA] Não mandei e-mail/nascimento pro prontuário: agendamento sem appAgendamentoId.");
+    return null;
+  }
+  try {
+    return await completarDadosDoPacienteEstrito(dados, chaveIdempotencia);
   } catch (erro) {
     console.error("[APP AGENDA] Erro ao mandar e-mail/nascimento pro Sistema Pediátrico Integrado:", erro.message);
     return null;
   }
 }
 
-module.exports = { enviarAgendamento, cancelarAgendamento, completarDadosDoPaciente };
+module.exports = {
+  enviarAgendamento,
+  cancelarAgendamento,
+  completarDadosDoPaciente,
+  enviarAgendamentoEstrito,
+  cancelarAgendamentoEstrito,
+  completarDadosDoPacienteEstrito,
+};

@@ -54,23 +54,38 @@ async function estaLivre(inicio, fim) {
   }
 }
 
-// Cria o evento de verdade na agenda. Retorna o id do evento criado, ou null se a integração
-// não estiver disponível ou a criação falhar (nesse caso o agendamento local já feito continua
-// valendo — a falha aqui não desfaz a reserva).
-async function criarEvento({ inicio, fim, titulo, descricao }) {
+// As versões estritas propagam erros para a caixa durável. Um eventId determinístico torna
+// a criação idempotente: repetir a mesma operação não cria dois eventos no Google.
+async function criarEventoEstrito({ inicio, fim, titulo, descricao, eventId }) {
   const calendar = obterCliente();
-  if (!calendar) return null;
+  if (!calendar) throw new Error("Integração com Google Agenda não configurada.");
   try {
     const resposta = await calendar.events.insert({
       calendarId: calendarId(),
       requestBody: {
+        id: eventId || undefined,
         summary: titulo,
         description: descricao,
         start: { dateTime: inicio.toISOString(), timeZone: "America/Sao_Paulo" },
         end: { dateTime: fim.toISOString(), timeZone: "America/Sao_Paulo" },
       },
     });
-    return resposta.data.id;
+    return resposta.data.id || eventId || null;
+  } catch (erro) {
+    // O ID determinístico já existe: uma tentativa anterior funcionou, mas a Carla caiu
+    // antes de registrar o sucesso. Para a reconciliação isso já é sucesso.
+    if (Number(erro.code || erro.response?.status) === 409 && eventId) return eventId;
+    throw erro;
+  }
+}
+
+// Cria o evento de verdade na agenda. Retorna o id do evento criado, ou null se a integração
+// não estiver disponível ou a criação falhar (nesse caso o agendamento local já feito continua
+// valendo — a falha aqui não desfaz a reserva).
+async function criarEvento(dados) {
+  if (!obterCliente()) return null;
+  try {
+    return await criarEventoEstrito(dados);
   } catch (erro) {
     console.error("[GOOGLE AGENDA] Erro ao criar evento:", erro.message);
     return null;
@@ -79,16 +94,35 @@ async function criarEvento({ inicio, fim, titulo, descricao }) {
 
 // Cancela um evento pelo id. Chamado quando um agendamento é apagado pelo painel — sem
 // isso, o horário ficaria bloqueado pra sempre na agenda mesmo depois de cancelado aqui.
-async function cancelarEvento(eventId) {
+async function cancelarEventoEstrito(eventId) {
   const calendar = obterCliente();
-  if (!calendar || !eventId) return false;
+  if (!calendar) throw new Error("Integração com Google Agenda não configurada.");
+  if (!eventId) throw new Error("eventId é obrigatório para cancelar no Google Agenda.");
   try {
     await calendar.events.delete({ calendarId: calendarId(), eventId });
     return true;
+  } catch (erro) {
+    // Excluir de novo é sucesso idempotente: o resultado desejado (evento ausente) já vale.
+    if ([404, 410].includes(Number(erro.code || erro.response?.status))) return true;
+    throw erro;
+  }
+}
+
+async function cancelarEvento(eventId) {
+  if (!obterCliente() || !eventId) return false;
+  try {
+    return await cancelarEventoEstrito(eventId);
   } catch (erro) {
     console.error("[GOOGLE AGENDA] Erro ao cancelar evento:", erro.message);
     return false;
   }
 }
 
-module.exports = { disponivel, estaLivre, criarEvento, cancelarEvento };
+module.exports = {
+  disponivel,
+  estaLivre,
+  criarEvento,
+  cancelarEvento,
+  criarEventoEstrito,
+  cancelarEventoEstrito,
+};

@@ -11,8 +11,6 @@
 <meta name="theme-color" content="#1e3324">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Carla">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
 
@@ -101,6 +99,7 @@
 
   .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 8px currentColor; }
   .status.ok { background: var(--sucesso); color: var(--sucesso); }
+  .status.aviso { background: var(--ouro-claro); color: var(--ouro-claro); }
   .status.erro { background: #ef4444; color: #ef4444; }
 
   #erro-conexao { display: none; color: #ffb3b3; background: rgba(255,90,90,0.12); border: 1px solid rgba(255,90,90,0.25); padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
@@ -109,6 +108,7 @@
   .bot-status { display: flex; align-items: center; font-size: 13.5px; font-weight: 600; }
   .bot-status .status { width: 11px; height: 11px; }
   .bot-status.ligada { color: var(--sucesso); }
+  .bot-status.aviso { color: var(--ouro-claro); }
   .bot-status.desligada { color: var(--texto-fraco); }
   #btn-toggle { border: none; border-radius: 20px; padding: 9px 20px; font-size: 13.5px; font-weight: 600; cursor: pointer; color: white; transition: opacity 0.15s, transform 0.15s; }
   #btn-toggle:hover:not(:disabled) { transform: translateY(-1px); }
@@ -307,6 +307,7 @@
   }
   .funil-rodape a:hover { border-color: var(--acento); background: rgba(203,160,90,0.1); }
   .funil-vazio { color: var(--texto-fraco); font-size: 13px; line-height: 1.6; }
+  .funil-contexto { color: var(--texto-fraco); font-size: 12px; line-height: 1.5; margin: 0 0 16px; }
 </style>
 </head>
 <body>
@@ -377,7 +378,7 @@
 
       <div class="cartao" id="cartao-funil">
         <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v7l-4 2v-9L3 4Z"/></svg></span>Funil</span>
+          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v7l-4 2v-9L3 4Z"/></svg></span>Funil · atividade no período</span>
           <span class="funil-periodo" id="funil-periodo">
             <button data-periodo="7d">7 dias</button>
             <button data-periodo="30d" aria-pressed="true">30 dias</button>
@@ -673,10 +674,22 @@
     const container = document.getElementById("bot-status");
     const botao = document.getElementById("btn-toggle");
 
-    if (status.rodando) {
+    if (status.rodando && status.whatsappConectado) {
       dot.className = "status ok";
-      texto.textContent = "Carla ligada";
+      texto.textContent = "Carla ligada · WhatsApp conectado";
       container.className = "bot-status ligada";
+      botao.className = "desligar";
+      botao.textContent = "Desligar Carla";
+    } else if (status.rodando) {
+      const mensagens = {
+        conectando: "Carla ligada · conectando ao WhatsApp",
+        reconectando: "Carla ligada · reconectando o WhatsApp",
+        sessao_desconectada: "Carla ligada · WhatsApp desconectado (escaneie o QR)",
+        sem_sinal: "Carla ligada · sem sinal recente do WhatsApp",
+      };
+      dot.className = "status aviso";
+      texto.textContent = mensagens[status.whatsappEstado] || "Carla ligada · conexão do WhatsApp não confirmada";
+      container.className = "bot-status aviso";
       botao.className = "desligar";
       botao.textContent = "Desligar Carla";
     } else {
@@ -821,7 +834,7 @@
   }
 
   async function cancelarAgendamento(slotId) {
-    if (!confirm("Cancelar e apagar esse agendamento? Não dá pra desfazer.")) return;
+    if (!confirm("Cancelar esse agendamento? Ele sai da agenda, mas o registro fica guardado para conferência.")) return;
     try {
       await fetch("/api/cancelar", {
         method: "POST",
@@ -1126,11 +1139,12 @@
 
     if (!topo) {
       alvo.innerHTML = `<p class="funil-vazio">Ainda não há contatos registrados neste período.<br>
+        Este quadro inclui quem teve alguma atividade no período escolhido, não uma turma fixa de quem começou nele.<br>
         O funil começa a encher a partir do momento em que o registro foi ligado, não retroage.</p>`;
       return;
     }
 
-    let html = "";
+    let html = `<p class="funil-contexto">Atividade no período: entram as famílias que tiveram algum evento no recorte escolhido. O estágio mostrado reúne o caminho delas até o fim desse recorte. Não é uma turma fixa de quem começou nele.</p>`;
     etapas.forEach((e, i) => {
       const largura = Math.round((e.quantidade / topo) * 100);
       const anterior = i > 0 ? etapas[i - 1].quantidade : null;

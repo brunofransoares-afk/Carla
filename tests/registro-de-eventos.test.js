@@ -140,6 +140,7 @@ const PAINEL = fs.readFileSync(path.join(__dirname, "..", "painel-server.js"), "
   eq(et("recebeuHorario"), 2, "6c. dois receberam horário (um explícito, um deduzido do agendamento)");
   eq(et("agendou"), 1, "6d. um agendou");
   eq(et("pagou"), 1, "6e. e pagou");
+  eq(f.semantica.chave, "atividade_no_periodo", "6f. a API declara que o recorte é de atividade");
 }
 
 // ------------------------------------------------- 7. o funil não pode alargar no meio
@@ -200,21 +201,47 @@ const PAINEL = fs.readFileSync(path.join(__dirname, "..", "painel-server.js"), "
     "12b. lido ANTES de qualquer coisa criar sessão, senão nunca é a primeira vez");
   ok(/Eventos\.registrar\("mensagem", telefone, \{\s*\n\s*classe: Eventos\.classificar\(texto\)/.test(SERVER),
     "12c. toda mensagem é classificada");
-  ok(/R\\\$\\s\?\(550\|800\)/.test(SERVER),
-    "12d. o preço é detectado no TEXTO que sai, não numa flag que a IA precisa lembrar de mandar");
+  ok(/function precoParticularInformado\(texto\)/.test(SERVER)
+    && /precoParticularInformado\(texto\)/.test(SERVER)
+    && /tipo: "registrar_preco"/.test(SERVER),
+    "12d. o preço é detectado no texto entregue e acompanha a mensagem como efeito durável");
   ok(/Eventos\.registrar\("agendou"/.test(SERVER), "12e. agendamento");
   ok(/Eventos\.registrar\("escalou"/.test(SERVER), "12f. escalada");
-  ok(/if \(ok && pago\) \{/.test(PAINEL), "12g. e o pagamento só conta quando é MARCADO, não desmarcado");
+  ok(/Eventos\.registrar\(pago \? "pagou" : "pagamento_desmarcado"/.test(PAINEL),
+    "12g. desmarcar pagamento grava compensação sem reescrever o histórico");
 }
 
 // ------------------------------------------------- 13. o funil fica DEPOIS das travas
 {
   // Emergência, silêncio manual e comprovante não são etapa de funil comercial. Contar
   // aquelas mensagens inflaria o topo com quem já é paciente.
-  const posEmergencia = SERVER.indexOf('CerebroIA.pareceEmergencia(texto)');
+  const posEmergencia = SERVER.indexOf('CerebroIA.avaliarEmergencia(texto)');
   const posFunil = SERVER.indexOf('Eventos.registrar("mensagem"');
   ok(posEmergencia > 0 && posFunil > posEmergencia,
     "13. o registro de mensagem vem depois da checagem de emergência");
+}
+
+// ------------------------------------------------- 14. pagamento é estado por agendamento
+{
+  fs.unlinkSync(Eventos.ARQ_EVENTOS);
+  const t = (m) => new Date(`2026-08-17T14:${String(m).padStart(2, "0")}:00Z`);
+  const tel = "+55190009";
+  Eventos.registrar("contato", tel, {}, t(0));
+  Eventos.registrar("mensagem", tel, { classe: "agendar" }, t(1));
+  Eventos.registrar("agendou", tel, { slotId: "filho-a" }, t(2));
+  Eventos.registrar("pagou", tel, { slotId: "filho-a" }, t(3));
+  Eventos.registrar("pagou", tel, { slotId: "filho-b" }, t(4));
+  Eventos.registrar("pagamento_desmarcado", tel, { slotId: "filho-a" }, t(5));
+  let contato = Eventos.funil().contatos.find((c) => c.telefone === tel);
+  eq(contato.pagou, true, "14. desmarcar um irmão não apaga o pagamento do outro");
+  contato = Eventos.funil({ desde: t(5).toISOString() }).contatos.find((c) => c.telefone === tel);
+  eq(contato.pagou, true,
+    "14b. o recorte de atividade reconstrói pagamentos anteriores ao primeiro dia selecionado");
+
+  Eventos.registrar("pagamento_desmarcado", tel, { slotId: "filho-b" }, t(6));
+  contato = Eventos.funil().contatos.find((c) => c.telefone === tel);
+  eq(contato.pagou, false, "14c. sem nenhum slot pago o funil deixa de contar como pago");
+  eq(contato.agendou, true, "14d. a compensação não apaga o fato de que houve agendamento");
 }
 
 console.log(`\nregistro-de-eventos: ${passou} passaram, ${falhou} falharam`);

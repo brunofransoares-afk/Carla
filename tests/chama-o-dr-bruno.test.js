@@ -30,6 +30,7 @@ function ok(cond, msg) { if (cond) { passou++; return; } falhou++; erros.push(ms
 function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + ", veio " + JSON.stringify(a) + ")"); }
 
 const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
+const TRIAGEM = fs.readFileSync(path.join(__dirname, "..", "triagem-emergencia.js"), "utf8");
 
 // ------------------------------------------------- 1. os dois casos chamam
 {
@@ -49,12 +50,12 @@ const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
   // A resposta pra família tem 3 segundos de atraso artificial ("digitando") antes de sair.
   // Disparar o aviso antes disso põe ele a caminho primeiro, que é o que importa aqui.
   const posAviso = SERVER.indexOf('notificarAtencao(sock, { tipo: "emergencia"');
-  const posResposta = SERVER.indexOf("await enviarResposta(sock, jid, telefone, respostaEmergencia, semAtraso);");
+  const posResposta = SERVER.indexOf("await enviarResposta(sock, jid, telefone, respostaEmergencia, semAtraso");
   ok(posAviso > 0 && posResposta > posAviso,
     "2. na emergência o Dr. Bruno é chamado antes de a resposta sair pra família");
 
   // E a promessa que a família lê continua lá, agora verdadeira.
-  ok(/Vou avisar o Dr\. Bruno sobre esse contato assim que possível/.test(SERVER),
+  ok(/Vou avisar o Dr\. Bruno sobre esse contato/.test(TRIAGEM),
     "2b. a promessa continua no texto da emergência");
 }
 

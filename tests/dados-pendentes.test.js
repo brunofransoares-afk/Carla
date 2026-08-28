@@ -26,7 +26,7 @@ const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-teste-")), "
 fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "storage-node.js"));
 fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
-const IRMA = path.join(RAIZ, "..", "carla-app", "js");
+const IRMA = path.join(RAIZ, "carla-app", "js");
 fs.mkdirSync(IRMA, { recursive: true });
 fs.writeFileSync(path.join(IRMA, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
 fs.writeFileSync(path.join(IRMA, "agenda.js"), "module.exports = {};\n");
@@ -36,6 +36,7 @@ const Storage = require(path.join(RAIZ, "storage-node.js"));
 const TEL = "+5519999482403";
 const OUTRO = "+5519911112222";
 const slot = (id, time) => ({ id, date: "2026-08-20", time, label: "20/08 às " + time });
+let reservaS3;
 
 // ---------------------------------------------- 1. dado adiantado não se perde
 {
@@ -56,7 +57,7 @@ const slot = (id, time) => ({ id, date: "2026-08-20", time, label: "20/08 às " 
 // ---------------------------------------------- 3. a reserva consome o bolso
 {
   const item = Storage.reservar({ slot: slot("s1", "09:00"), responsavel: "Bruno", crianca: "Eduardo", telefone: TEL });
-  ok(item && item.slotId === "s1", "3. reservar devolve o agendamento criado, não true");
+  ok(item && item.slotId && item.agendaSlotId === "s1", "3. reservar devolve o agendamento criado, não true");
   eq(item.criancaDataNascimento, "2018-02-22", "3. a data adiantada entrou no agendamento");
   eq(item.responsavelEmail, "mae@exemplo.com", "3. o e-mail adiantado entrou no agendamento");
   eq(Storage.lerDadosPendentes(TEL), null, "3. o bolso foi esvaziado depois de usado");
@@ -73,16 +74,19 @@ const slot = (id, time) => ({ id, date: "2026-08-20", time, label: "20/08 às " 
 {
   Storage.registrarDadosDoPaciente(OUTRO, { email: "outra@exemplo.com" });
   const item = Storage.reservar({ slot: slot("s3", "11:00"), responsavel: "Ana", crianca: "Lis", telefone: TEL });
+  reservaS3 = item;
   eq(item.responsavelEmail, null, "5. o bolso de outro telefone não entra aqui");
   const guardado = Storage.lerDadosPendentes(OUTRO);
   eq(guardado && guardado.email, "outra@exemplo.com", "5. e continua guardado pra quem é dono dele");
 }
 
-// ---------------------------------------------- 6. com agendamento, comportamento antigo
+// ---------------------------------------------- 6. com irmãos, exige identidade do agendamento
 {
-  const r = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com", dataNascimento: "2020-05-05" });
+  const semAlvo = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com", dataNascimento: "2020-05-05" });
+  ok(semAlvo && semAlvo.ambiguo === true, "6. com mais de um filho não escolhe o mais recente no escuro");
+  const r = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com", dataNascimento: "2020-05-05" }, { slotId: reservaS3.slotId });
   ok(r && r.pendente !== true, "6. com agendamento existente NÃO cai no bolso de pendentes");
-  eq(r.slotId, "s3", "6. grava no agendamento mais recente do telefone");
+  eq(r.slotId, reservaS3.slotId, "6. grava no agendamento indicado por slotId");
   eq(r.responsavelEmail, "depois@exemplo.com", "6. e-mail gravado");
   eq(r.criancaDataNascimento, "2020-05-05", "6. data gravada");
 }
@@ -92,11 +96,11 @@ const slot = (id, time) => ({ id, date: "2026-08-20", time, label: "20/08 às " 
 // ferramenta outra vez. Cada chamada disparava um WhatsApp pro Dr. Bruno com o mesmo
 // recado. Repetido tem que morrer aqui, sem depender do modelo lembrar.
 {
-  const r = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com", dataNascimento: "2020-05-05" });
+  const r = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com", dataNascimento: "2020-05-05" }, { slotId: reservaS3.slotId });
   ok(r && r.semNovidade === true, "6b. os dois iguais devolvem semNovidade");
-  const r2 = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com" });
+  const r2 = Storage.registrarDadosDoPaciente(TEL, { email: "depois@exemplo.com" }, { slotId: reservaS3.slotId });
   ok(r2 && r2.semNovidade === true, "6b. so o e-mail, igual, também é semNovidade");
-  const r3 = Storage.registrarDadosDoPaciente(TEL, { email: "novo@exemplo.com" });
+  const r3 = Storage.registrarDadosDoPaciente(TEL, { email: "novo@exemplo.com" }, { slotId: reservaS3.slotId });
   ok(r3 && !r3.semNovidade, "6b. e-mail diferente NÃO é semNovidade");
   eq(r3.responsavelEmail, "novo@exemplo.com", "6b. e o novo e-mail foi gravado");
   eq(r3.criancaDataNascimento, "2020-05-05", "6b. sem apagar a data que já estava lá");
@@ -111,6 +115,7 @@ const slot = (id, time) => ({ id, date: "2026-08-20", time, label: "20/08 às " 
 }
 
 // ------------------------------------------------------------------ resultado
+Storage._fecharBancoAgendamentosParaTeste();
 fs.rmSync(path.dirname(RAIZ), { recursive: true, force: true });
 console.log(erros.map((e) => "  FALHA " + e).join("\n"));
 console.log(`dados-pendentes: ${passou} passaram, ${falhou} falharam`);

@@ -26,7 +26,7 @@ const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-teste-")), "
 fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "storage-node.js"));
 fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
-const IRMA = path.join(RAIZ, "..", "carla-app", "js");
+const IRMA = path.join(RAIZ, "carla-app", "js");
 fs.mkdirSync(IRMA, { recursive: true });
 fs.writeFileSync(path.join(IRMA, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
 fs.writeFileSync(path.join(IRMA, "agenda.js"), "module.exports = {};\n");
@@ -37,13 +37,14 @@ const TEL = "+5519999482403";
 const SEM_WHATSAPP = "(a confirmar)";
 const slot = (id, time) => ({ id, date: "2026-09-10", time, label: "10/09 às " + time });
 
-Storage.reservar({ slot: slot("a1", "09:00"), responsavel: "Bruno", crianca: "Eduardo Soares", telefone: TEL });
+const reservaA1 = Storage.reservar({ slot: slot("a1", "09:00"), responsavel: "Bruno", crianca: "Eduardo Soares", telefone: TEL });
+let reservaA2;
 Storage.registrarDadosDoPaciente(TEL, { email: "mae@exemplo.com" });
 
 // ------------------------------------------------- 1. acha pelo e-mail
 {
   const a = Storage.acharAgendamentoPorEmail("mae@exemplo.com");
-  ok(a && a.slotId === "a1", "1. acha o agendamento pelo e-mail exato");
+  ok(a && a.slotId === reservaA1.slotId, "1. acha o agendamento pelo e-mail exato");
 }
 
 // ------------------------------------------------- 2. e-mail vem digitado à mão
@@ -56,20 +57,20 @@ Storage.registrarDadosDoPaciente(TEL, { email: "mae@exemplo.com" });
 
 // ------------------------------------------------- 3. duas consultas, o mesmo e-mail
 {
-  Storage.reservar({ slot: slot("a2", "10:00"), responsavel: "Bruno", crianca: "Irmã", telefone: TEL });
-  Storage.registrarDadosDoPaciente(TEL, { email: "mae@exemplo.com" });
+  reservaA2 = Storage.reservar({ slot: slot("a2", "10:00"), responsavel: "Bruno", crianca: "Irmã", telefone: TEL });
+  Storage.registrarDadosDoPaciente(TEL, { email: "mae@exemplo.com" }, { slotId: reservaA2.slotId });
   const a = Storage.acharAgendamentoPorEmail("mae@exemplo.com");
-  eq(a.slotId, "a2", "3. devolve o agendamento mais recente desse e-mail");
+  eq(a.slotId, reservaA2.slotId, "3. devolve o agendamento mais recente desse e-mail");
 }
 
 // ------------------------------------------------- 4. marca que já avisou
 {
   const antes = Storage.acharAgendamentoPorEmail("mae@exemplo.com");
   eq(antes.portalAvisadoEm, undefined, "4. começa sem marca de aviso");
-  ok(Storage.marcarPortalAvisado("a2") === true, "4. marcar devolve true");
+  ok(Storage.marcarPortalAvisado(reservaA2.slotId) === true, "4. marcar devolve true");
   const depois = Storage.acharAgendamentoPorEmail("mae@exemplo.com");
   ok(typeof depois.portalAvisadoEm === "string", "4. a marca ficou gravada");
-  eq(Storage.lerAgendamentos().find((x) => x.slotId === "a1").portalAvisadoEm, undefined,
+  eq(Storage.lerAgendamentos().find((x) => x.slotId === reservaA1.slotId).portalAvisadoEm, undefined,
     "4. e não marcou o outro agendamento junto");
 }
 
@@ -87,6 +88,7 @@ Storage.registrarDadosDoPaciente(TEL, { email: "mae@exemplo.com" });
     "6. agendamento feito na mão é encontrado, e dá pra ver que não tem WhatsApp (quem avisa recusa)");
 }
 
+Storage._fecharBancoAgendamentosParaTeste();
 fs.rmSync(path.dirname(RAIZ), { recursive: true, force: true });
 console.log(erros.map((e) => "  FALHA " + e).join("\n"));
 console.log(`portal-liberado: ${passou} passaram, ${falhou} falharam`);

@@ -3,6 +3,10 @@
 function mensagemDaReserva(acao) {
   const valor = acao.valorDaConsulta || "o valor informado";
   const prazo = acao.prazoPagamento || "no prazo informado";
+  const formas = acao.formasPagamento || {};
+  const linhaCartao = formas.cartao
+    ? "Se preferir cartão em até 3x, me avisa que te mando o link."
+    : "Para este valor, o link de cartão ainda precisa ser gerado pelo Dr. Bruno. Se precisar pagar por cartão, me avisa que confirmo com ele.";
   return `Perfeito 😊
 
 Deixei separado para você: ${acao.slot.label}.
@@ -14,7 +18,7 @@ A chave Pix é o e-mail (${valor}):
 
 brunofransoares@gmail.com
 
-Se preferir cartão em até 3x, me avisa que te mando o link.`;
+${linhaCartao}`;
 }
 
 function respostaDepoisDosEfeitos(ctx) {
@@ -25,7 +29,15 @@ function respostaDepoisDosEfeitos(ctx) {
   if (acoes.length > 1) {
     const linhas = acoes.map((a) =>
       `• ${a.crianca}: ${a.slot.label}, ${a.valorDaConsulta || "valor informado"}, pagamento ${a.prazoPagamento || "no prazo informado"}`);
-    return `Os horários ficaram separados 😊\n\n${linhas.join("\n")}\n\nA chave Pix é brunofransoares@gmail.com. Se preferir cartão, me avisa que te mando o link.`;
+    const todosComCartao = acoes.every((a) => a.formasPagamento && a.formasPagamento.cartao);
+    const cartao = todosComCartao
+      ? "Se preferir cartão, me avisa que te mando o link correto."
+      : "Se precisar pagar por cartão, me avisa que confirmo o link correto com o Dr. Bruno.";
+    return `Os horários ficaram separados 😊\n\n${linhas.join("\n")}\n\nA chave Pix é brunofransoares@gmail.com. ${cartao}`;
+  }
+  if (ctx.cancelamentoPreparado) {
+    const c = ctx.cancelamentoPreparado;
+    return `Confirma que quer cancelar a consulta de ${c.crianca}, ${c.label}?`;
   }
   if (cancelamentos.length === 1) {
     const c = cancelamentos[0];
@@ -58,12 +70,14 @@ function recuperarAposFalha({ historico, texto, ctx }) {
     historico: novoHistorico,
     acoes: ctx.acoesRealizadas || [],
     cancelamentos: ctx.cancelamentosRealizados || [],
+    cancelamentoPreparado: ctx.cancelamentoPreparado || null,
     escalar: ctx.escalar || null,
     escalarPergunta: ctx.escalarPergunta || null,
     escalarData: ctx.escalarData || null,
     escalarHora: ctx.escalarHora || null,
     escalarTipo: ctx.escalarTipo || null,
     dadosDoPaciente: ctx.dadosDoPacienteRegistrados || null,
+    estadoAtendimento: ctx.estadoAtendimento || null,
     horariosOferecidos: [...(ctx.horariosOferecidos || [])].slice(-20),
   };
 }

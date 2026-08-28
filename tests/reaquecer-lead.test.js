@@ -161,14 +161,15 @@ const OK = { respondeuAlgumaVez: true, ultimaAtividade: HA_TRES_DIAS };
 // ------------------------------------------------- 10. marca ANTES de enviar
 {
   // Duplo clique é o erro caro aqui: manda duas mensagens não solicitadas pra mesma pessoa.
-  // Marcar depois do envio deixaria essa janela aberta.
+  // A mensagem entra primeiro na caixa durável; imediatamente depois, antes da tentativa de
+  // rede, aposPersistir marca a sessão. A chave também deduplica uma retomada após queda.
   const bloco = SERVER.slice(SERVER.indexOf("async function reaquecerLead"),
                              SERVER.indexOf("async function processarMensagem"));
-  const posMarca = bloco.indexOf("sessao.reaquecidoEm = agora.toISOString();");
-  const posEnvio = bloco.indexOf("await enviarResposta(");
-  ok(posMarca > 0 && posEnvio > posMarca,
-    "10. a marca de 'já reaquecido' é gravada antes do envio");
-  ok(/Marca ANTES de enviar/.test(bloco), "10b. e o porquê está escrito no código");
+  ok(/chaveIdempotencia: `reaquecimento:/.test(bloco)
+    && /efeitoAposEnvio: \{ tipo: "marcar_reaquecimento"/.test(bloco)
+    && /aposPersistir: \(\) => \{[\s\S]*Storage\.salvarSessao/.test(bloco),
+    "10. reaquecimento é deduplicado e a sessão só avança depois da persistência durável");
+  ok(/depois que a mensagem já existe na caixa durável/.test(bloco), "10b. e o porquê está escrito no código");
   ok(/Eventos\.registrar\("reaquecido"/.test(bloco), "10c. e o funil registra o reaquecimento");
 }
 

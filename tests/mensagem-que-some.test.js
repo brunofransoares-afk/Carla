@@ -73,6 +73,10 @@ const SERVER_SEM_COMENTARIO = SERVER.split("\n").filter((l) => !l.trim().startsW
     "exame", "4d. documento com legenda");
   eq(T.textoDe({ protocolMessage: { editedMessage: { conversation: "corrigi o que escrevi" } } }),
     "corrigi o que escrevi", "4e. mensagem editada");
+  eq(T.textoDe({ templateMessage: { hydratedTemplate: { hydratedContentText: "Quero este horário" } } }),
+    "Quero este horário", "4f. texto de modelo comercial hidratado");
+  eq(T.textoDe({ orderMessage: { message: "pedido da família" } }),
+    "pedido da família", "4g. observação de pedido comercial");
 }
 
 // ------------------------------------------------- 5. embrulho dentro de embrulho
@@ -110,6 +114,8 @@ const SERVER_SEM_COMENTARIO = SERVER.split("\n").filter((l) => !l.trim().startsW
   ok(!T.ehRecadoDeSistema({ protocolMessage: { editedMessage: { conversation: "x" } } }),
     "7d. mas mensagem EDITADA não é recado de sistema: ela tem texto de gente");
   ok(!T.ehRecadoDeSistema({ imageMessage: {} }), "7e. e foto também não");
+  ok(T.ehRecadoDeSistema({ secretEncryptedMessage: {}, messageContextInfo: {} }),
+    "7f. sincronização secreta é sistema, mesmo acompanhada do contexto");
 }
 
 // ------------------------------------------------- 8. mídia sem texto é caso à parte
@@ -126,6 +132,11 @@ const SERVER_SEM_COMENTARIO = SERVER.split("\n").filter((l) => !l.trim().startsW
   eq(T.tipoDe({ ephemeralMessage: { message: { stickerMessage: {} } } }), "stickerMessage",
     "9. o tipo é o de DENTRO do embrulho, que é o que interessa");
   eq(T.tipoDe(null), "desconhecido", "9b. e nunca estoura");
+  eq(T.classificar({ conversation: "oi" }).categoria, "texto", "9c. classificação única reconhece texto");
+  eq(T.classificar({ imageMessage: {} }).categoria, "midia_sem_texto", "9d. separa mídia sem legenda");
+  eq(T.classificar({ secretEncryptedMessage: {} }).categoria, "sistema", "9e. separa protocolo interno");
+  eq(T.classificar({ pollCreationMessage: {} }).categoria, "nao_suportado",
+    "9f. formato humano ainda não lido é explícito e não deve sumir");
 }
 
 // ------------------------------------------------- 10. o server usa isso, e desembrulha antes de tudo

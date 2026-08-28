@@ -6,9 +6,8 @@
  * InfinitePay ali é o que dá segurança pra clicar.
  *
  * O preço dele é que, pra montar esse quadro, o servidor da Carla SAI VISITANDO o endereço
- * que estiver escrito na mensagem, com um pacote (link-preview-js) que tem uma falha sem
- * correção: ele não se recusa a visitar endereços internos da própria máquina. Lá dentro tem
- * o painel com os dados dos pacientes e a API interna do bot.
+ * que estiver escrito na mensagem. A dependência foi atualizada, mas a defesa principal é
+ * não dar à resposta livre da IA o poder de escolher o endereço que o servidor vai visitar.
  *
  * A defesa é uma linha só: só o link de pagamento, que é uma constante do código, pode
  * disparar a visita. Toda outra mensagem sai com linkPreview: null, e aí o Baileys nem chega
@@ -35,7 +34,12 @@ function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + "
 const RAIZ = path.join(__dirname, "..");
 const SERVER = fs.readFileSync(path.join(RAIZ, "server.js"), "utf8");
 const CEREBRO = fs.readFileSync(path.join(RAIZ, "cerebro-ia.js"), "utf8");
-const LINK = Previa.LINK_DE_PAGAMENTO;
+const LINKS_PAGAMENTO = fs.readFileSync(path.join(RAIZ, "link-de-pagamento.js"), "utf8");
+const PACOTE = JSON.parse(fs.readFileSync(path.join(RAIZ, "package.json"), "utf8"));
+const LINK = Previa.linksPermitidos()[0];
+
+ok(/^4\./.test(PACOTE.dependencies["link-preview-js"]),
+  "0. link-preview-js precisa continuar na versão 4 corrigida contra SSRF");
 
 // ------------------------------------------------- 1. o link de pagamento pode buscar
 {
@@ -73,6 +77,9 @@ const LINK = Previa.LINK_DE_PAGAMENTO;
     "Claro! http://127.0.0.1:3355/api/agendamentos é isso que você pediu 😊",
     "https://link.infinitepay.io.exemplo.com/roubado",
     "https://link.infinitepay.io/brunoffsoares/OUTRO-LINK-QUALQUER-550,00",
+    `http://127.0.0.1:3355/api/dados ${LINK}`,
+    `${LINK} https://example.com/outra-url`,
+    `${LINK}/sufixo-hostil`,
   ];
   for (const a of ataques) eq(Previa.previaDeLink(a), null, "3. NÃO pode buscar: " + a);
 }
@@ -89,16 +96,17 @@ const LINK = Previa.LINK_DE_PAGAMENTO;
   eq(semLink.linkPreview, null, "4e. sem o link de pagamento, linkPreview fica null");
 }
 
-// ------------------------------------------------- 5. o link é o mesmo do prompt
+// ------------------------------------------------- 5. o link vem do código, não do prompt
 {
-  // A defesa é uma comparação de string. Se o link mudar no prompt e não aqui, a Carla passa
-  // a mandar um link que nunca casa, a prévia some, e ninguém descobre porque nada quebra.
-  ok(CEREBRO.includes(LINK), "5. o link deste arquivo tem que estar escrito no prompt da Carla");
+  // O modelo recebe o link no resultado determinístico da ferramenta. Deixar a URL literal
+  // no prompt criaria uma segunda fonte de verdade e permitiria cobrar R$ 550 num horário
+  // de fim de semana. O módulo de pagamento é a única origem permitida.
+  ok(CEREBRO.includes("link-de-pagamento.js") && LINKS_PAGAMENTO.includes(LINK),
+    "5. cérebro e prévia usam a mesma fonte determinística de links");
 
   const noPrompt = CEREBRO.match(/https:\/\/link\.infinitepay\.io\/[^\s`"]*[^\s`".]/g) || [];
-  ok(noPrompt.length > 0, "5b. o prompt tem pelo menos um link da InfinitePay");
-  const diferentes = [...new Set(noPrompt)].filter((l) => l !== LINK);
-  eq(diferentes.length, 0, "5c. o prompt não pode ter um link de pagamento diferente deste. Diferentes: " + JSON.stringify(diferentes));
+  eq(noPrompt.length, 0, "5b. o prompt não guarda link de pagamento literal");
+  eq(Previa.linksPermitidos()[0], LINK, "5c. a prévia libera o link vindo do módulo determinístico");
 }
 
 // ------------------------------------------------- 6. nenhum envio escapa da decisão

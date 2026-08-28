@@ -19,6 +19,9 @@ try {
   const lido = lerJSONSeguro(json, null);
   ok(lido.versao === 2 && lido.itens.length === 2, "substitui o documento inteiro");
   ok(!fs.readdirSync(dir).some((nome) => nome.endsWith(".tmp")), "não deixa temporário depois do rename");
+  if (process.platform !== "win32") {
+    ok((fs.statSync(json).mode & 0o777) === 0o600, "dados sensíveis ficam legíveis só pelo usuário do processo");
+  }
 
   const texto = path.join(dir, "agenda.csv");
   escreverTextoAtomico(texto, "primeira");

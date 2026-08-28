@@ -12,7 +12,7 @@ function ok(cond, msg) { if (cond) { passou++; return; } falhou++; erros.push(ms
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), "carla-saida-"));
 const raiz = path.join(base, "bot");
-const irma = path.join(base, "carla-app", "js");
+const irma = path.join(raiz, "carla-app", "js");
 fs.mkdirSync(path.join(raiz, "data"), { recursive: true });
 fs.mkdirSync(irma, { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(raiz, "storage-node.js"));
@@ -20,9 +20,10 @@ fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(raiz
 fs.writeFileSync(path.join(irma, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
 fs.writeFileSync(path.join(irma, "agenda.js"), "module.exports = {};\n");
 
+let Storage = null;
 (async () => {
 try {
-  const Storage = require(path.join(raiz, "storage-node.js"));
+  Storage = require(path.join(raiz, "storage-node.js"));
   const a = Storage.registrarMensagemPendente({ telefone: "+551", jid: "551@s.whatsapp.net", texto: "mensagem A", chaveIdempotencia: "aviso:1" });
   const aRepetida = Storage.registrarMensagemPendente({ telefone: "+551", jid: "551@s.whatsapp.net", texto: "mensagem A", chaveIdempotencia: "aviso:1" });
   const b = Storage.registrarMensagemPendente({ telefone: "+552", jid: "552@s.whatsapp.net", texto: "mensagem B" });
@@ -87,13 +88,17 @@ try {
   ok(!efeitos.some((e) => e.tipo === "nao-roda"), "efeito posterior não roda sem entrega");
 
   const servidor = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
-  ok(/const pendente = Storage\.registrarMensagemPendente[\s\S]*return caixaDeSaida\.tentarEnviar/.test(servidor),
-    "enviarResposta registra a saída antes de chamar a rede");
+  const posRegistra = servidor.indexOf("const pendente = Storage.registrarMensagemPendente");
+  const posSemSocket = servidor.indexOf("if (!sock) return { ok: true, pendente: true", posRegistra);
+  const posTentaEnviar = servidor.indexOf("await caixaDeSaida.tentarEnviar(sock, pendente)", posRegistra);
+  ok(posRegistra >= 0 && posSemSocket > posRegistra && posTentaEnviar > posSemSocket,
+    "enviarResposta persiste antes de olhar a conexão e antes de chamar a rede");
   ok(/connection === "open"[\s\S]*reenviarMensagensPendentes\(sock\)/.test(servidor),
     "a reconexão tenta entregar a caixa de saída");
   const moduloCaixa = fs.readFileSync(path.join(__dirname, "..", "caixa-de-saida.js"), "utf8");
   ok(/\[ERRO AO ENVIAR\][\s\S]*throw erro;/.test(moduloCaixa), "falha não é tratada como sucesso");
 } finally {
+  if (Storage) Storage._fecharBancoAgendamentosParaTeste();
   fs.rmSync(base, { recursive: true, force: true });
 }
 

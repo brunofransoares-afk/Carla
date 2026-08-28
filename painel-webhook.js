@@ -15,6 +15,8 @@
  * família, e juntá-los num "avisar" genérico faria um dos dois sair na hora errada.
  */
 
+const { compararSegredo } = require("./painel-seguranca.js");
+
 // O segredo aceito. Dois nomes, e a ordem importa:
 //
 //   PORTAL_WEBHOOK_SECRET — o dedicado a esta porta. É o preferido.
@@ -79,7 +81,7 @@ function decidir({ url, method, headers, env }) {
   }
   // Comparação com trim nos DOIS lados: o valor do SPI é colado à mão no painel do
   // Supabase, e um "\n" invisível no fim já custou uma tarde neste projeto.
-  if (!aceitos.some((s) => s.valor === enviado)) {
+  if (!aceitos.some((s) => compararSegredo(enviado, s.valor))) {
     return { tipo: "recusar", status: 401, corpo: { ok: false,
       motivo: "segredo não confere com nenhum dos configurados aqui — confira se o valor " +
         "no SPI é o mesmo do .env da Carla" } };

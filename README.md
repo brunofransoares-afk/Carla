@@ -4,16 +4,21 @@
 
 Depois da primeira vez (veja abaixo), o dia a dia é só isto:
 
-**Abra http://localhost:3355 no navegador.** Lá tem os agendamentos, os alertas
-e um botão pra ligar ou desligar a Carla, sem precisar mexer em nenhum comando.
+**Abra https://painel.drbrunosoares.med.br no navegador.** Lá tem os agendamentos,
+os alertas e um botão pra ligar ou desligar a Carla, sem precisar mexer em comando.
 O painel fica de pé mesmo com a Carla desligada — é um processo separado,
 então dá pra religar por ele a qualquer momento.
 
-## Primeira vez / depois de reiniciar o computador
+## Primeira instalação
 
 De dentro da pasta `carla-whatsapp-bot`:
 
+Use Node 22.5 ou mais novo e crie o `.env` antes de iniciar. No mínimo,
+`PAINEL_SENHA` precisa existir; sem ela o painel recusa abrir.
+
 ```
+npm ci --omit=dev
+npm run check
 npm run start
 ```
 
@@ -21,24 +26,13 @@ Isso liga tanto a Carla quanto o painel. Se pedir para escanear QR code,
 o arquivo aparece em `qr.png` na pasta. Depois disso, o resto é só pelo
 painel no navegador.
 
-## Acessar o painel pelo celular (de qualquer lugar)
+O acesso público é feito pelo nginx da VPS, com HTTPS. O túnel temporário do
+Cloudflare foi removido. O usuário do diálogo do navegador pode ser qualquer
+texto; a senha é `PAINEL_SENHA` do `.env`.
 
-O painel também fica disponível por um link público, via um túnel do Cloudflare
-(`carla-tunnel`), protegido por senha.
-
-1. **Descubra o link atual**: `npm run link` — procure uma linha com
-   `https://alguma-coisa.trycloudflare.com`. Esse link **muda toda vez que o
-   túnel reinicia** (ex: depois de reiniciar o computador), então confira de
-   novo se parar de funcionar.
-2. **Abra esse link no navegador do celular.** Vai pedir usuário e senha —
-   usuário pode ser qualquer coisa, a senha é a que está em `PAINEL_SENHA`
-   no arquivo `.env`.
-3. Pode salvar o link na tela inicial do celular pra acessar rápido (mas
-   lembre que ele muda se o túnel reiniciar).
-
-Sem `PAINEL_SENHA` configurada no `.env`, o painel funciona sem senha nenhuma
-— assim ficava antes, só pra uso local. Com a senha configurada, ela passa a
-ser exigida também no acesso local (http://localhost:3355), não só remoto.
+O painel agora **recusa iniciar** sem `PAINEL_SENHA`. A sessão do navegador é um
+token aleatório, marcado `Secure` e `HttpOnly`; reiniciar o painel encerra as
+sessões abertas. Nunca coloque a senha em commit ou em linha de comando.
 
 ## Comandos (só pra casos que o painel não cobre)
 
@@ -55,20 +49,67 @@ abaixo, de dentro da pasta `carla-whatsapp-bot`:
 | `npm run status` | Mostra o que está rodando, há quanto tempo, uso de memória |
 | `npm run logs` | Mostra o que a Carla está fazendo em tempo real (Ctrl+C pra sair) |
 | `npm run logs:painel` | Mesma coisa, só do painel |
-| `npm run link` | Mostra o link público atual pra acessar o painel do celular |
-| `npm run restart:tunnel` | Reinicia o túnel (gera um link novo) |
+| `npm run check` | Confere sintaxe e roda toda a bateria antes de publicar |
+| `npm run backup` | Faz uma cópia consistente e verificada dos dados fora do repositório |
 
 Se por algum motivo abrir duas vezes sem querer, o próprio programa recusa a
 segunda instância com uma mensagem clara, então não corre mais risco de duplicar.
 
+O cartão de estado do painel agora mostra duas coisas diferentes: se o processo da
+Carla está ligado e se a sessão do WhatsApp está realmente conectada. Amarelo significa
+que o processo está vivo, mas o WhatsApp está conectando, reconectando ou precisa de QR;
+verde só aparece depois de a conexão real responder e continua exigindo um pulso recente.
+
 ## Onde estão os dados
 
-- **Painel (agendamentos, alertas, ligar/desligar)**: http://localhost:3355
+- **Painel (agendamentos, alertas, ligar/desligar)**: https://painel.drbrunosoares.med.br
 - **Agendamentos**: `data/agendamentos.csv` (abre no Excel) e `data/agendamentos.json`
 - **Alertas de urgência / não entendidas**: `data/alertas.json`
 - **Logs do bot**: `logs/saida.log` (mensagens normais) e `logs/erro.log` (erros)
 - **Logs do painel**: `logs/painel-saida.log` e `logs/painel-erro.log`
-- **Logs do túnel (link público)**: `logs/tunnel-saida.log` e `logs/tunnel-erro.log`
+
+Os logs passam por `log-seguro.js`: mensagens clínicas, argumentos de ferramenta,
+telefones, e-mails e credenciais são removidos antes de chegarem ao PM2. Para
+configurar rotação diária, compressão, limite de 10 MB e retenção de 14 arquivos:
+
+```
+bash scripts/configurar-logs.sh
+```
+
+Os valores podem ser ajustados por `CARLA_LOG_ROTATE_SIZE` e `CARLA_LOG_RETAIN`.
+
+## Publicação segura
+
+O deploy de produção deve chamar apenas:
+
+```
+bash /root/carla/carla-whatsapp-bot/scripts/deploy-seguro.sh
+```
+
+O script usa `flock` para impedir dois deploys simultâneos, recusa árvore suja,
+valida o commit novo numa pasta descartável com `npm ci` e todos os testes, aceita
+somente avanço direto de `main`, verifica a saúde e volta ao commit anterior em
+caso de falha. Antes de reiniciar, também cria um backup com verificação de
+integridade do SQLite. Ele preserva o estado dos processos: se a Carla estava
+desligada pelo painel, uma publicação não a religa.
+
+Exemplo de cron, a cada três minutos:
+
+```
+*/3 * * * * /usr/bin/bash /root/carla/carla-whatsapp-bot/scripts/deploy-seguro.sh >> /root/carla/deploy.log 2>&1
+```
+
+O GitHub Actions executa as mesmas verificações em Node 22 para todo PR e push
+em `main`. Um PR não deve ser mergeado enquanto essa verificação estiver vermelha.
+
+### Variáveis operacionais opcionais
+
+- `PAINEL_LIMITE_CORPO_BYTES`: limite de cada corpo HTTP; padrão 64 KiB, máximo 1 MiB.
+- `PAINEL_SESSAO_SEGUNDOS`: validade da sessão do painel; padrão 7 dias, máximo 60.
+- `CARLA_LOG_MAX_LINE`: tamanho máximo de uma linha já redigida; padrão 2.000 caracteres.
+- `CARLA_LOG_REDACT=0`: desliga a redação. Use apenas em teste local sem dados reais.
+- `CARLA_BACKUP_DIR`: pasta externa dos backups; padrão `../backups`.
+- `CARLA_BACKUP_RETER`: quantidade de cópias verificadas mantidas; padrão 30.
 
 ## Como a Carla pensa (a Claude conduz a conversa)
 
@@ -212,9 +253,9 @@ O sexo da criança **não é perguntado**: o outro sistema infere pelo primeiro
 nome. Nome ambíguo (Alex, Ariel, Darci…) não é chutado — nesse caso a ficha não
 é criada e o log avisa o motivo.
 
-### Teste
+### Testes
 
-`node tests/app-agenda.test.js` — 35 verificações, sem rede (o `fetch` é
+`node tests/app-agenda.test.js` — 46 verificações, sem rede (o `fetch` é
 substituído). Vale rodar depois de mexer neste arquivo: a integração roda em
 background e falha em silêncio de propósito, então um erro aqui não aparece
 sozinho.
@@ -262,14 +303,8 @@ X-Carla-Secret: <segredo>
 ### Teste
 
 ```
-node tests/painel-webhook.test.js
+npm test
 ```
 
-30 asserções, sem subir servidor e **sem a pasta irmã `carla-app`** — de
-propósito. As baterias que dependem dela (`portal-liberado`, `guia-liberado`,
-`dados-pendentes`) não rodam fora da VPS, e uma regra de segurança testada só na
-VPS é uma regra que na prática não é testada. Esta é a única rota do painel cuja
-autorização não é a senha, então é a que mais precisa de teste.
-
-**`npm test` não roda nada** neste repositório — o script é um `exit 1` de
-esqueleto. Rode os arquivos direto, como acima.
+A bateria roda todas as suítes, inclusive autorização do webhook, segurança do
+painel e prévia de links, sem abrir uma porta real nem usar dados de pacientes.

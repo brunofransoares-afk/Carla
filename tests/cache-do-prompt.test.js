@@ -123,7 +123,8 @@ for (const pac of [false, true])
 
   const comTudo = montarNovo(AGORA, true, true, true, CONSULTAS[2]).volatil;
   ok(/PACIENTE JÁ CONHECIDO/.test(comTudo), "4d. paciente conhecido sai no contexto");
-  ok(/CONSULTA JÁ MARCADA NESTE TELEFONE: Isis/.test(comTudo), "4e. a consulta já marcada sai no contexto, com o nome da criança");
+  ok(/CONSULTA JÁ MARCADA NESTE TELEFONE\.[\s\S]*\"Isis\"/.test(comTudo),
+    "4e. a consulta já marcada sai no contexto, com o nome da criança sanitizado");
   ok(/É HOJE/.test(comTudo), "4f. consulta de hoje sai marcada como hoje");
   ok(/Acesso ao portal: JÁ ESTÁ LIBERADO/.test(comTudo), "4g. portal liberado sai no contexto");
   ok(/o Dr\. Bruno JÁ LIBEROU/.test(comTudo), "4h. guia liberado sai no contexto");

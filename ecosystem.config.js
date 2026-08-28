@@ -9,6 +9,7 @@ module.exports = {
       cwd: __dirname,
       instances: 1,
       exec_mode: "fork",
+      node_args: "--require ./log-seguro.js",
       autorestart: true,
       watch: false,
       max_restarts: 10,
@@ -19,6 +20,10 @@ module.exports = {
       out_file: "./logs/saida.log",
       error_file: "./logs/erro.log",
       time: true,
+      env: {
+        CARLA_LOG_REDACT: "1",
+        CARLA_LOG_MAX_LINE: "2000",
+      },
     },
     {
       // Painel separado do bot de propósito: precisa continuar de pé mesmo quando
@@ -28,6 +33,7 @@ module.exports = {
       cwd: __dirname,
       instances: 1,
       exec_mode: "fork",
+      node_args: "--require ./log-seguro.js",
       autorestart: true,
       watch: false,
       max_restarts: 10,
@@ -35,6 +41,10 @@ module.exports = {
       out_file: "./logs/painel-saida.log",
       error_file: "./logs/painel-erro.log",
       time: true,
+      env: {
+        CARLA_LOG_REDACT: "1",
+        CARLA_LOG_MAX_LINE: "2000",
+      },
     },
   ],
 };

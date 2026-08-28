@@ -122,6 +122,10 @@ const TELA = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8
     "7d. e com texto próprio pra quando não há dado, em vez de barras zeradas");
   ok(/não retroage/.test(TELA),
     "7e. avisando que o funil começa do zero: sem isso parece que o sistema perdeu histórico");
+  ok(/Funil · atividade no período/.test(TELA),
+    "7f. o título deixa claro que o recorte seleciona atividade, não uma coorte");
+  ok(/Não é uma turma fixa de quem começou nele\./.test(TELA),
+    "7g. a explicação em linguagem comum evita interpretar o período como data de entrada");
 }
 
 // ------------------------------------------------- 8. nada do que vem do dado vira HTML cru

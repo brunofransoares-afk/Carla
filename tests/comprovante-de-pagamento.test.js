@@ -107,7 +107,7 @@ const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
 {
   // Emergência é inegociável e vem ANTES. Alguém que mande o comprovante junto de "meu filho
   // está convulsionando" precisa da resposta de emergência, não do silêncio.
-  const posEmergencia = SERVER.indexOf("pareceEmergencia(texto)");
+  const posEmergencia = SERVER.indexOf("CerebroIA.avaliarEmergencia(texto)");
   const posComprovante = SERVER.indexOf("Comprovante.pareceComprovante(texto)");
   ok(posEmergencia > 0, "5. a checagem de emergência existe");
   ok(posComprovante > 0, "5b. a checagem de comprovante existe");
