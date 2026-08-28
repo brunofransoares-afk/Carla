@@ -1,5 +1,6 @@
 "use strict";
 
+const fs = require("fs");
 const path = require("path");
 const { EventEmitter } = require("events");
 const S = require(path.join(__dirname, "..", "painel-seguranca.js"));
@@ -77,6 +78,26 @@ eq(S.identificarCliente(pedido({ ip: "ip-inventado, 198.51.100.7" })), "198.51.1
   eq(S.origemPermitida(mesma), true, "5f. permite cliente autenticado sem cabeçalho de navegador");
 }
 
+// O DDI explícito nunca pode ser trocado por +55. Esse era o motivo de um contato dos EUA
+// aparecer normalmente no painel, mas o clique em "Silenciar" gravar outro número.
+eq(S.normalizarTelefoneManual("+1 (619) 757-3958"), "+16197573958",
+  "6. preserva telefone internacional que já vem com +1");
+eq(S.normalizarTelefoneManual("+55 (19) 99999-0000"), "+5519999990000",
+  "6b. preserva também DDI brasileiro explícito");
+eq(S.normalizarTelefoneManual("19 99999-0000"), "+5519999990000",
+  "6c. digitação nacional sem DDI continua assumindo Brasil");
+eq(S.normalizarTelefoneManual("001 619 757 3958"), "+16197573958",
+  "6d. aceita prefixo internacional 00");
+eq(S.normalizarTelefoneManual(""), null, "6e. recusa telefone vazio");
+eq(S.normalizarTelefoneManual("+1234567890123456"), null, "6f. recusa número acima do limite E.164");
+{
+  const fonte = fs.readFileSync(path.join(__dirname, "..", "painel-server.js"), "utf8");
+  const rota = fonte.slice(fonte.indexOf('req.url === "/api/silenciar"'),
+    fonte.indexOf('req.url === "/api/dessilenciar"'));
+  ok(/Seguranca\.normalizarTelefoneManual\(corpo\.telefone\)/.test(rota),
+    "6g. a rota de silenciar usa a normalização que preserva o DDI");
+}
+
 function corpo(partes, headers = {}) {
   const req = new EventEmitter();
   req.headers = headers;
@@ -86,13 +107,13 @@ function corpo(partes, headers = {}) {
 
 (async () => {
   const json = await S.lerCorpo(corpo(['{"ok":', "true}"]), { limite: 64, json: true });
-  eq(json.ok, true, "6. lê JSON válido em mais de um bloco");
+  eq(json.ok, true, "7. lê JSON válido em mais de um bloco");
   try { await S.lerCorpo(corpo(["xxxxxxxxx"]), { limite: 4, json: false });
-    ok(false, "6b. aceitou corpo grande");
-  } catch (e) { eq(e.statusCode, 413, "6b. corpo grande devolve 413"); }
+    ok(false, "7b. aceitou corpo grande");
+  } catch (e) { eq(e.statusCode, 413, "7b. corpo grande devolve 413"); }
   try { await S.lerCorpo(corpo(["{"]), { limite: 64, json: true });
-    ok(false, "6c. aceitou JSON inválido");
-  } catch (e) { eq(e.statusCode, 400, "6c. JSON inválido devolve 400"); }
+    ok(false, "7c. aceitou JSON inválido");
+  } catch (e) { eq(e.statusCode, 400, "7c. JSON inválido devolve 400"); }
 
   console.log(`\npainel-seguranca: ${passou} passaram, ${falhou} falharam`);
   if (falhou) { erros.forEach((e) => console.log("  FALHOU: " + e)); process.exit(1); }
