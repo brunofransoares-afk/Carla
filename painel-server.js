@@ -73,6 +73,40 @@ function rodarComandoPm2(comando) {
   });
 }
 
+function esperar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// O comando do PM2 terminar não basta: o painel só confirma a ação depois de reler o estado
+// real do processo. Antes, qualquer falha (inclusive um clique durante o restart do painel)
+// era devolvida como HTTP 200 e o navegador a ignorava, dando a impressão de que ligou.
+async function controlarBot(deveRodar) {
+  const acao = deveRodar ? "ligar" : "desligar";
+  const comando = deveRodar
+    ? `pm2 start ecosystem.config.js --only ${NOME_APP_BOT} --update-env`
+    : `pm2 stop ${NOME_APP_BOT}`;
+  const executado = await rodarComandoPm2(comando);
+  if (!executado.ok) {
+    console.error(`[PAINEL] Falha do PM2 ao ${acao} a Carla:`, executado.mensagem);
+    return { ok: false, erro: `Não foi possível ${acao} a Carla no servidor.` };
+  }
+
+  let status = await statusDoBot();
+  for (let tentativa = 0; status.rodando !== deveRodar && tentativa < 10; tentativa++) {
+    await esperar(300);
+    status = await statusDoBot();
+  }
+  if (status.rodando !== deveRodar) {
+    console.error(`[PAINEL] O PM2 não confirmou a ação de ${acao}.`, status);
+    return { ok: false, erro: `O servidor não confirmou que conseguiu ${acao} a Carla.`, status };
+  }
+
+  const persistido = await rodarComandoPm2("pm2 save");
+  if (!persistido.ok) console.error("[PAINEL] Estado alterado, mas o PM2 não conseguiu salvá-lo:", persistido.mensagem);
+  console.log(`[PAINEL] Carla ${deveRodar ? "ligada" : "desligada"} pelo painel; estado confirmado no PM2.`);
+  return { ok: true, status };
+}
+
 const LIMITE_CORPO = Seguranca.inteiroPositivo(
   process.env.PAINEL_LIMITE_CORPO_BYTES, Seguranca.LIMITE_CORPO_PADRAO, 1024 * 1024
 );
@@ -537,15 +571,15 @@ async function atenderRequisicao(req, res) {
   }
 
   if (req.url === "/api/ligar" && req.method === "POST") {
-    const resultado = await rodarComandoPm2(`pm2 start ecosystem.config.js --only ${NOME_APP_BOT}`);
-    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    const resultado = await controlarBot(true);
+    res.writeHead(resultado.ok ? 200 : 500, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(resultado));
     return;
   }
 
   if (req.url === "/api/desligar" && req.method === "POST") {
-    const resultado = await rodarComandoPm2(`pm2 stop ${NOME_APP_BOT}`);
-    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    const resultado = await controlarBot(false);
+    res.writeHead(resultado.ok ? 200 : 500, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(resultado));
     return;
   }
