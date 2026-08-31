@@ -70,16 +70,9 @@ function criarSessoes({ nomeCookie, ttlMs, agora = () => Date.now(), maximo = 50
     while (sessoes.size > maximo) sessoes.delete(sessoes.keys().next().value);
   }
 
-  function autenticar(req, senha) {
+  function entrar(recebida, senha) {
     limpar();
-    const existente = lerCookie(req, nomeCookie);
-    if (existente && sessoes.has(existente) && sessoes.get(existente) > agora()) {
-      sessoes.set(existente, agora() + ttl);
-      return { ok: true, token: existente, nova: false };
-    }
-
-    const enviada = credencialBasic(req);
-    if (enviada == null || !compararSegredo(enviada, senha)) return { ok: false };
+    if (!compararSegredo(recebida, senha)) return { ok: false };
 
     const token = crypto.randomBytes(32).toString("base64url");
     sessoes.set(token, agora() + ttl);
@@ -87,7 +80,21 @@ function criarSessoes({ nomeCookie, ttlMs, agora = () => Date.now(), maximo = 50
     return { ok: true, token, nova: true };
   }
 
-  return { autenticar, tamanho: () => sessoes.size };
+  function autenticar(req, senha, { permitirBasic = true } = {}) {
+    limpar();
+    const existente = lerCookie(req, nomeCookie);
+    if (existente && sessoes.has(existente) && sessoes.get(existente) > agora()) {
+      sessoes.set(existente, agora() + ttl);
+      return { ok: true, token: existente, nova: false };
+    }
+
+    if (!permitirBasic) return { ok: false };
+    const enviada = credencialBasic(req);
+    if (enviada == null) return { ok: false };
+    return entrar(enviada, senha);
+  }
+
+  return { autenticar, entrar, tamanho: () => sessoes.size };
 }
 
 function cookieSeguro(nome, token, ttlSegundos) {

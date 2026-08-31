@@ -113,9 +113,11 @@ const LIMITE_CORPO = Seguranca.inteiroPositivo(
 const lerCorpoJSON = (req) => Seguranca.lerCorpo(req, { limite: LIMITE_CORPO, json: true });
 const lerCorpoTexto = (req) => Seguranca.lerCorpo(req, { limite: LIMITE_CORPO, json: false });
 
-// Login persistente: depois de autenticar uma vez (com a senha via Basic Auth), o navegador
-// recebe um token aleatório. Ele só vale na memória deste processo, nunca é derivado da senha
-// e expira; reiniciar o painel encerra todas as sessões existentes.
+// Login persistente: a página própria de senha funciona também no Safari/PWA do iPhone,
+// que pode transformar uma resposta Basic 401 sem tipo em arquivo para download. Basic Auth
+// fica restrito ao health check interno, mas não é mais a interface de login humana.
+// Depois de autenticar, o navegador recebe um token aleatório que só vale na memória deste
+// processo, nunca é derivado da senha e expira; reiniciar o painel encerra as sessões.
 const NOME_COOKIE = "carla_painel_sessao";
 const SESSAO_SEGUNDOS = Seguranca.inteiroPositivo(
   process.env.PAINEL_SESSAO_SEGUNDOS, 7 * 24 * 60 * 60, 60 * 24 * 60 * 60
@@ -126,6 +128,64 @@ const sessoes = Seguranca.criarSessoes({
 const limiteLogin = Seguranca.criarLimitador({ maximo: 10, janelaMs: 15 * 60 * 1000 });
 const limiteApi = Seguranca.criarLimitador({ maximo: 240, janelaMs: 60 * 1000 });
 const limiteWebhook = Seguranca.criarLimitador({ maximo: 60, janelaMs: 60 * 1000 });
+
+function paginaLogin(mensagem = "") {
+  const aviso = mensagem
+    ? `<p class="aviso" role="alert">${mensagem}</p>`
+    : '<p class="instrucao">Digite a senha para abrir o painel.</p>';
+  return Buffer.from(`<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07140d">
+  <title>Entrar · Painel da Carla</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+      background: #07140d; color: #edf7ef; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width: min(100%, 390px); padding: 30px 24px; border: 1px solid #284536;
+      border-radius: 22px; background: #10251a; box-shadow: 0 20px 60px #0008; }
+    h1 { margin: 0 0 8px; font-size: 27px; }
+    p { margin: 0 0 22px; color: #b8cbbd; line-height: 1.45; }
+    .aviso { color: #ffb4ab; }
+    label { display: block; margin-bottom: 8px; font-weight: 650; }
+    input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid #456452;
+      border-radius: 13px; background: #07140d; color: #fff; font-size: 18px; outline: none; }
+    input:focus { border-color: #d6a84b; box-shadow: 0 0 0 3px #d6a84b33; }
+    button { width: 100%; min-height: 50px; margin-top: 16px; border: 0; border-radius: 13px;
+      background: #d6a84b; color: #162016; font-size: 17px; font-weight: 750; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Painel da Carla</h1>
+    ${aviso}
+    <form method="post" action="/login">
+      <label for="senha">Senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="current-password" required autofocus>
+      <button type="submit">Entrar</button>
+    </form>
+  </main>
+</body>
+</html>`, "utf8");
+}
+
+function enviarPaginaLogin(res, { status = 200, mensagem = "", tentarEm = null } = {}) {
+  const corpo = paginaLogin(mensagem);
+  const cabecalhos = {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Length": corpo.length,
+  };
+  if (tentarEm) cabecalhos["Retry-After"] = tentarEm;
+  res.writeHead(status, cabecalhos);
+  res.end(corpo);
+}
+
+function redirecionar(res, destino) {
+  res.writeHead(303, { Location: destino, "Content-Type": "text/plain; charset=utf-8" });
+  res.end("Redirecionando...");
+}
 
 const html = fs.readFileSync(path.join(__dirname, "dashboard.html"));
 const PASTA_ICONES = path.join(__dirname, "icons");
@@ -235,15 +295,73 @@ async function atenderRequisicao(req, res) {
     return;
   }
 
-  const autenticacao = sessoes.autenticar(req, PAINEL_SENHA);
-  if (!autenticacao.ok) {
+  // Basic Auth só existe para o health check local do deploy. A tentativa é limitada ANTES
+  // de comparar a senha; limitar depois deixaria um atacante continuar testando senhas e
+  // apenas esconderia a resposta. Todas as páginas humanas usam cookie + formulário.
+  const basicSaude = caminhoPedido === "/api/status" && req.method === "GET" &&
+    String(req.headers.authorization || "").startsWith("Basic ");
+  if (basicSaude) {
     const limite = limiteLogin.verificar(cliente);
-    const status = limite.permitido ? 401 : 429;
-    const cabecalhos = limite.permitido
-      ? { "WWW-Authenticate": 'Basic realm="Painel da Carla"' }
-      : { "Retry-After": limite.tentarEm };
-    res.writeHead(status, cabecalhos);
-    res.end(limite.permitido ? "Senha necessária." : "Muitas tentativas. Aguarde e tente novamente.");
+    if (!limite.permitido) {
+      res.writeHead(429, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Retry-After": limite.tentarEm,
+      });
+      res.end(JSON.stringify({ ok: false, erro: "Muitas tentativas. Aguarde e tente novamente." }));
+      return;
+    }
+  }
+  const autenticacao = sessoes.autenticar(req, PAINEL_SENHA, { permitirBasic: basicSaude });
+
+  if (caminhoPedido === "/login" && req.method === "GET") {
+    if (autenticacao.ok) {
+      limiteLogin.limpar(cliente);
+      res.setHeader("Set-Cookie", Seguranca.cookieSeguro(
+        NOME_COOKIE, autenticacao.token, SESSAO_SEGUNDOS
+      ));
+      redirecionar(res, "/");
+      return;
+    }
+    enviarPaginaLogin(res);
+    return;
+  }
+
+  if (caminhoPedido === "/login" && req.method === "POST") {
+    if (!Seguranca.origemPermitida(req)) {
+      enviarPaginaLogin(res, { status: 403, mensagem: "Esta tentativa de entrada foi recusada." });
+      return;
+    }
+    const limite = limiteLogin.verificar(cliente);
+    if (!limite.permitido) {
+      enviarPaginaLogin(res, {
+        status: 429,
+        mensagem: "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+        tentarEm: limite.tentarEm,
+      });
+      return;
+    }
+    const parametros = new URLSearchParams(await lerCorpoTexto(req));
+    const entrada = sessoes.entrar(parametros.get("senha"), PAINEL_SENHA);
+    if (!entrada.ok) {
+      enviarPaginaLogin(res, { status: 401, mensagem: "Senha incorreta." });
+      return;
+    }
+    limiteLogin.limpar(cliente);
+    res.setHeader("Set-Cookie", Seguranca.cookieSeguro(
+      NOME_COOKIE, entrada.token, SESSAO_SEGUNDOS
+    ));
+    redirecionar(res, "/");
+    return;
+  }
+
+  if (!autenticacao.ok) {
+    const navegacao = String(req.headers["sec-fetch-mode"] || "").toLowerCase() === "navigate";
+    if (caminhoPedido.startsWith("/api/") && !navegacao) {
+      res.writeHead(401, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: false, erro: "Sessão expirada.", login: "/login" }));
+      return;
+    }
+    redirecionar(res, "/login");
     return;
   }
   limiteLogin.limpar(cliente);
