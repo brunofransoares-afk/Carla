@@ -36,6 +36,14 @@ eq(S.compararSegredo("x", "uma-senha-muito-maior"), false, "1c. tamanhos diferen
     "2d. sessão expira");
   eq(sessoes.autenticar(pedido({ senha: "errada" }), "correta").ok, false,
     "2e. senha errada não cria sessão");
+  eq(sessoes.autenticar(pedido({ senha: "correta" }), "correta", { permitirBasic: false }).ok,
+    false, "2f. Basic Auth pode ser desligado nas rotas humanas");
+
+  const formulario = sessoes.entrar("correta", "correta");
+  ok(formulario.ok && formulario.nova,
+    "2g. formulário de senha cria a mesma sessão segura sem depender de Basic Auth");
+  eq(sessoes.entrar("errada", "correta").ok, false,
+    "2h. formulário recusa senha errada");
 }
 
 {

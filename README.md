@@ -27,8 +27,8 @@ o arquivo aparece em `qr.png` na pasta. Depois disso, o resto é só pelo
 painel no navegador.
 
 O acesso público é feito pelo nginx da VPS, com HTTPS. O túnel temporário do
-Cloudflare foi removido. O usuário do diálogo do navegador pode ser qualquer
-texto; a senha é `PAINEL_SENHA` do `.env`.
+Cloudflare foi removido. O navegador abre uma página própria de entrada; nela,
+digite o valor de `PAINEL_SENHA` do `.env` no campo de senha.
 
 O painel agora **recusa iniciar** sem `PAINEL_SENHA`. A sessão do navegador é um
 token aleatório, marcado `Secure` e `HttpOnly`; reiniciar o painel encerra as
