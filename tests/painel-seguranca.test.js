@@ -84,6 +84,15 @@ eq(S.identificarCliente(pedido({ ip: "ip-inventado, 198.51.100.7" })), "198.51.1
   eq(S.origemPermitida(mesma), false, "5e. recusa pedido cross-site mesmo sem Origin");
   delete mesma.headers["sec-fetch-site"];
   eq(S.origemPermitida(mesma), true, "5f. permite cliente autenticado sem cabeçalho de navegador");
+
+  mesma.headers.origin = "null";
+  eq(S.origemPermitida(mesma), false,
+    "5g. APIs autenticadas continuam recusando Origin null");
+  eq(S.origemLoginPermitida(mesma), true,
+    "5h. login aceita Origin null enviado pelo Safari em navegação direta");
+  mesma.headers["sec-fetch-site"] = "cross-site";
+  eq(S.origemLoginPermitida(mesma), false,
+    "5i. login continua recusando Origin null quando a página veio de outro site");
 }
 
 // O DDI explícito nunca pode ser trocado por +55. Esse era o motivo de um contato dos EUA

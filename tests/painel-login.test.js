@@ -28,8 +28,8 @@ ok(/sessoes\.entrar\(parametros\.get\("senha"\), PAINEL_SENHA\)/.test(login),
   "5. o formulário precisa criar sessão usando a senha configurada");
 ok(/limiteLogin\.verificar\(cliente\)/.test(login),
   "6. tentativas de senha pelo formulário precisam ter limite");
-ok(/Seguranca\.origemPermitida\(req\)/.test(login),
-  "7. o formulário precisa recusar envio originado em outro site");
+ok(/Seguranca\.origemLoginPermitida\(req\)/.test(login),
+  "7. o formulário precisa aceitar o Safari sem liberar envio originado em outro site");
 ok(/redirecionar\(res, "\/"\)/.test(login),
   "8. login correto precisa voltar ao painel");
 
