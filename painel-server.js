@@ -327,7 +327,7 @@ async function atenderRequisicao(req, res) {
   }
 
   if (caminhoPedido === "/login" && req.method === "POST") {
-    if (!Seguranca.origemPermitida(req)) {
+    if (!Seguranca.origemLoginPermitida(req)) {
       enviarPaginaLogin(res, { status: 403, mensagem: "Esta tentativa de entrada foi recusada." });
       return;
     }

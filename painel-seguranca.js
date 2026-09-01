@@ -112,9 +112,8 @@ function identificarCliente(req) {
   return (real || encaminhado || String(req?.socket?.remoteAddress || "desconhecido")).slice(0, 80);
 }
 
-// Defesa de CSRF para os botões que mudam estado. SameSite=Strict já protege a sessão,
-// mas o navegador também pode ter a senha Basic em cache. Sec-Fetch-Site e Origin fecham
-// esse segundo caminho sem impedir curl/health checks que não carregam esses cabeçalhos.
+// Defesa de CSRF para os botões que mudam estado. SameSite=Strict protege a sessão e estes
+// cabeçalhos também recusam explicitamente pedidos vindos de outra página.
 function origemPermitida(req) {
   const site = String(req?.headers?.["sec-fetch-site"] || "").toLowerCase();
   if (site === "cross-site") return false;
@@ -126,6 +125,18 @@ function origemPermitida(req) {
   } catch {
     return false;
   }
+}
+
+// Safari 26 (iPhone e macOS) envia `Origin: null` no POST de um formulário normal aberto
+// neste painel. Isso não pode ser tratado como outro site: o navegador marca pedidos realmente
+// externos como Sec-Fetch-Site: cross-site, que continua recusado. A exceção fica restrita ao
+// login; as APIs autenticadas permanecem usando a validação rigorosa acima.
+function origemLoginPermitida(req) {
+  const site = String(req?.headers?.["sec-fetch-site"] || "").toLowerCase();
+  if (site === "cross-site") return false;
+  const origem = String(req?.headers?.origin || "").trim().toLowerCase();
+  if (origem === "null") return true;
+  return origemPermitida(req);
 }
 
 function criarLimitador({ maximo, janelaMs, agora = () => Date.now() }) {
@@ -198,6 +209,7 @@ module.exports = {
   criarSessoes,
   identificarCliente,
   normalizarTelefoneManual,
+  origemLoginPermitida,
   origemPermitida,
   inteiroPositivo,
   lerCorpo,
