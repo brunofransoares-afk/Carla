@@ -26,6 +26,10 @@ function linkParaCentavos(centavos) {
   if (Number(centavos) === 80000) {
     return limpar(process.env.LINK_PAGAMENTO_FIM_DE_SEMANA);
   }
+  // Irmãos juntos: um link por tamanho de grupo, um pagamento só. Sem o link configurado a
+  // Carla oferece Pix e leva o pedido de cartão pro Dr. Bruno, igual ao fim de semana.
+  if (Number(centavos) === 100000) return limpar(process.env.LINK_PAGAMENTO_IRMAOS_2);
+  if (Number(centavos) === 150000) return limpar(process.env.LINK_PAGAMENTO_IRMAOS_3);
   return null;
 }
 
@@ -37,7 +41,7 @@ function formasParaPreco(centavos) {
     linkCartao,
     avisoCartao: linkCartao
       ? null
-      : "Não existe link de cartão configurado para este valor. Não envie o link de R$ 550. Ofereça Pix; se a família precisar de cartão, escale para o Dr. Bruno gerar o link correto.",
+      : "Não existe link de cartão configurado para este valor. Não envie o link de R$ 550 nem outro link de valor diferente. Ofereça Pix; se a família precisar de cartão, escale para o Dr. Bruno gerar o link correto.",
   };
 }
 

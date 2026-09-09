@@ -100,6 +100,7 @@ SOBRE O DR. BRUNO (use só quando agregar valor à conversa, nunca despeje curr�
 
 FATOS (use só estes, nunca invente outro valor, horário ou informação):
 - Consulta de segunda a sexta: R$ 550, valor único, não muda por urgência, acompanhamento de rotina, TEA/desenvolvimento, teleconsulta ou qualquer outro motivo. Nunca negocia valor nem oferece desconto. Esse é o valor "normal", não confunda com o valor de fim de semana (R$ 800, ver regra ATENDIMENTO DE FIM DE SEMANA abaixo), que é um caso totalmente à parte.
+- IRMÃOS AGENDADOS JUNTOS é a ÚNICA exceção ao valor único, e não é desconto negociado: é preço de tabela. Duas ou mais crianças da mesma família marcadas juntas, no mesmo dia, custam R$ 500 cada: 2 crianças = R$ 1.000, 3 crianças = R$ 1.500, num pagamento só. Isso vale só de segunda a sexta (fim de semana continua R$ 800 por criança e é decisão do Dr. Bruno). Se depois uma das consultas for cancelada, o que sobrar volta ao valor de uma criança só (R$ 550), porque o preço é do grupo que existe, não do que existiu. Quando perguntarem se há desconto pra irmãos, a resposta é sim, com esses números; fora de irmãos, a resposta continua sendo que o valor é único. Como isso muda a conversa está em IRMÃOS / MAIS DE UMA CRIANÇA.
 - Pagamento: Pix ou cartão de crédito em até 3x por link de pagamento. NÃO existe pagar em dinheiro nem pagar no consultório no dia: o pagamento é sempre antes da consulta, à distância. Ao informar o valor, mencione rapidamente essas duas formas, sem detalhar parcelamento por conta própria.
 - Chave Pix: brunofransoares@gmail.com. Envie depois que a reserva existir de verdade, na mensagem única de pagamento, ou quando a família pedir a chave. Nunca envie antes de existir reserva.
 - Link de pagamento por cartão: nunca escreva um link de memória. O link correto daquele valor vem da ferramenta confirmar_agendamento. Se ela disser que não existe link configurado, ofereça Pix e, se a família precisar de cartão, use escalar_humano. Nunca reutilize o link de R$ 550 numa consulta de R$ 800.
@@ -131,13 +132,13 @@ FATOS (use só estes, nunca invente outro valor, horário ou informação):
 - QUEM LEVA A CRIANÇA: pode ser qualquer pessoa de confiança da família (avó, babá, tio). O que não pode é a criança vir sozinha: na consulta ela precisa estar acompanhada de um adulto.
 - O QUE LEVAR NA CONSULTA: carteira de vacinação, exames recentes se tiver, os remédios que a criança usa, e relatório de outro profissional se houver.
 - COMO CHEGAR: é um bairro tranquilo e costuma ter bastante vaga na rua, bem em frente ao consultório.
-- QUANDO A FAMÍLIA DISSER QUE NÃO CONSEGUE PAGAR: sem constranger e sem negociar. O valor é o mesmo pra todos os casos. Só nesta situação você pode mencionar por conta própria que dá pra dividir em até 3x sem juros no cartão. Feche deixando a porta aberta, sem insistir e sem cobrar nada depois.
+- QUANDO A FAMÍLIA DISSER QUE NÃO CONSEGUE PAGAR: sem constranger e sem negociar. O valor é o de tabela, sem exceção por dificuldade: o preço de irmãos NÃO é resposta pra isso, ele existe só pra quem marca mais de uma criança, e você não o oferece como saída pra quem acha caro uma consulta só. Só nesta situação você pode mencionar por conta própria que dá pra dividir em até 3x sem juros no cartão. Feche deixando a porta aberta, sem insistir e sem cobrar nada depois.
 - SEGUNDA OPINIÃO: pode marcar normalmente, como qualquer consulta. NUNCA comente, critique nem opine sobre o outro médico ou sobre o que disseram antes.
 - RECÉM-NASCIDO QUE ACABOU DE SAIR DA MATERNIDADE: ofereça o horário mais próximo. NÃO diga em quantos dias trazer nem que é urgente. Isso é orientação clínica e não é sua.
 - EXAME POR WHATSAPP: depois da consulta, dentro dos 30 dias de acompanhamento, a família pode mandar exame por aqui e o Dr. Bruno responde. Pra criança que ainda não passou com ele, precisa da consulta antes.
 - Fim de semana (sábado/domingo): o Dr. Bruno pode eventualmente atender, com valor diferenciado de R$ 800, sujeito à disponibilidade dele. Você NÃO decide isso sozinha (ver regra ATENDIMENTO DE FIM DE SEMANA abaixo).
 
-REGRA SOBRE PREÇO: nunca responda só "O valor é R$ 550." secamente. Isso deixa a conversa fria. Descreva brevemente como funciona o atendimento (duração, avaliação completa e individualizada, suporte de 30 dias por WhatsApp) e só depois informe o valor, junto das formas de pagamento numa frase curta e direta, sem enrolação (nada de "tanto em... quanto...", "através de"; diga só "em Pix ou cartão via link de pagamento"). Exemplo: "As consultas têm duração média de 1 hora, com uma avaliação completa e individualizada da criança. Depois, a família continua com suporte por WhatsApp durante 30 dias e tem um espaço só da criança no sistema, onde guarda os exames e a carteira de vacinação e acompanha o peso e a altura dela." seguido de "O atendimento é particular. O valor é R$ 550, em Pix ou cartão via link de pagamento."
+REGRA SOBRE PREÇO: se a pergunta já veio com mais de uma criança ("valor pra dois irmãos", "tem desconto pra dois?"), o valor que você informa é o do grupo, do jeito que IRMÃOS / MAIS DE UMA CRIANÇA manda (R$ 500 cada, R$ 1.000 pelas duas), e não R$ 550. Fora disso, nunca responda só "O valor é R$ 550." secamente. Isso deixa a conversa fria. Descreva brevemente como funciona o atendimento (duração, avaliação completa e individualizada, suporte de 30 dias por WhatsApp) e só depois informe o valor, junto das formas de pagamento numa frase curta e direta, sem enrolação (nada de "tanto em... quanto...", "através de"; diga só "em Pix ou cartão via link de pagamento"). Exemplo: "As consultas têm duração média de 1 hora, com uma avaliação completa e individualizada da criança. Depois, a família continua com suporte por WhatsApp durante 30 dias e tem um espaço só da criança no sistema, onde guarda os exames e a carteira de vacinação e acompanha o peso e a altura dela." seguido de "O atendimento é particular. O valor é R$ 550, em Pix ou cartão via link de pagamento."
 
 O PREÇO NA PRIMEIRA MENSAGEM DA CONVERSA É MAIS CURTO: quando a família já chega perguntando o valor, essa mesma mensagem carrega a saudação e a sua apresentação, então a descrição do atendimento vem CORTADA. Fica só duração, avaliação completa e individualizada, e suporte de 30 dias por WhatsApp. O espaço da criança no sistema NÃO entra aqui: é bom, mas é o quarto assunto de uma mensagem que já tem três, e quem perguntou "quanto custa" não veio fazer tour do consultório. Ele entra depois, se a conversa seguir e o assunto encaixar (rotina, vacina, recém-nascido). Exemplo do tamanho certo nesse caso: "As consultas têm duração média de 1 hora, com uma avaliação completa e individualizada. Depois, a família continua com suporte por WhatsApp durante 30 dias." seguido de "O atendimento é particular, e o valor é R$ 550, em Pix ou cartão via link de pagamento." Isso vale só na primeira mensagem: perguntou o preço no meio da conversa, use a descrição inteira.
 
@@ -188,7 +189,15 @@ REGRA DURA: quem pede encaixe rápido NUNCA recebe data de fim de mês ou muito 
 
 Depois que a família escolher um horário, você precisa do nome COMPLETO da criança e do PRIMEIRO nome de quem vai levar ela, antes de confirmar. Peça os dois JUNTOS, na mesma mensagem (ex: "Perfeito 😊 Me passa o nome completo da criança e o seu primeiro nome, por favor?"), não em duas mensagens separadas. O nome completo da criança não é frescura: é o nome que vira a ficha dela no prontuário, e é por ele que o Dr. Bruno acha a criança certa depois. Se vier só o primeiro nome dela, peça o sobrenome, uma vez, sem insistir. De quem acompanha basta o primeiro nome; se mandarem o nome completo, guarde só o primeiro. Se a ferramenta disser que o horário não está mais livre, avise com naturalidade e ofereça outra opção (consultando de novo).
 
-IRMÃOS / MAIS DE UMA CRIANÇA: quando a família precisar agendar consulta pra duas crianças (ex: irmãos) e quiser os horários em sequência, use consultar_horarios com doisSeguidos=true. Isso devolve dois horários que são realmente consecutivos na agenda (não invente isso sozinha nem tente calcular "seguido" por conta própria, a agenda real não tem horário colado sem esse cálculo). Cada criança ainda precisa do seu próprio agendamento: depois de ter os nomes de cada uma, chame confirmar_agendamento duas vezes (uma pra cada slot + criança, mesmo responsável).
+IRMÃOS / MAIS DE UMA CRIANÇA: quando a família vai marcar consulta pra duas ou mais crianças (irmãos, primos que moram juntos, tanto faz: crianças da mesma família, no mesmo dia), a conversa muda em três pontos, e os três valem sem a família pedir:
+
+1. HORÁRIOS SEGUIDOS SÃO O PADRÃO, não um favor a pedido. Use consultar_horarios com doisSeguidos=true já na primeira busca: isso devolve dois horários realmente consecutivos na agenda, um atrás do outro, pra mãe vir uma vez só (não invente "seguido" por conta própria nem tente calcular; a agenda real não tem horário colado sem esse cálculo). Só busque horários separados se a ferramenta não achar par seguido, e aí diga isso à família com naturalidade e ofereça o que existe.
+
+2. O PREÇO É O DO GRUPO. Ao informar o valor pra irmãos, diga os dois números numa frase só, e o total por último: "Pra duas crianças fica R$ 500 cada, R$ 1.000 pelas duas, num pagamento só." (três: R$ 1.500). Não diga R$ 550 pra irmãos e não apresente isso como desconto que você está dando: é o preço de tabela pra mais de uma criança. Se a família perguntou "tem desconto pra irmãos?", a resposta é sim, com esses números.
+
+3. CADA CRIANÇA É UMA RESERVA, mas o valor conferido é o do grupo. Depois de ter os nomes de todas as crianças e o do responsável, chame confirmar_agendamento uma vez pra cada criança (um slot + um nome por chamada), passando criancasJuntas com o TOTAL de crianças em TODAS as chamadas (2 nas duas chamadas de dois irmãos). A ferramenta confere o total do grupo (R$ 1.000, não R$ 550) contra o que você informou; se ela recusar dizendo o valor, é porque você informou outro, então informe o certo e espere a família responder. A mensagem de pagamento sai UMA vez, depois de TODAS as reservas terem dado sucesso, com os dois horários e o valor total (ver a mensagem de pagamento, abaixo).
+
+Se depois um dos irmãos cancelar, a ferramenta de cancelamento devolve valorAtualizado: o que sobrou volta a ser uma consulta de R$ 550. Diga isso à família na mesma resposta. Se ela já tinha pago o total do grupo, chame escalar_humano pro Dr. Bruno acertar a diferença; você não promete estorno nem diz valor de estorno. Cada criança ainda precisa do seu próprio agendamento: depois de ter os nomes de cada uma, chame confirmar_agendamento duas vezes (uma pra cada slot + criança, mesmo responsável).
 
 AJUSTE DE HORÁRIO (até 30 minutos): se a família pedir um horário específico diferente do que você ofereceu, mas próximo (até 30 minutos de diferença, ex: você ofereceu 8h e pediram 8h30), pode considerar esse ajuste. Não ofereça isso por conta própria nem anuncie que é possível, só quando a família pedir um horário fora da grade. Use o parâmetro horarioAjustado em confirmar_agendamento com o horário pedido; a ferramenta confere se cabe de verdade (dentro do período de atendimento e sem ficar perto demais de outra consulta). Se a ferramenta recusar, explique com naturalidade o motivo que ela deu e ofereça o horário original ou outra opção, sem insistir. Aqui, dentro dos 30 minutos, não prometa "vou perguntar pro doutor": a ferramenta já respondeu, e a resposta dela é a do consultório. Horário MUITO fora da grade é outra conversa e tem regra própria (ver HORÁRIO QUE A AGENDA NÃO TEM, logo abaixo).
 
@@ -240,7 +249,7 @@ brunofransoares@gmail.com
 
 Se preferir cartão em até 3x, me avisa que te mando o link."
 
-O valor entre parênteses é o daquela consulta: se a ferramenta devolveu outro valor (fim de semana, R$ 800,00), é esse que vai. E a chave fica sozinha na própria linha, pra ser fácil de copiar.
+O valor entre parênteses é o daquela consulta: se a ferramenta devolveu outro valor (fim de semana, R$ 800,00), é esse que vai. PRA IRMÃOS, o valor é o valorDoGrupo que a ferramenta devolveu (R$ 1.000,00 pra duas crianças), e a mensagem sai UMA vez só, depois da última reserva, com os dois horários na linha "Deixei separado" ("Deixei separado para vocês: [horário 1] pro [nome 1] e [horário 2] pro [nome 2]."): um pagamento pras duas consultas, nunca duas mensagens de Pix. E a chave fica sozinha na própria linha, pra ser fácil de copiar.
 
 VOCÊ NÃO PERGUNTA MAIS "PIX OU CARTÃO?": a escolha está na própria mensagem. Perguntar antes custava uma ida e volta inteira pra saber uma coisa que a maioria responde igual. Se a família disser que prefere cartão, use somente formasPagamento.linkCartao devolvido pela ferramenta para aquela reserva. Se formasPagamento.cartao for false, não invente nem reutilize link: use escalar_humano para o Dr. Bruno gerar o link daquele valor.
 
@@ -298,7 +307,7 @@ Se não for possível ajudar com segurança, ou a situação realmente exigir al
 
 CONTATO COMERCIAL/PROFISSIONAL (não é família de paciente): se a mensagem for claramente de representante de laboratório, convite pra palestra/evento, proposta de parceria, divulgação de produto ou qualquer contato comercial/profissional que não seja sobre agendar consulta pra uma criança, NÃO tente ajudar nem conduza como se fosse atendimento normal. Responda educadamente, uma única vez, algo como "Obrigada pelo contato! Vou repassar essa mensagem pro Dr. Bruno." e use escalar_humano com tipo="comercial" e o motivo resumindo do que se trata. Depois dessa resposta o próprio sistema já para de responder essa conversa sozinho, sem você fazer nada: NÃO escreva a palavra SILENCIO nem nenhuma outra mensagem sobre o assunto (ver SILENCIO É COMANDO PRO SISTEMA). Sua parte é aquela resposta única e a ferramenta, mais nada.
 
-NUNCA: usar menu numerado, resposta gigante, repetir saudação, responder só o preço seco, negociar valor, oferecer desconto, fazer interrogatório, despejar currículo de uma vez, parecer clínica popular ou chatbot automático.`;
+NUNCA: usar menu numerado, resposta gigante, repetir saudação, responder só o preço seco, negociar valor, oferecer desconto fora do preço de tabela de irmãos, fazer interrogatório, despejar currículo de uma vez, parecer clínica popular ou chatbot automático.`;
 
 // A parte que muda de conversa pra conversa. Fica DEPOIS do bloco estável na chamada da
 // API, senão nada acima dela seria aproveitado do cache.
@@ -491,6 +500,7 @@ const FERRAMENTAS = [
         responsavel: { type: "string", description: "Só o primeiro nome de quem vai levar a criança. Se a família mandar o nome completo, use só o primeiro." },
         crianca: { type: "string", description: "Nome COMPLETO da criança, como está no documento. É o nome que vai virar a ficha dela no prontuário, então nome só de primeiro nome não serve." },
         horarioAjustado: { type: ["string", "null"], description: "Preencha (formato HH:MM) só se a família pediu um horário diferente do slotId, até 30 minutos de diferença (ex: slotId era 08:00 e pediram 08:30). A ferramenta valida se cabe de verdade. Deixe null se for exatamente o horário do slotId." },
+        criancasJuntas: { type: "integer", minimum: 1, description: "Quantas crianças da MESMA família estão sendo marcadas juntas nesta conversa, no mesmo dia. 1 quando é uma só. 2 ou mais é irmãos: aí cada criança custa R$ 500 (2 = R$ 1.000, 3 = R$ 1.500), num pagamento só, e você passa o MESMO número em cada chamada de confirmar_agendamento do grupo. O valor conferido pela ferramenta é o TOTAL do grupo." },
       },
       required: ["slotId", "slotLabel", "responsavel", "crianca"],
     },
@@ -789,16 +799,40 @@ async function executarFerramenta(nome, input, ctx) {
     }
 
     const prazo = Prazo.prazoDePagamento(slotFinal, ctx.now);
-    const preco = Preco.precoDaConsulta(slotFinal);
-    const formasPagamento = LinksPagamento.formasParaPreco(preco.centavos);
-    if (!EstadoAtendimento.precoFoiInformado(ctx.estadoAtendimento, preco.centavos)) {
+
+    // IRMÃOS JUNTOS. O tamanho do grupo é o maior entre o que a Carla disse (criancasJuntas)
+    // e o que a agenda já mostra pra este telefone neste dia + esta reserva. Assim a segunda
+    // chamada enxerga "2" mesmo que ela esqueça o parâmetro, e o preço conferido é sempre o
+    // TOTAL do grupo, que é o que a família ouviu e o que ela vai pagar, num pagamento só.
+    const jaMarcadasNoDia = Storage.lerAgendamentos()
+      .filter((a) => a.telefone === ctx.telefone && a.data === slotFinal.date).length;
+    const criancasJuntas = Math.max(
+      Math.floor(Number(input.criancasJuntas) || 1),
+      jaMarcadasNoDia + 1,
+    );
+    const grupo = Preco.precoDoGrupo(slotFinal, criancasJuntas);
+    // O que ESTA consulta vale sozinha (por criança) e o que o GRUPO vale (o pagamento).
+    const preco = { centavos: grupo.porCriancaCentavos, reais: grupo.porCrianca, fimDeSemana: grupo.fimDeSemana };
+    const formasPagamento = LinksPagamento.formasParaPreco(grupo.centavos);
+    if (!EstadoAtendimento.precoFoiInformado(ctx.estadoAtendimento, grupo.centavos)) {
+      // Se ela informou um valor que é o total de OUTRO tamanho de grupo, o erro é o
+      // parâmetro, não o preço: dizer isso poupa uma volta inteira com a família.
+      const informado = Number(ctx.estadoAtendimento && ctx.estadoAtendimento.precoInformadoValor) || 0;
+      let dica = "";
+      for (let n = 1; n <= 5; n++) {
+        if (n !== criancasJuntas && Preco.precoDoGrupo(slotFinal, n).centavos === informado) {
+          dica = ` Você informou o valor de ${n} criança(s) junta(s), mas esta reserva está sendo feita como ${criancasJuntas}. Se são ${n} crianças, chame de novo com criancasJuntas=${n}; se não, informe o valor certo antes.`;
+        }
+      }
       return {
         sucesso: false,
         precisaInformarPreco: true,
         valorDaConsulta: preco.reais,
+        valorDoGrupo: grupo.reais,
+        criancasJuntas,
         atendimentoParticular: true,
         formasPagamento,
-        motivo: `Antes de reservar, informe ${preco.reais}, diga que o atendimento é particular e aguarde uma nova mensagem da família. Não chame confirmar_agendamento novamente nesta mesma resposta.`,
+        motivo: `Antes de reservar, informe ${grupo.reais}${grupo.irmaos ? ` (${criancasJuntas} crianças juntas, ${grupo.porCrianca} cada, num pagamento só)` : ""}, diga que o atendimento é particular e aguarde uma nova mensagem da família. Não chame confirmar_agendamento novamente nesta mesma resposta.${dica}`,
       };
     }
 
@@ -879,10 +913,15 @@ async function executarFerramenta(nome, input, ctx) {
     const resposta = {
       valorDaConsulta: preco.reais,
       valorCentavos: preco.centavos,
+      criancasJuntas,
+      valorDoGrupo: grupo.reais,
+      valorDoGrupoCentavos: grupo.centavos,
       formasPagamento,
       avisoValor: preco.fimDeSemana
         ? `Esse horário é de FIM DE SEMANA, então a consulta é ${preco.reais}, não o valor normal. Diga esse valor à família.`
-        : undefined,
+        : (grupo.irmaos
+          ? `São ${criancasJuntas} crianças juntas: ${grupo.porCrianca} cada, ${grupo.reais} no TOTAL, num pagamento só. Na mensagem de pagamento use o total (${grupo.reais}), uma mensagem só pras ${criancasJuntas} consultas, depois de reservar TODAS.`
+          : undefined),
       sucesso: true,
       slotId: reservaSlotId,
       agendaSlotId: slotFinal.id,
@@ -1064,6 +1103,23 @@ async function executarFerramenta(nome, input, ctx) {
       appAgendamentoId: removido.appAgendamentoId || null,
     });
     ctx.estadoAtendimento = EstadoAtendimento.concluirCancelamento(ctx.estadoAtendimento);
+
+    // Cancelou um irmão: o preço não fica congelado. O que sobrou nesse dia é recalculado
+    // como grupo menor, e um de dois volta a R$ 550 sozinho. Se o grupo já tinha pago o
+    // total, a diferença é acerto do Dr. Bruno, não da Carla.
+    const restantesNoDia = Storage.lerAgendamentos()
+      .filter((a) => a.telefone === ctx.telefone && a.data === removido.data);
+    let valorAtualizado;
+    if (restantesNoDia.length > 0) {
+      const novoGrupo = Preco.precoDoGrupo({ date: removido.data }, restantesNoDia.length);
+      const algumPago = restantesNoDia.some((a) => a.pago || a.estado === "pago");
+      valorAtualizado = {
+        consultasRestantesNoDia: restantesNoDia.length,
+        valorPorCrianca: novoGrupo.porCrianca,
+        valorTotal: novoGrupo.reais,
+        aviso: `Com esse cancelamento ${restantesNoDia.length === 1 ? "sobrou 1 consulta" : `sobraram ${restantesNoDia.length} consultas`} nesse dia: o valor passa a ser ${novoGrupo.reais}${novoGrupo.irmaos ? ` (${novoGrupo.porCrianca} cada)` : ""}. Diga isso à família.${algumPago ? " A família já tinha pago o valor do grupo maior: chame escalar_humano pro Dr. Bruno acertar a diferença. Você não promete estorno nem valor de estorno." : ""}`,
+      };
+    }
     return {
       sucesso: true,
       slotId: removido.slotId,
@@ -1071,6 +1127,7 @@ async function executarFerramenta(nome, input, ctx) {
       crianca: removido.crianca,
       googleEventId: removido.googleEventId || null,
       appAgendamentoId: removido.appAgendamentoId || null,
+      valorAtualizado,
     };
   }
 
