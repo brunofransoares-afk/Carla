@@ -84,6 +84,10 @@ const SABADO = { date: "2026-09-12" };
   eq(lerPreco("O atendimento é particular. Os três ficam em R$ 1.500 no total."), 150000, "3d. três crianças");
   eq(lerPreco("O atendimento é particular. R$ 1000 pelas duas."), 100000, "3e. sem o ponto de milhar também vale");
   eq(lerPreco("O atendimento é particular. R$ 1.000,00 pelas duas."), 100000, "3f. com centavos também");
+  eq(lerPreco("O atendimento é particular. A consulta é R$ 550. Pra dois irmãos marcados juntos, fica R$ 500 cada, R$ 1.000 pelos dois."), 100000,
+    "3g. a frase completa, com o 550 na frente: a máquina escolhe o total, então o 550 é seguro e a proibição dele era desnecessária");
+  eq(lerPreco("O atendimento é particular. A consulta é R$ 550. Pra três irmãos fica R$ 500 cada, R$ 1.500 pelos três."), 150000,
+    "3h. idem com três");
 }
 
 // ------------------------------------------------- 4. a ambiguidade continua sendo "não sei"
@@ -151,8 +155,8 @@ const SABADO = { date: "2026-09-12" };
     "8d. 'não consegue pagar' diz na cara que irmãos não é saída pra quem acha caro uma consulta");
   ok(!/O valor é o mesmo pra todos os casos\./.test(SEM_COMENTARIO),
     "8e. a frase absoluta antiga, que agora seria falsa, não pode continuar");
-  ok(/é o do grupo, do jeito que IRMÃOS \/ MAIS DE UMA CRIANÇA manda/.test(SEM_COMENTARIO),
-    "8f. e a REGRA SOBRE PREÇO sabe que 'valor pra dois irmãos' é pergunta de grupo");
+  ok(/os três números do jeito que IRMÃOS \/ MAIS DE UMA CRIANÇA manda/.test(SEM_COMENTARIO),
+    "8f. e a REGRA SOBRE PREÇO sabe que 'valor pra dois irmãos' é pergunta de grupo, com os três números");
 }
 
 // ------------------------------------------------- 9. a regra de irmãos
@@ -160,9 +164,16 @@ const SABADO = { date: "2026-09-12" };
   ok(/HORÁRIOS SEGUIDOS SÃO O PADRÃO, não um favor a pedido/.test(SEM_COMENTARIO),
     "9. doisSeguidos vira o padrão pra irmãos, sem a família pedir");
   ok(/consultar_horarios com doisSeguidos=true já na primeira busca/.test(SEM_COMENTARIO), "9b. já na primeira busca");
-  ok(/R\$ 500 cada, R\$ 1\.000 pelas duas, num pagamento só/.test(SEM_COMENTARIO),
-    "9c. o exemplo de frase tem os dois números e o total por último, que é o que a máquina lê");
-  ok(/Não diga R\$ 550 pra irmãos/.test(SEM_COMENTARIO), "9d. e proíbe o 550 pra irmãos, que travaria a reserva");
+  // Um atendimento real (09/09, 10:38) mostrou o defeito da versão anterior desta regra: ela
+  // proibia o R$ 550 pra irmãos, e a família entendeu que a consulta custa R$ 500. O 550 é
+  // seguro pra máquina (ver 3g abaixo), então ele volta, e volta OBRIGATÓRIO.
+  ok(/A consulta é R\$ 550\. Pra dois irmãos marcados juntos, fica R\$ 500 cada, R\$ 1\.000 pelos dois, num pagamento só/.test(SEM_COMENTARIO),
+    "9c. o exemplo de frase tem os TRÊS números: o de uma consulta, o por criança e o total por último");
+  ok(/O R\$ 550 vem SEMPRE/.test(SEM_COMENTARIO), "9d. o valor de uma consulta é obrigatório na frase de irmãos");
+  ok(!/Não diga R\$ 550 pra irmãos/.test(SEM_COMENTARIO),
+    "9d2. a proibição antiga do 550, que fazia a família achar que a consulta custa R$ 500, não pode voltar");
+  ok(/Nunca só o valor de irmãos, senão a família acha que a consulta custa R\$ 500/.test(SEM_COMENTARIO),
+    "9d3. e a REGRA SOBRE PREÇO diz o mesmo, pelo mesmo motivo");
   ok(/passando criancasJuntas com o TOTAL de crianças em TODAS as chamadas/.test(SEM_COMENTARIO),
     "9e. o mesmo criancasJuntas em todas as chamadas do grupo");
   ok(/A mensagem de pagamento sai UMA vez, depois de TODAS as reservas/.test(SEM_COMENTARIO),
