@@ -70,6 +70,10 @@ function bate(slot, { diaPreferido = null, periodo = null, dataPreferida = null 
   if (diaPreferido !== null && slot.weekday !== diaPreferido) return false;
   if (periodo === "manha" && slot.time >= "12:00") return false;
   if (periodo === "tarde" && slot.time < "12:00") return false;
+  // O corte da teleconsulta: "comercial" é antes das 18h, "noite" é das 18h em diante. A
+  // grade normal inteira é comercial; os horários fixos de vídeo são noite.
+  if (periodo === "noite" && slot.time < "18:00") return false;
+  if (periodo === "comercial" && slot.time >= "18:00") return false;
   return true;
 }
 

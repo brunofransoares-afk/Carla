@@ -30,7 +30,7 @@ function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + "
 // Storage isolado: grava em ./data ao lado de si mesmo, então sem cópia sujaria dado real.
 const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-tele-")), "bot");
 fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
-for (const f of ["storage-node.js", "arquivo-atomico.js"]) fs.copyFileSync(path.join(__dirname, "..", f), path.join(RAIZ, f));
+for (const f of ["storage-node.js", "arquivo-atomico.js", "grade-teleconsulta.js"]) fs.copyFileSync(path.join(__dirname, "..", f), path.join(RAIZ, f));
 const IRMA = path.join(RAIZ, "carla-app", "js");
 fs.mkdirSync(IRMA, { recursive: true });
 fs.writeFileSync(path.join(IRMA, "config.js"), 'global.CARLA_CONFIG = { nomesDiaSemana: ["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"] };\n');

@@ -7,6 +7,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { DatabaseSync } = require("node:sqlite");
 const { escreverTextoAtomico, escreverJSONAtomico, lerJSONSeguro } = require("./arquivo-atomico.js");
+const GradeTele = require("./grade-teleconsulta.js");
 
 // Garante CARLA_CONFIG (global) antes do Agenda, que depende dele — precisa disso aqui
 // porque o painel (painel-server.js) usa este arquivo sem nunca ter carregado config.js.
@@ -404,7 +405,7 @@ function lerHorariosExtras() {
 // que a Carla lê, na lista do painel e na regra de oferta (extrasDisponiveis). Um extra
 // antigo, sem a marca, continua valendo pra tudo, como sempre foi. O id NÃO muda com a marca:
 // é a mesma vaga, só com restrição.
-function slotDeExtra({ data, hora, soTeleconsulta = false }) {
+function slotDeExtra({ data, hora, soTeleconsulta = false, fixo = false }) {
   const [ano, mes, dia] = data.split("-").map(Number);
   const nomesDia = (global.CARLA_CONFIG && global.CARLA_CONFIG.nomesDiaSemana) || [];
   const nomeDia = nomesDia[new Date(ano, mes - 1, dia).getDay()] || "";
@@ -417,13 +418,21 @@ function slotDeExtra({ data, hora, soTeleconsulta = false }) {
     label: soTeleconsulta ? `${base} (só teleconsulta)` : base,
     extra: true,
     soTeleconsulta: !!soTeleconsulta,
+    // Gerado pela grade fixa de teleconsulta (grade-teleconsulta.js), não liberado na mão.
+    // Não se remove pelo painel: se um dia específico não puder, bloqueia o horário.
+    fixo: !!fixo,
   };
 }
 
 // Slots extras que ainda fazem sentido oferecer: só os que não passaram. Ordenados no
 // tempo. Não filtra ocupado/bloqueado — quem chama cuida disso (igual à grade padrão).
 function listarSlotsExtras(now = new Date()) {
-  return lerHorariosExtras()
+  // Os liberados na mão vêm primeiro e VENCEM: se o Dr. Bruno liberou o mesmo horário de
+  // um dia fixo pelo painel (com ou sem a marca de vídeo), vale o que ele decidiu ali.
+  const manuais = lerHorariosExtras();
+  const chaves = new Set(manuais.map((e) => `${e.data}-${e.hora}`));
+  const fixos = GradeTele.gerarExtrasFixos(now).filter((e) => !chaves.has(`${e.data}-${e.hora}`));
+  return [...manuais, ...fixos]
     .map(slotDeExtra)
     .filter((s) => {
       const [ano, mes, dia] = s.date.split("-").map(Number);
@@ -469,6 +478,9 @@ function extrasDisponiveis(now = new Date(), ocupados = new Set(), filtros = {})
       const hora = Number(s.time.split(":")[0]);
       if (periodo === "manha" && hora >= 12) return false;
       if (periodo === "tarde" && hora < 12) return false;
+      // "comercial" e "noite" são o corte da teleconsulta (ver grade-teleconsulta.js).
+      if (periodo === "noite" && GradeTele.periodoDaHora(s.time) !== "noite") return false;
+      if (periodo === "comercial" && GradeTele.periodoDaHora(s.time) !== "comercial") return false;
     }
     return true;
   });
@@ -517,6 +529,7 @@ function listarHorariosDoDia(dataStr, now = new Date()) {
         bloqueado: diaTodoBloqueado || bloqueiosHorarios.has(s.id),
         extra: !!s.extra,
         soTeleconsulta: !!s.soTeleconsulta,
+        fixo: !!s.fixo,
         modalidade: agendamento ? (agendamento.modalidade || "presencial") : null,
       };
     });
