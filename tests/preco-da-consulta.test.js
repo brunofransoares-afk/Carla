@@ -65,7 +65,10 @@ const slot = (date, time = "08:00") => ({ date, time });
 // ------------------------------------------------- 5. quem usa isso é quem cria a cobrança
 {
   const fonte = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
-  ok(/Preco\.precoDaConsulta\(slotFinal\)/.test(fonte),
+  // A intenção é "o valor vem deste módulo". A chamada passou de precoDaConsulta(slot) para
+  // precoDoGrupo(slot, criancasJuntas) quando entrou o preço de irmãos; travar o NOME da
+  // função quebrava sem nada ter regredido. O que não pode existir é conta de preço solta.
+  ok(/Preco\.precoDoGrupo\(slotFinal, criancasJuntas\)/.test(fonte),
     "5. o valor da cobrança vem daqui, não de uma constante solta");
   ok(!/PRECO_CONSULTA_CENTAVOS \|\| 55000\);/.test(fonte),
     "5. e a constante antiga de valor único saiu do cerebro-ia.js");
