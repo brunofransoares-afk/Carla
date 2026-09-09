@@ -21,6 +21,7 @@ fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 fs.mkdirSync(path.join(RAIZ, "carla-app", "js"), { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "storage-node.js"));
 fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
+fs.copyFileSync(path.join(__dirname, "..", "grade-teleconsulta.js"), path.join(RAIZ, "grade-teleconsulta.js"));
 fs.writeFileSync(path.join(RAIZ, "carla-app", "js", "config.js"), `
 global.CARLA_CONFIG = { nomesDiaSemana: ["domingo","segunda","terça","quarta","quinta","sexta","sábado"] };
 `);

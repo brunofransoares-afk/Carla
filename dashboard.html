@@ -603,13 +603,15 @@
             ? `${h.responsavel} / ${h.crianca}`
             : (h.bloqueado ? "Bloqueado — clique pra liberar" : "Livre — clique pra bloquear");
           if (h.soTeleconsulta) classes.push("so-tele");
-          const sufixo = h.soTeleconsulta ? " (extra, só teleconsulta)" : (h.extra ? " (horário extra)" : "");
+          const sufixo = h.fixo ? " (grade fixa de teleconsulta)" : (h.soTeleconsulta ? " (extra, só teleconsulta)" : (h.extra ? " (horário extra)" : ""));
           return `<button class="${classes.join(" ")}" ${h.ocupado ? "disabled" : `data-slot-id="${escapeHtml(h.slotId)}"`} title="${escapeHtml(titulo + sufixo)}">${h.time}</button>`;
         }).join("")}</div>`;
 
     // Só dá pra remover um horário extra que ainda não tem consulta marcada — senão a
     // consulta ficaria órfã, sem o horário correspondente na agenda.
-    const extrasRemoviveis = horarios.filter((h) => h.extra && !h.ocupado);
+    // Os da grade fixa de vídeo não se removem (são regra, não clique): pra tirar um dia
+    // específico de circulação, bloqueia o horário na grade, como qualquer outro.
+    const extrasRemoviveis = horarios.filter((h) => h.extra && !h.ocupado && !h.fixo);
     const chipsExtras = extrasRemoviveis.length === 0 ? "" : `<div class="extras-lista">${extrasRemoviveis.map((h) =>
       `<span class="chip-extra${h.soTeleconsulta ? " so-tele" : ""}">${h.time}${h.soTeleconsulta ? '<span class="tag-tele" title="Só teleconsulta">vídeo</span>' : ""}<button data-remover-extra="${escapeHtml(h.slotId)}" title="Remover esse horário extra">✕</button></span>`
     ).join("")}</div>`;

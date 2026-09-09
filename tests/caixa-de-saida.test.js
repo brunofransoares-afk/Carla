@@ -17,6 +17,7 @@ fs.mkdirSync(path.join(raiz, "data"), { recursive: true });
 fs.mkdirSync(irma, { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(raiz, "storage-node.js"));
 fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(raiz, "arquivo-atomico.js"));
+fs.copyFileSync(path.join(__dirname, "..", "grade-teleconsulta.js"), path.join(raiz, "grade-teleconsulta.js"));
 fs.writeFileSync(path.join(irma, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
 fs.writeFileSync(path.join(irma, "agenda.js"), "module.exports = {};\n");
 

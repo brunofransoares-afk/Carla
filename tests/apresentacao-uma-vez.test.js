@@ -35,6 +35,7 @@ const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-apres-")), "
 fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "storage-node.js"));
 fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
+fs.copyFileSync(path.join(__dirname, "..", "grade-teleconsulta.js"), path.join(RAIZ, "grade-teleconsulta.js"));
 // storage-node puxa config.js e agenda.js da pasta irmã. Nada do que esta bateria testa
 // (paciente, apresentação, contatos) passa por eles, então dublês bastam — e assim a bateria
 // roda em máquina onde carla-app não existe, que é o caso hoje: a pasta não está em git
