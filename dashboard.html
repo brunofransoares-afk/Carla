@@ -173,6 +173,12 @@
   .extra-form button { border: none; background: rgba(203,160,90,0.18); color: var(--ouro-claro); border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
   .extra-form button:hover { background: rgba(203,160,90,0.3); }
   .extras-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  /* Horário só de teleconsulta: mesma cor da família "extra", com a etiqueta "vídeo" pra
+     não confundir com um extra comum na hora de bater o olho no dia. */
+  .extra-tele { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--texto-fraco); white-space: nowrap; cursor: pointer; }
+  .extra-tele input { accent-color: var(--acento); }
+  .tag-tele { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; padding: 1px 5px; border-radius: 999px; background: rgba(203,160,90,0.22); color: var(--ouro-claro); }
+  .horario-slot.so-tele::after { content: "📹"; font-size: 9px; margin-left: 3px; }
   .chip-extra { display: inline-flex; align-items: center; gap: 6px; background: rgba(203,160,90,0.1); border: 1px solid rgba(203,160,90,0.25); color: var(--ouro-claro); font-size: 11.5px; padding: 4px 6px 4px 10px; border-radius: 12px; }
   .chip-extra button { border: none; background: rgba(203,160,90,0.25); color: #f3e2c4; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; }
   .chip-extra button:hover { background: rgba(203,160,90,0.45); }
@@ -596,7 +602,8 @@
           const titulo = h.ocupado
             ? `${h.responsavel} / ${h.crianca}`
             : (h.bloqueado ? "Bloqueado — clique pra liberar" : "Livre — clique pra bloquear");
-          const sufixo = h.extra ? " (horário extra)" : "";
+          if (h.soTeleconsulta) classes.push("so-tele");
+          const sufixo = h.soTeleconsulta ? " (extra, só teleconsulta)" : (h.extra ? " (horário extra)" : "");
           return `<button class="${classes.join(" ")}" ${h.ocupado ? "disabled" : `data-slot-id="${escapeHtml(h.slotId)}"`} title="${escapeHtml(titulo + sufixo)}">${h.time}</button>`;
         }).join("")}</div>`;
 
@@ -604,12 +611,13 @@
     // consulta ficaria órfã, sem o horário correspondente na agenda.
     const extrasRemoviveis = horarios.filter((h) => h.extra && !h.ocupado);
     const chipsExtras = extrasRemoviveis.length === 0 ? "" : `<div class="extras-lista">${extrasRemoviveis.map((h) =>
-      `<span class="chip-extra">${h.time}<button data-remover-extra="${escapeHtml(h.slotId)}" title="Remover esse horário extra">✕</button></span>`
+      `<span class="chip-extra${h.soTeleconsulta ? " so-tele" : ""}">${h.time}${h.soTeleconsulta ? '<span class="tag-tele" title="Só teleconsulta">vídeo</span>' : ""}<button data-remover-extra="${escapeHtml(h.slotId)}" title="Remover esse horário extra">✕</button></span>`
     ).join("")}</div>`;
 
     painel.innerHTML = `${cabecalho}${grade}
       <div class="extra-form">
         <input type="time" id="input-hora-extra" step="1800">
+        <label class="extra-tele"><input type="checkbox" id="input-extra-tele"> só teleconsulta</label>
         <button id="btn-add-extra">Liberar horário</button>
       </div>${chipsExtras}`;
 
@@ -631,11 +639,12 @@
     const input = document.getElementById("input-hora-extra");
     const hora = (input.value || "").slice(0, 5);
     if (!hora) return;
+    const soTeleconsulta = !!document.getElementById("input-extra-tele").checked;
     try {
       await fetch("/api/horario-extra", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data, hora }),
+        body: JSON.stringify({ data, hora, soTeleconsulta }),
       });
     } catch (e) {
       // se falhar, o horário simplesmente não entra e dá pra tentar de novo
