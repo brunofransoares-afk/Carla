@@ -32,6 +32,7 @@ const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"))
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
 const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
+const Preco = require(path.join(__dirname, "preco-da-consulta.js"));
 const EstadoAtendimento = require(path.join(__dirname, "estado-atendimento.js"));
 const TriagemEmergencia = require(path.join(__dirname, "triagem-emergencia.js"));
 const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
@@ -505,13 +506,32 @@ function registrarPagamentoNaSessao(telefone, agendamento) {
   Storage.salvarSessao(telefone, sessao);
 }
 
+// Um "R$ 1.000" escrito pela Carla precisa virar 100000, senão a máquina nunca registra o
+// preço de irmãos e a reserva fica travada. Aceita "1.000", "1000" e "1.000,00".
+function valorEscrito(conteudo, centavos) {
+  const inteiro = String(Math.round(centavos / 100));
+  const comPonto = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, "\\.?");
+  return new RegExp(`R\\$\\s*${comPonto}(?:[.,]00)?\\b`, "i").test(conteudo);
+}
+
 function precoParticularInformado(texto) {
   const conteudo = String(texto || "");
   if (!/atendimento\s+(?:é\s+|eh\s+)?particular|consulta\s+(?:é\s+|eh\s+)?particular|particular[^\n]{0,100}R\$/i.test(conteudo)) return null;
   const valores = new Set();
-  if (/R\$\s*550(?:[.,]00)?\b/i.test(conteudo)) valores.add(55000);
-  if (/R\$\s*800(?:[.,]00)?\b/i.test(conteudo)) valores.add(80000);
-  return valores.size === 1 ? [...valores][0] : null;
+  if (valorEscrito(conteudo, 55000)) valores.add(55000);
+  if (valorEscrito(conteudo, 80000)) valores.add(80000);
+  // Irmãos: o valor POR CRIANÇA (R$ 500) e os TOTAIS do grupo (R$ 1.000, R$ 1.500...).
+  if (valorEscrito(conteudo, Preco.IRMAOS_POR_CRIANCA_CENTAVOS)) valores.add(Preco.IRMAOS_POR_CRIANCA_CENTAVOS);
+  const totais = Preco.totaisDeGrupoConhecidos();
+  for (const total of totais) if (valorEscrito(conteudo, total)) valores.add(total);
+
+  if (valores.size === 1) return [...valores][0];
+  // "R$ 500 cada, R$ 1.000 pelas duas" é UMA informação, não duas: o que vale é o total do
+  // grupo. Só quando a mensagem traz exatamente um total é que a ambiguidade desaparece;
+  // dois totais (ou nenhum) continua sendo "não sei", que é o comportamento seguro.
+  const totaisNaMensagem = [...valores].filter((v) => totais.includes(v));
+  if (totaisNaMensagem.length === 1) return totaisNaMensagem[0];
+  return null;
 }
 
 function combinarEfeitos(...efeitos) {
