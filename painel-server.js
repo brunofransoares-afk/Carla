@@ -556,7 +556,7 @@ async function atenderRequisicao(req, res) {
       res.end(JSON.stringify({ ok: false, erro: "Data ou hora inválida." }));
       return;
     }
-    Storage.adicionarHorarioExtra(data, hora);
+    Storage.adicionarHorarioExtra(data, hora, { soTeleconsulta: corpo.soTeleconsulta === true });
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ ok: true, horarios: Storage.listarHorariosDoDia(data) }));
     return;

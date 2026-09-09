@@ -111,6 +111,7 @@ FATOS (use só estes, nunca invente outro valor, horário ou informação):
 - POR ISSO, NUNCA DESCARTE A CONSULTA: você não diz que o atendimento dele "não substitui" o de um psiquiatra, não diz que a família "precisa mesmo" de um psiquiatra, e não manda ninguém seguir encaminhamento de outro profissional. Isso é parecer clínico, e não é seu. Você não é médica. Descartar uma consulta que o Dr. Bruno poderia atender tira um paciente dele e tira da família uma opção de verdade. Já aconteceu: uma mãe de criança autista foi embora depois de você dizer que ele "não substitui a consulta com psiquiatra infantil".
 - QUANDO A FAMÍLIA FALAR DE AUTISMO, TEA OU ENCAMINHAMENTO PRA PSIQUIATRA: acolha o que ela trouxe, diga que o Dr. Bruno acompanha crianças assim e que tem essa formação, e ofereça horário com naturalidade, como em qualquer outro caso. Se ela perguntar direto se ele é psiquiatra, responda a informação exata ("Ele é pediatra, com pós-graduação em Psiquiatria da Infância e Adolescência") e siga. Sem aviso, sem ressalva, sem "quis deixar claro antes": isso soa como desculpa e afasta.
 - Também atende por teleconsulta, mesmo valor da presencial. Só fale sobre teleconsulta (e a ressalva de que algumas situações exigem presencial, como exame físico, caso agudo ou 1ª consulta de recém-nascido) quando a pessoa perguntar especificamente sobre teleconsulta ou consulta por vídeo. Não traga esse assunto por conta própria em outras perguntas (ex: "atende recém-nascido?" não precisa de nenhuma ressalva sobre presencial/teleconsulta).
+- HORÁRIOS SÓ DE TELECONSULTA: o Dr. Bruno abre alguns horários exclusivos pra atendimento por vídeo. A teleconsulta pode usar qualquer horário normal da agenda E esses exclusivos; a consulta presencial usa só os normais. Isso funciona pelas ferramentas, não pela sua cabeça: quando a família disser que quer por vídeo, passe modalidade="teleconsulta" em consultar_horarios (só assim os exclusivos aparecem) e em confirmar_agendamento. Quando não disser nada, não passe modalidade (vale presencial) e os exclusivos nem aparecem. Um horário cujo label termina em "(só teleconsulta)" nunca é oferecido pra quem vai ao consultório, e a ferramenta recusa se você tentar. Você não anuncia que existem horários "extras de vídeo" nem oferece teleconsulta por conta própria: a regra de cima continua valendo.
 - Retorno: se o Dr. Bruno avaliar que precisa de um retorno depois da consulta, já está incluso no valor, não é garantido/automático, depende da avaliação dele. Só fale sobre isso se perguntarem.
 - Lembrete de consulta: a família recebe um aviso automático por WhatsApp 1 semana antes da consulta e outro no dia da consulta, confirmando data e horário. Isso é automático, garantido pelo sistema, não depende de ninguém lembrar manualmente. Se perguntarem se você avisa antes ou no dia, pode confirmar que sim, com tranquilidade.
 - Depois da consulta: contato direto por WhatsApp por 30 dias, para dúvidas, envio de exames e orientações relacionadas ao atendimento. Pode mencionar como diferencial quando fizer sentido, sem forçar.
@@ -477,6 +478,7 @@ const FERRAMENTAS = [
         data: { type: ["string", "null"], description: "Data específica pedida, formato AAAA-MM-DD, se a família mencionou uma data (ex: amanhã, dia 15)" },
         doisSeguidos: { type: "boolean", description: "true quando precisa de dois horários realmente consecutivos pra duas crianças da mesma família (ex: irmãos), ignora dia/periodo/data e busca o par mais próximo" },
         urgente: { type: "boolean", description: "true quando a família pediu algo rápido (encaixe, o quanto antes, essa semana), devolve os horários realmente mais próximos disponíveis, ignorando a preferência padrão do consultório. Não combine com dia/periodo/data." },
+        modalidade: { type: ["string", "null"], enum: ["teleconsulta", "presencial", null], description: "'teleconsulta' SÓ quando a família disse que quer atendimento por vídeo. Existem horários abertos exclusivamente pra teleconsulta, e eles só aparecem com esse valor. Sem a família dizer, deixe null (é tratado como presencial)." },
       },
     },
   },
@@ -491,6 +493,7 @@ const FERRAMENTAS = [
         responsavel: { type: "string", description: "Só o primeiro nome de quem vai levar a criança. Se a família mandar o nome completo, use só o primeiro." },
         crianca: { type: "string", description: "Nome COMPLETO da criança, como está no documento. É o nome que vai virar a ficha dela no prontuário, então nome só de primeiro nome não serve." },
         horarioAjustado: { type: ["string", "null"], description: "Preencha (formato HH:MM) só se a família pediu um horário diferente do slotId, até 30 minutos de diferença (ex: slotId era 08:00 e pediram 08:30). A ferramenta valida se cabe de verdade. Deixe null se for exatamente o horário do slotId." },
+        modalidade: { type: ["string", "null"], enum: ["teleconsulta", "presencial", null], description: "'teleconsulta' quando a família disse que quer por vídeo; null ou 'presencial' quando vai ao consultório. Um horário aberto só pra teleconsulta NÃO aceita presencial: a ferramenta recusa." },
       },
       required: ["slotId", "slotLabel", "responsavel", "crianca"],
     },
@@ -615,7 +618,7 @@ async function executarFerramenta(nome, input, ctx) {
       // que importa é o mais cedo, então um extra pode legitimamente vir antes da grade.
       const candidatosUrgente = [
         ...Agenda.disponiveis(ctx.now, ctx.idsOcupados),
-        ...Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados),
+        ...Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, { modalidade: input.modalidade === "teleconsulta" ? "teleconsulta" : null }),
       ].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).slice(0, 10);
       const livresUrgente = [];
       for (const c of candidatosUrgente) {
@@ -661,7 +664,8 @@ async function executarFerramenta(nome, input, ctx) {
     // depois de checar o Google Agenda — só ficam os 2 primeiros que passarem nas duas checagens.
     // A ordem entre grade e extras é decidida em ordem-dos-horarios.js: horário aberto no
     // painel é horário de verdade e concorre igual, senão nunca chega a ser oferecido.
-    const filtros = { diaPreferido, periodo, dataPreferida };
+    const modalidade = input.modalidade === "teleconsulta" ? "teleconsulta" : null;
+    const filtros = { diaPreferido, periodo, dataPreferida, modalidade };
     const pediuAlgo = diaPreferido !== null || periodo !== null || dataPreferida !== null;
     const slotsGrade = Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { ...filtros, count: 6 });
     const slotsExtras = Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, filtros);
@@ -730,6 +734,12 @@ async function executarFerramenta(nome, input, ctx) {
     const slotReal = Storage.slotsPossiveisComExtras(ctx.now).find((s) => s.id === input.slotId);
     if (!slotReal) {
       return { sucesso: false, motivo: "Esse horário não corresponde a um horário real da agenda. Se essa consulta já foi confirmada antes nesta conversa, não chame essa ferramenta de novo, apenas continue a conversa normalmente (ex: informando a forma de pagamento)." };
+    }
+    const modalidade = input.modalidade === "teleconsulta" ? "teleconsulta" : "presencial";
+    // Horário aberto só pra vídeo não vira consulta presencial, nem por engano: a família
+    // apareceria no consultório num horário em que o Dr. Bruno não pode receber ninguém.
+    if (slotReal.soTeleconsulta && modalidade !== "teleconsulta") {
+      return { sucesso: false, motivo: `O horário ${slotReal.label} é aberto SÓ pra teleconsulta e esta consulta é presencial. Não ofereça esse horário pra presencial. Consulte de novo sem modalidade='teleconsulta' e ofereça outro horário; se a família quiser por vídeo, aí sim marque com modalidade='teleconsulta'.` };
     }
 
     // SÓ MARCA O QUE FOI OFERECIDO. A checagem acima garante que o horário existe; esta
@@ -817,6 +827,7 @@ async function executarFerramenta(nome, input, ctx) {
       slot: slotFinal,
       responsavel,
       crianca,
+      modalidade,
       telefone: ctx.telefone,
       googleEventId: null,
       expiraEm: prazo.expiraEm,
@@ -828,7 +839,7 @@ async function executarFerramenta(nome, input, ctx) {
     const reservaSlotId = ok.slotId || slotFinal.id;
     const inicioIso = inicio.toISOString();
     const fimIso = fim.toISOString();
-    const titulo = `Consulta - ${crianca}`;
+    const titulo = `${modalidade === "teleconsulta" ? "Teleconsulta" : "Consulta"} - ${crianca}`;
     const descricao = `Responsável: ${responsavel}\nTelefone: ${ctx.telefone}\nAgendado pela Carla (WhatsApp)`;
     const dadosSpi = {
       pacienteNome: crianca,
@@ -886,6 +897,7 @@ async function executarFerramenta(nome, input, ctx) {
       sucesso: true,
       slotId: reservaSlotId,
       agendaSlotId: slotFinal.id,
+      modalidade,
       horarioSeparado: slotFinal.label,
       aviso: "O horário está SEPARADO, não confirmado. Quem confirma é o pagamento.",
       prazoPagamento: prazo.texto,

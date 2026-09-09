@@ -775,7 +775,7 @@ async function enfileirarIntegracoesDaReserva(acao, telefone) {
       slotId: agendamento.slotId,
       inicio,
       fim,
-      titulo: `Consulta - ${agendamento.crianca}`,
+      titulo: `${agendamento.modalidade === "teleconsulta" ? "Teleconsulta" : "Consulta"} - ${agendamento.crianca}`,
       descricao: `Responsável: ${agendamento.responsavel}\nTelefone: ${agendamento.telefone || telefone}\nAgendado pela Carla (WhatsApp)`,
     });
   }

@@ -398,17 +398,25 @@ function lerHorariosExtras() {
 
 // Monta um slot no mesmo formato dos gerados pela grade padrão ({id, date, time, label}).
 // O id leva o prefixo "extra-" pra nunca colidir com um id da grade.
-function slotDeExtra({ data, hora }) {
+// HORÁRIO SÓ DE TELECONSULTA. O Dr. Bruno abre extras pelo painel; alguns ele quer reservar
+// só pra atendimento por vídeo (dá pra encaixar entre coisas que não cabem uma consulta
+// presencial). O extra ganha a marca soTeleconsulta, e ela viaja no slot inteiro: no label
+// que a Carla lê, na lista do painel e na regra de oferta (extrasDisponiveis). Um extra
+// antigo, sem a marca, continua valendo pra tudo, como sempre foi. O id NÃO muda com a marca:
+// é a mesma vaga, só com restrição.
+function slotDeExtra({ data, hora, soTeleconsulta = false }) {
   const [ano, mes, dia] = data.split("-").map(Number);
   const nomesDia = (global.CARLA_CONFIG && global.CARLA_CONFIG.nomesDiaSemana) || [];
   const nomeDia = nomesDia[new Date(ano, mes - 1, dia).getDay()] || "";
   const horaLabel = typeof Agenda.formatHora === "function" ? Agenda.formatHora(hora) : hora;
+  const base = `${nomeDia} (${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}) às ${horaLabel}`;
   return {
     id: `extra-${data}-${hora}`,
     date: data,
     time: hora,
-    label: `${nomeDia} (${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}) às ${horaLabel}`,
+    label: soTeleconsulta ? `${base} (só teleconsulta)` : base,
     extra: true,
+    soTeleconsulta: !!soTeleconsulta,
   };
 }
 
@@ -442,11 +450,14 @@ function slotsPossiveisComExtras(now = new Date()) {
 // Extras realmente livres pra oferecer: tira os já ocupados/bloqueados e, quando pedido,
 // filtra por dia da semana, período ou data específica (mesmos critérios da grade).
 function extrasDisponiveis(now = new Date(), ocupados = new Set(), filtros = {}) {
-  const { diaPreferido = null, periodo = null, dataPreferida = null } = filtros;
+  const { diaPreferido = null, periodo = null, dataPreferida = null, modalidade = null } = filtros;
   const bloqueados = new Set(lerBloqueios());
   const grade = new Set(Agenda.gerarSlotsPossiveis(now).map((s) => chaveHorarioReal(s.date, s.time)));
   return listarSlotsExtras(now).filter((s) => {
     if (grade.has(chaveHorarioReal(s.date, s.time))) return false;
+    // Só entra na roda pra quem pediu teleconsulta. Sem modalidade (a família não disse) é
+    // presencial: o padrão seguro é NUNCA oferecer um horário de vídeo pra quem vai vir.
+    if (s.soTeleconsulta && modalidade !== "teleconsulta") return false;
     if (ocupados.has(s.id)) return false;
     if (bloqueados.has(s.date)) return false;
     if (dataPreferida && s.date !== dataPreferida) return false;
@@ -463,11 +474,13 @@ function extrasDisponiveis(now = new Date(), ocupados = new Set(), filtros = {})
   });
 }
 
-function adicionarHorarioExtra(data, hora) {
+function adicionarHorarioExtra(data, hora, { soTeleconsulta = false } = {}) {
   return atualizarJSON(ARQ_HORARIOS_EXTRAS, [], (lista) => {
-    if (!lista.some((e) => e.data === data && e.hora === hora)) {
-      lista.push({ data, hora });
-    }
+    const existente = lista.find((e) => e.data === data && e.hora === hora);
+    // Liberar de novo o mesmo horário com a marca diferente ATUALIZA a marca: é o jeito de
+    // corrigir um clique errado sem ter que remover e recriar.
+    if (existente) existente.soTeleconsulta = !!soTeleconsulta;
+    else lista.push({ data, hora, soTeleconsulta: !!soTeleconsulta });
     return lista;
   });
 }
@@ -503,6 +516,8 @@ function listarHorariosDoDia(dataStr, now = new Date()) {
         crianca: agendamento ? agendamento.crianca : null,
         bloqueado: diaTodoBloqueado || bloqueiosHorarios.has(s.id),
         extra: !!s.extra,
+        soTeleconsulta: !!s.soTeleconsulta,
+        modalidade: agendamento ? (agendamento.modalidade || "presencial") : null,
       };
     });
   return { diaTodoBloqueado, horarios };
@@ -576,7 +591,7 @@ function limparDadosPendentes(telefone) {
 // Retorna false se o horário já tiver sido reservado por outra família (nunca deixa
 // duplicar). Quando dá certo devolve o agendamento criado, porque quem chama precisa
 // saber se veio e-mail/nascimento junto (do bolso de pendentes) pra mandar pro prontuário.
-function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, expiraEm = null, expiresAt = null }) {
+function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, expiraEm = null, expiresAt = null, modalidade = "presencial" }) {
   // O que a família adiantou antes de ter horário entra aqui, no agendamento certo.
   const pendentes = lerDadosPendentes(telefone);
   const agora = new Date();
@@ -589,6 +604,8 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, 
     // da grade, que pode ser ocupada novamente quando esta reserva ficar inativa.
     slotId: `reserva-${crypto.randomUUID()}`,
     agendaSlotId: slot.id,
+    // "presencial" ou "teleconsulta". Vai pro painel e pro título do evento na agenda.
+    modalidade: modalidade === "teleconsulta" ? "teleconsulta" : "presencial",
     data: slot.date,
     horario: slot.time,
     diaLabel: slot.label,
