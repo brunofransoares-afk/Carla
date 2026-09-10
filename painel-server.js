@@ -581,6 +581,16 @@ async function atenderRequisicao(req, res) {
     return;
   }
 
+  // Reativar consulta vencida ou cancelada. Quem faz é o bot (cria reserva nova e enfileira
+  // SPI e Google); isto só encaminha, igual aos outros botões que mexem no mundo.
+  if (caminhoPedido === "/api/crm/reativar" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = await encaminharAoBot("/interno/reativar-reserva", JSON.stringify({ slotId: corpo.slotId }));
+    res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(r.texto);
+    return;
+  }
+
   if (caminhoPedido === "/api/crm/etiquetas" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const r = Crm.definirEtiquetas(ARQ_CRM, corpo.telefone, corpo.etiquetas);
