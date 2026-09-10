@@ -164,7 +164,7 @@ async function avisarPagamentoConfirmadoNaFila(slotId) {
       : `É pra criar o portal de ${primeiroNome(a.crianca)}: um espaço só de vocês, onde você guarda os exames, a carteira de vacinação e o peso e altura, e compara os exames antigos com os novos. As receitas e os documentos que o Dr. Bruno passar também ficam lá, junto com o crescimento e as vacinas que ainda faltam.`
   }`;
 
-  const texto = `Pagamento recebido! 😊\n\nA consulta de ${primeiroNome(a.crianca)} está confirmada para ${a.diaLabel}.\n\nEndereço: Rua Ranulpho Alvarenga Ferreira, 61${pedido}\n\nQualquer coisa até lá, é só me chamar por aqui.`;
+  const texto = `Pagamento recebido! 😊\n\nA consulta de ${primeiroNome(a.crianca)} está confirmada para ${a.diaLabel}.\n\nEndereço: Rua Ranulpho Alvarenga Ferreira, 61\n${LINK_MAPA}\n\n${O_QUE_LEVAR}${pedido}\n\nSe precisar remarcar ou for atrasar, é só me avisar por aqui.`;
 
   // O fato do pagamento vem do painel e vale mesmo se o WhatsApp estiver reconectando.
   // A mensagem fica na caixa de saída, mas a próxima conversa já não pode tratar a consulta
@@ -507,6 +507,30 @@ function resumoDeAgendamento(agendamento) {
 
 function agendamentoAtualReal(telefone, now = new Date()) {
   return Storage.proximaConsultaDoTelefone(telefone, now);
+}
+
+// Endereço com mapa e o que levar: as três informações que toda confirmação de consulta
+// precisa ter (endereço com link, o que trazer, o que fazer se atrasar). Entram na
+// confirmação do pagamento e nos lembretes, que são código, não IA.
+const LINK_MAPA = String(process.env.LINK_MAPA || "").trim()
+  || "https://www.google.com/maps/search/?api=1&query=Rua+Ranulpho+Alvarenga+Ferreira,+61,+Limeira+-+SP";
+const O_QUE_LEVAR = "O que levar: carteira de vacinação, exames recentes se tiver, e os remédios que a criança usa.";
+
+// A consulta que aconteceu há menos de 30 dias nesse telefone: a família está no
+// acompanhamento pelo WhatsApp, e uma dúvida sobre a criança é do Dr. Bruno, não um
+// agendamento novo. Vai pro prompt como fato da agenda.
+const JANELA_ACOMPANHAMENTO_DIAS = 30;
+function consultaRecenteDe(telefone, now = new Date()) {
+  const hoje = Agenda.toDateStr(now);
+  const realizadas = Storage.lerTodosAgendamentos(now)
+    .filter((a) => a.telefone === telefone && (a.estado === "pago" || a.estado === "reservado") && a.data < hoje)
+    .sort((a, b) => (b.data + b.horario).localeCompare(a.data + a.horario));
+  const ultima = realizadas[0];
+  if (!ultima) return null;
+  const [y, m, d] = ultima.data.split("-").map(Number);
+  const diasDesde = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(y, m - 1, d)) / 86400000);
+  if (diasDesde < 0 || diasDesde > JANELA_ACOMPANHAMENTO_DIAS) return null;
+  return { crianca: ultima.crianca, diaLabel: ultima.diaLabel, diasDesde };
 }
 
 function sincronizarUltimoAgendamento(sessao, telefone, now = new Date()) {
@@ -1044,6 +1068,7 @@ async function responderEscaladaNaFila(alertaId, resposta) {
         diaLabel: consultaReal.diaLabel,
         ehHoje: consultaReal.data === Agenda.toDateStr(new Date()),
       } : null,
+      consultaRecente: consultaRecenteDe(telefone),
       recadoDoDoutor: sessao.recadoDoDoutor,
       estadoAtendimento: sessao.estadoAtendimento,
       triagemPendente: sessao.triagemPendente,
@@ -1411,6 +1436,9 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
       const c = consultaReal;
       return c ? { crianca: c.crianca, diaLabel: c.diaLabel, ehHoje: c.data === Agenda.toDateStr(now) } : null;
     })(),
+    // A consulta que já aconteceu há menos de 30 dias: a família está no acompanhamento,
+    // e dúvida sobre a criança vai pro Dr. Bruno, não pra um agendamento novo.
+    consultaRecente: consultaRecenteDe(telefone, now),
     estadoAtendimento: sessao.estadoAtendimento,
     triagemPendente: sessao.triagemPendente,
   });
@@ -1512,7 +1540,7 @@ async function enviarLembretes(sock) {
 
   for (const a of Storage.agendamentosProntosParaLembrete(hojeStr, "semanaAntes")) {
     const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
-    const texto = `Olá! Passando pra lembrar que a consulta de ${a.crianca} com o Dr. Bruno está agendada para ${a.diaLabel}.\n\nSe precisar remarcar, é só me avisar por aqui 😊`;
+    const texto = `Olá! Passando pra lembrar que a consulta de ${a.crianca} com o Dr. Bruno está agendada para ${a.diaLabel}.\n\n${O_QUE_LEVAR}\n\nSe precisar remarcar, é só me avisar por aqui 😊`;
     try {
       await filaMensagens.enfileirar(a.telefone, () =>
         enviarResposta(sock, jid, a.telefone, texto, true, {
@@ -1528,7 +1556,7 @@ async function enviarLembretes(sock) {
 
   for (const a of Storage.agendamentosProntosParaLembrete(hojeStr, "diaDaConsulta")) {
     const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
-    const texto = `Bom dia! Só confirmando: hoje é o dia da consulta de ${a.crianca} com o Dr. Bruno, às ${Agenda.formatHora(a.horario)}.\n\nEndereço: ${CARLA_CONFIG.endereco}\n\nAté já! 😊`;
+    const texto = `Bom dia! Só confirmando: hoje é o dia da consulta de ${a.crianca} com o Dr. Bruno, às ${Agenda.formatHora(a.horario)}.\n\nEndereço: ${CARLA_CONFIG.endereco}\n${LINK_MAPA}\n\n${O_QUE_LEVAR}\n\nSe for atrasar, me avisa por aqui. Até já! 😊`;
     try {
       await filaMensagens.enfileirar(a.telefone, () =>
         enviarResposta(sock, jid, a.telefone, texto, true, {
