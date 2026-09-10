@@ -2,29 +2,46 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Painel da Carla</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Carla CRM</title>
 <link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#1e3324">
+<meta name="theme-color" content="#0b1a3f">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Carla">
 <style>
+  /* ------------------------------------------------------------------------------------
+     O TEMA. Azul-marinho que escurece do topo pro fundo, e dourado nas letras. O dourado
+     puro (#d4b060) fica nos títulos, rótulos, números e botões; o texto corrido usa um
+     dourado pálido (#efe3c2) pra continuar legível em parágrafo. Estado (pago, atenção,
+     perda) tem cor própria e não disputa com o dourado.
+     ------------------------------------------------------------------------------------ */
   * { box-sizing: border-box; }
 
   :root {
-    --verde-logo: #1e3324;
-    --ouro: #cba05a;
-    --ouro-claro: #e8c887;
-    --acento: #cba05a;          /* acento agora e o dourado da logo */
-    --acento-escuro: #a67c3c;
-    --sucesso: #4fb07d;         /* verde de estado positivo (online, fechou, ocupado) */
-    --vidro: rgba(255,255,255,0.035);
-    --vidro-borda: rgba(203,160,90,0.15);
-    --texto: #eef3ec;
-    --texto-fraco: #96a89a;
+    --azul-topo: #102a5c;
+    --azul-meio: #0a1a3d;
+    --azul-fundo: #040a1c;
+    --ouro: #d4b060;
+    --ouro-claro: #edd28a;
+    --ouro-escuro: #a8843a;
+    --acento: var(--ouro);
+    --acento-escuro: var(--ouro-escuro);
+    --texto: #efe3c2;
+    --texto-fraco: #b8a77a;
+    --texto-apagado: #7d7256;
+    --vidro: rgba(255, 255, 255, 0.035);
+    --vidro-forte: rgba(255, 255, 255, 0.06);
+    --vidro-borda: rgba(212, 176, 96, 0.18);
+    --vidro-borda-forte: rgba(212, 176, 96, 0.4);
+    --sucesso: #5fc78f;
+    --atencao: #f0c266;
+    --perda: #ff8f8f;
+    --info: #8fb6ff;
+    --sombra: 0 14px 40px rgba(0, 0, 0, 0.45);
   }
 
   html { scroll-behavior: smooth; }
@@ -32,36 +49,32 @@
   body {
     margin: 0;
     min-height: 100vh;
-    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
     color: var(--texto);
-    background: radial-gradient(circle at 12% -8%, #274733 0%, transparent 46%),
-                radial-gradient(circle at 108% 10%, rgba(203,160,90,0.12) 0%, transparent 44%),
-                linear-gradient(165deg, #0b1610 0%, #13251a 52%, #081007 100%);
-    background-color: #0a140e;
+    background: linear-gradient(180deg, var(--azul-topo) 0%, var(--azul-meio) 42%, var(--azul-fundo) 100%);
+    background-color: var(--azul-fundo);
+    background-attachment: fixed;
     position: relative;
     overflow-x: hidden;
   }
 
-  .brilho { position: fixed; border-radius: 50%; filter: blur(100px); pointer-events: none; z-index: 0; opacity: 0.5; }
-  .brilho-1 { width: 440px; height: 440px; top: -150px; right: -110px; background: radial-gradient(circle, rgba(203,160,90,0.22), transparent 70%); }
-  .brilho-2 { width: 400px; height: 400px; bottom: -170px; left: -130px; background: radial-gradient(circle, rgba(46,90,60,0.5), transparent 70%); }
+  .brilho { position: fixed; border-radius: 50%; filter: blur(110px); pointer-events: none; z-index: 0; opacity: 0.55; }
+  .brilho-1 { width: 520px; height: 520px; top: -200px; right: -140px; background: radial-gradient(circle, rgba(212,176,96,0.22), transparent 70%); }
+  .brilho-2 { width: 460px; height: 460px; bottom: -220px; left: -160px; background: radial-gradient(circle, rgba(40,80,170,0.45), transparent 70%); }
 
-  .pagina { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+  .pagina { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 22px 18px 70px; }
 
-  h1, h2 { font-family: "Poppins", "Segoe UI", Arial, sans-serif; margin: 0; }
+  h1, h2, h3 { font-family: "Poppins", "Segoe UI", Arial, sans-serif; margin: 0; color: var(--ouro); }
 
-  .topo { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+  /* ---- topo --------------------------------------------------------------- */
+  .topo { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
   .marca { display: flex; align-items: center; gap: 14px; }
-  .avatar {
-    width: 52px; height: 52px; border-radius: 15px; flex-shrink: 0;
-    object-fit: cover; display: block;
-    border: 1px solid rgba(203,160,90,0.35);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
-  }
-  h1 { font-size: 22px; letter-spacing: 0.3px; color: #f2fbf7; }
+  .avatar { width: 52px; height: 52px; border-radius: 15px; flex-shrink: 0; object-fit: cover; display: block; border: 1px solid var(--vidro-borda-forte); box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
+  h1 { font-size: 21px; letter-spacing: 0.4px; }
+  h1 small { font-weight: 500; color: var(--texto-fraco); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; margin-left: 8px; }
   .subtitulo { color: var(--texto-fraco); font-size: 12.5px; margin-top: 3px; display: flex; align-items: center; }
 
-  .icone { display: inline-flex; vertical-align: -3px; margin-right: 7px; opacity: 0.85; color: var(--acento); }
+  .icone { display: inline-flex; vertical-align: -3px; margin-right: 7px; opacity: 0.9; color: var(--ouro); }
   .icone svg { width: 16px; height: 16px; }
 
   .cartao {
@@ -69,263 +82,370 @@
     backdrop-filter: blur(22px);
     -webkit-backdrop-filter: blur(22px);
     border: 1px solid var(--vidro-borda);
-    border-radius: 20px;
+    border-radius: 18px;
     padding: 18px 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 14px 40px rgba(0,0,0,0.4);
+    margin-bottom: 18px;
+    box-shadow: var(--sombra);
   }
   .cartao h2 {
-    font-size: 14.5px; font-weight: 600; color: #dfeede;
+    font-size: 14px; font-weight: 600; color: var(--ouro);
     margin: 0 0 14px; padding-bottom: 11px;
-    border-bottom: 1px solid rgba(203,160,90,0.14);
-    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--vidro-borda);
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
   }
   .titulo-icone { display: flex; align-items: center; }
+  .contagem { background: linear-gradient(135deg, var(--ouro), var(--ouro-escuro)); color: #10203f; border-radius: 12px; padding: 2px 10px; font-size: 11.5px; font-weight: 700; margin-left: 8px; }
 
-  .contagem { background: linear-gradient(135deg, var(--acento), var(--acento-escuro)); color: #06231a; border-radius: 12px; padding: 2px 10px; font-size: 11.5px; font-weight: 700; margin-left: 8px; }
+  .cartao-bot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; margin: 0; }
+  .bot-status { display: flex; align-items: center; font-size: 13.5px; font-weight: 600; }
+  .bot-status .status { width: 11px; height: 11px; }
+  .bot-status.ligada { color: var(--sucesso); }
+  .bot-status.aviso { color: var(--atencao); }
+  .bot-status.desligada { color: var(--texto-fraco); }
+  #btn-toggle { border: none; border-radius: 20px; padding: 9px 20px; font-size: 13.5px; font-weight: 700; cursor: pointer; color: white; transition: opacity 0.15s, transform 0.15s; }
+  #btn-toggle:hover:not(:disabled) { transform: translateY(-1px); }
+  #btn-toggle.ligar { background: linear-gradient(135deg, #6ad39a, #2f8f5f); color: #05210f; }
+  #btn-toggle.desligar { background: linear-gradient(135deg, #f87171, #b91c1c); }
+  #btn-toggle:disabled { opacity: 0.55; cursor: default; }
 
-  #tabela-agendamentos { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  th { color: var(--texto-fraco); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.4px; }
-  td { color: #dcece5; }
+  .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 8px currentColor; }
+  .status.ok { background: var(--sucesso); color: var(--sucesso); }
+  .status.aviso { background: var(--atencao); color: var(--atencao); }
+  .status.erro { background: #ef4444; color: #ef4444; }
+
+  #erro-conexao { display: none; color: var(--perda); background: rgba(255,90,90,0.12); border: 1px solid rgba(255,90,90,0.25); padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
+
+  /* ---- resumo (os números do topo) ------------------------------------------ */
+  .resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .kpi { background: var(--vidro); border: 1px solid var(--vidro-borda); border-radius: 14px; padding: 12px 14px; cursor: pointer; transition: border-color .15s, background .15s; text-align: left; font-family: inherit; color: inherit; }
+  .kpi:hover { border-color: var(--vidro-borda-forte); background: var(--vidro-forte); }
+  .kpi-rotulo { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--texto-fraco); }
+  .kpi-valor { font-family: "Poppins", sans-serif; font-size: 26px; font-weight: 700; color: var(--ouro); line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi-detalhe { font-size: 11px; color: var(--texto-apagado); margin-top: 2px; }
+  .kpi.atencao .kpi-valor { color: var(--atencao); }
+  .kpi.perda .kpi-valor { color: var(--perda); }
+
+  /* ---- abas ---------------------------------------------------------------- */
+  .abas { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--vidro-borda); overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .abas::-webkit-scrollbar { display: none; }
+  .abas button {
+    background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--texto-fraco);
+    padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 6px; transition: color .15s, border-color .15s;
+  }
+  .abas button:hover { color: var(--ouro-claro); }
+  .abas button[aria-selected="true"] { color: var(--ouro); border-bottom-color: var(--ouro); }
+  .abas .badge { background: rgba(212,176,96,0.18); color: var(--ouro-claro); border-radius: 999px; padding: 1px 7px; font-size: 10.5px; font-weight: 700; }
+  .abas .badge.atencao { background: rgba(240,194,102,0.22); color: var(--atencao); }
+  .aba { display: none; }
+  .aba[data-ativa="true"] { display: block; }
+
+  /* ---- tabelas e listas ---------------------------------------------------- */
+  .rolagem-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
+  th { color: var(--texto-fraco); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td { color: var(--texto); }
+  tr.clicavel { cursor: pointer; }
+  tr.clicavel:hover td { background: rgba(255,255,255,0.03); }
   .vazio { color: var(--texto-fraco); font-size: 13px; padding: 10px 0; }
+  th.col-x, td.col-x { width: 34px; text-align: center; }
 
   ul { list-style: none; padding: 0; margin: 0; }
   li { padding: 9px 12px; border-radius: 10px; margin-bottom: 7px; font-size: 13px; }
   li.urgencia { background: rgba(255,90,90,0.12); color: #ffb3b3; border: 1px solid rgba(255,90,90,0.2); }
-  li.nao_entendida { background: rgba(232,200,135,0.14); color: #f0da9f; border: 1px solid rgba(232,200,135,0.22); }
-  li.comercial { background: rgba(135,180,232,0.14); color: #a9c9f0; border: 1px solid rgba(135,180,232,0.22); }
-
-  .status { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 8px currentColor; }
-  .status.ok { background: var(--sucesso); color: var(--sucesso); }
-  .status.aviso { background: var(--ouro-claro); color: var(--ouro-claro); }
-  .status.erro { background: #ef4444; color: #ef4444; }
-
-  #erro-conexao { display: none; color: #ffb3b3; background: rgba(255,90,90,0.12); border: 1px solid rgba(255,90,90,0.25); padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
-
-  .cartao-bot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; }
-  .bot-status { display: flex; align-items: center; font-size: 13.5px; font-weight: 600; }
-  .bot-status .status { width: 11px; height: 11px; }
-  .bot-status.ligada { color: var(--sucesso); }
-  .bot-status.aviso { color: var(--ouro-claro); }
-  .bot-status.desligada { color: var(--texto-fraco); }
-  #btn-toggle { border: none; border-radius: 20px; padding: 9px 20px; font-size: 13.5px; font-weight: 600; cursor: pointer; color: white; transition: opacity 0.15s, transform 0.15s; }
-  #btn-toggle:hover:not(:disabled) { transform: translateY(-1px); }
-  #btn-toggle.ligar { background: linear-gradient(135deg, #5cbf88, #2f8f5f); color: #05210f; }
-  #btn-toggle.desligar { background: linear-gradient(135deg, #f87171, #dc2626); }
-  #btn-toggle:disabled { opacity: 0.55; cursor: default; }
+  li.nao_entendida { background: rgba(240,194,102,0.12); color: #f5d99a; border: 1px solid rgba(240,194,102,0.22); }
+  li.comercial { background: rgba(143,182,255,0.12); color: #b7cdff; border: 1px solid rgba(143,182,255,0.22); }
 
   .btn-x { border: none; background: rgba(255,90,90,0.14); color: #ff9d9d; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 1; font-weight: 700; }
   .btn-x:hover { background: rgba(255,90,90,0.28); }
-  .btn-portal { border: none; background: rgba(184,137,63,0.18); color: var(--ouro-claro, #cba05a); padding: 3px 9px; border-radius: 999px; cursor: pointer; font-size: 11px; font-weight: 700; }
-  .btn-portal:hover { background: rgba(184,137,63,0.34); }
+  .btn-portal { border: none; background: rgba(212,176,96,0.16); color: var(--ouro-claro); padding: 3px 9px; border-radius: 999px; cursor: pointer; font-size: 11px; font-weight: 700; }
+  .btn-portal:hover { background: rgba(212,176,96,0.32); }
   .btn-portal:disabled { opacity: .5; cursor: default; }
-  .portal-ok { color: #6ee7b7; font-weight: 700; }
+  .portal-ok { color: var(--sucesso); font-weight: 700; }
   .portal-na { opacity: .35; }
-  .btn-pago { border: 0; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; padding: 4px 8px; }
+  .btn-pago { border: 0; border-radius: 6px; cursor: pointer; font-size: 12.5px; font-weight: 700; padding: 4px 8px; }
   .btn-pago.sim { background: #1f7a3d; color: #fff; }
   .btn-pago.nao { background: #7a1f1f; color: #fff; }
-  th.col-x, td.col-x { width: 32px; text-align: center; }
-  .btn-limpar { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 12px; padding: 5px 13px; font-size: 12px; cursor: pointer; }
+  .btn-limpar { border: none; background: rgba(255,255,255,0.07); color: var(--texto); border-radius: 12px; padding: 5px 13px; font-size: 12px; cursor: pointer; font-family: inherit; }
   .btn-limpar:hover { background: rgba(255,255,255,0.12); }
+  .btn-ficha { border: 1px solid var(--vidro-borda); background: transparent; color: var(--ouro-claro); border-radius: 999px; padding: 3px 10px; font-size: 11px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .btn-ficha:hover { border-color: var(--ouro); background: rgba(212,176,96,0.1); }
 
+  .tag-tipo { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgba(212,176,96,0.14); color: var(--ouro-claro); white-space: nowrap; }
+  .tag-tipo.urgencia { background: rgba(255,143,143,0.16); color: var(--perda); }
+  .tag-tipo.tnd { background: rgba(143,182,255,0.16); color: var(--info); }
+  .tag-mod { font-size: 11px; color: var(--texto-fraco); white-space: nowrap; }
+
+  /* ---- calendário ---------------------------------------------------------- */
   .calendario-nav { display: flex; align-items: center; gap: 8px; }
-  .calendario-nav button { border: none; background: rgba(255,255,255,0.06); color: #cdeee0; border-radius: 7px; width: 26px; height: 26px; cursor: pointer; font-size: 12.5px; }
+  .calendario-nav button { border: none; background: rgba(255,255,255,0.06); color: var(--ouro-claro); border-radius: 7px; width: 26px; height: 26px; cursor: pointer; font-size: 12.5px; }
   .calendario-nav button:hover { background: rgba(255,255,255,0.12); }
   .calendario-mes { font-size: 12.5px; color: var(--texto-fraco); min-width: 105px; text-align: center; }
-
   .btn-colapsar { display: flex; align-items: center; justify-content: center; }
   .btn-colapsar svg { width: 14px; height: 14px; transition: transform 0.25s ease; }
   #cartao-calendario.colapsado .btn-colapsar svg { transform: rotate(-90deg); }
-
   .colapsavel { overflow: hidden; max-height: 1400px; opacity: 1; transition: max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease; }
   #cartao-calendario.colapsado .colapsavel { max-height: 0; opacity: 0; }
-
   .calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 6px; }
   .cal-cabecalho { text-align: center; font-size: 10.5px; color: var(--texto-fraco); padding-bottom: 2px; }
-  .cal-dia { position: relative; text-align: center; padding: 9px 0; border-radius: 8px; font-size: 12.5px; background: rgba(255,255,255,0.04); cursor: pointer; user-select: none; color: #dcece5; }
+  .cal-dia { position: relative; text-align: center; padding: 9px 0; border-radius: 8px; font-size: 12.5px; background: rgba(255,255,255,0.04); cursor: pointer; user-select: none; color: var(--texto); }
   .cal-dia:hover { background: rgba(255,255,255,0.1); }
   .cal-dia.vazio { background: transparent; cursor: default; }
-  .cal-dia.sem-atendimento { color: rgba(255,255,255,0.2); cursor: default; background: transparent; }
-  .cal-dia.passado { color: rgba(255,255,255,0.2); cursor: default; background: transparent; }
+  .cal-dia.sem-atendimento, .cal-dia.passado { color: rgba(255,255,255,0.2); cursor: default; background: transparent; }
   .cal-dia.bloqueado { background: rgba(255,90,90,0.3); color: #ffd4d4; font-weight: 600; }
   .cal-dia.bloqueado:hover { background: rgba(255,90,90,0.42); }
   .cal-dia .cal-ponto { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--sucesso); }
   .calendario-legenda { display: flex; gap: 16px; margin-top: 12px; font-size: 11px; color: var(--texto-fraco); flex-wrap: wrap; }
   .calendario-legenda span { display: inline-flex; align-items: center; gap: 5px; }
-  .cal-dia.selecionado { outline: 2px solid var(--acento); outline-offset: -2px; }
-
+  .cal-dia.selecionado { outline: 2px solid var(--ouro); outline-offset: -2px; }
   .painel-horarios-dia { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); }
-  .horarios-dia-cabecalho { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 12.5px; color: #cdeee0; font-weight: 600; }
+  .horarios-dia-cabecalho { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 12.5px; color: var(--ouro-claro); font-weight: 600; }
   .horarios-dia-cabecalho .botoes { display: flex; gap: 8px; align-items: center; }
   .horarios-dia-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
-  .horario-slot { border: 1px solid var(--vidro-borda); background: rgba(255,255,255,0.04); color: #dcece5; border-radius: 8px; padding: 8px 4px; font-size: 12px; cursor: pointer; text-align: center; }
+  .horario-slot { border: 1px solid var(--vidro-borda); background: rgba(255,255,255,0.04); color: var(--texto); border-radius: 8px; padding: 8px 4px; font-size: 12px; cursor: pointer; text-align: center; font-family: inherit; }
   .horario-slot:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
   .horario-slot.bloqueado { background: rgba(255,90,90,0.16); border-color: rgba(255,90,90,0.3); color: #ffb3b3; }
   .horario-slot.bloqueado:hover:not(:disabled) { background: rgba(255,90,90,0.28); }
-  .horario-slot.ocupado { background: rgba(52,211,153,0.14); border-color: rgba(52,211,153,0.3); color: #6ee7b7; cursor: default; }
-  .horario-slot.extra { border-color: rgba(203,160,90,0.5); box-shadow: inset 0 0 0 1px rgba(203,160,90,0.18); }
+  .horario-slot.ocupado { background: rgba(95,199,143,0.14); border-color: rgba(95,199,143,0.3); color: var(--sucesso); cursor: default; }
+  .horario-slot.extra { border-color: rgba(212,176,96,0.5); box-shadow: inset 0 0 0 1px rgba(212,176,96,0.18); }
   .horario-slot.extra::after { content: "+"; font-size: 9px; vertical-align: super; color: var(--ouro); margin-left: 2px; }
-
-  .extra-form { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  .extra-form { display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
   .extra-form input { background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--texto); color-scheme: dark; }
-  .extra-form button { border: none; background: rgba(203,160,90,0.18); color: var(--ouro-claro); border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
-  .extra-form button:hover { background: rgba(203,160,90,0.3); }
+  .extra-form button { border: none; background: rgba(212,176,96,0.18); color: var(--ouro-claro); border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; font-family: inherit; }
+  .extra-form button:hover { background: rgba(212,176,96,0.3); }
   .extras-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   /* Horário só de teleconsulta: mesma cor da família "extra", com a etiqueta "vídeo" pra
      não confundir com um extra comum na hora de bater o olho no dia. */
   .extra-tele { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--texto-fraco); white-space: nowrap; cursor: pointer; }
-  .extra-tele input { accent-color: var(--acento); }
-  .tag-tele { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; padding: 1px 5px; border-radius: 999px; background: rgba(203,160,90,0.22); color: var(--ouro-claro); }
+  .extra-tele input { accent-color: var(--ouro); }
+  .tag-tele { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; padding: 1px 5px; border-radius: 999px; background: rgba(212,176,96,0.22); color: var(--ouro-claro); }
   .horario-slot.so-tele::after { content: "📹"; font-size: 9px; margin-left: 3px; }
-  .chip-extra { display: inline-flex; align-items: center; gap: 6px; background: rgba(203,160,90,0.1); border: 1px solid rgba(203,160,90,0.25); color: var(--ouro-claro); font-size: 11.5px; padding: 4px 6px 4px 10px; border-radius: 12px; }
-  .chip-extra button { border: none; background: rgba(203,160,90,0.25); color: #f3e2c4; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; }
-  .chip-extra button:hover { background: rgba(203,160,90,0.45); }
-
-  .btn-fechar-horarios-dia { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 12px; }
+  .chip-extra { display: inline-flex; align-items: center; gap: 6px; background: rgba(212,176,96,0.1); border: 1px solid rgba(212,176,96,0.25); color: var(--ouro-claro); font-size: 11.5px; padding: 4px 6px 4px 10px; border-radius: 12px; }
+  .chip-extra button { border: none; background: rgba(212,176,96,0.25); color: #f3e2c4; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; }
+  .chip-extra button:hover { background: rgba(212,176,96,0.45); }
+  .btn-fechar-horarios-dia { border: none; background: rgba(255,255,255,0.07); color: var(--texto); border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 12px; }
   .btn-fechar-horarios-dia:hover { background: rgba(255,255,255,0.13); }
   .legenda-cor { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 
-  .layout-principal { display: grid; grid-template-columns: 1fr 300px; gap: 22px; align-items: start; }
-  @media (max-width: 880px) { .layout-principal { grid-template-columns: 1fr; } }
-  .coluna-principal, .coluna-lateral { min-width: 0; }
+  /* ---- layouts ------------------------------------------------------------- */
+  .layout-2 { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+  .layout-crm { display: grid; grid-template-columns: 400px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 960px) { .layout-2, .layout-crm { grid-template-columns: 1fr; } }
+  .coluna { min-width: 0; }
 
-  .coluna-lateral .cartao:last-child { margin-bottom: 0; }
+  /* ---- famílias (a lista do CRM) ------------------------------------------- */
+  .filtros { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .filtros button { background: transparent; border: 1px solid var(--vidro-borda); color: var(--texto-fraco); border-radius: 999px; padding: 4px 10px; font-size: 11.5px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 5px; transition: all .15s; }
+  .filtros button:hover { color: var(--ouro-claro); border-color: var(--ouro); }
+  .filtros button[aria-pressed="true"] { background: rgba(212,176,96,0.16); border-color: var(--ouro); color: var(--ouro-claro); }
+  .filtros button b { font-weight: 700; color: var(--ouro); font-variant-numeric: tabular-nums; }
+  .filtros button.atencao[aria-pressed="true"], .filtros button.atencao b { color: var(--atencao); }
+  .filtros button.perda b { color: var(--perda); }
 
-  #lista-contatos { max-height: 420px; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
+  .busca-contatos { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 10px; padding: 9px 12px; font-size: 13px; color: var(--texto); margin-bottom: 10px; font-family: inherit; }
+  .busca-contatos::placeholder { color: var(--texto-apagado); }
+  .busca-contatos:focus { outline: none; border-color: var(--ouro); }
+
+  #lista-contatos { max-height: 62vh; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
   #lista-contatos::-webkit-scrollbar { width: 6px; }
-  #lista-contatos::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
-  #lista-contatos li { display: flex; flex-direction: column; gap: 3px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); }
-  .busca-contatos { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); margin-bottom: 10px; }
-  .busca-contatos::placeholder { color: var(--texto-fraco); }
+  #lista-contatos::-webkit-scrollbar-thumb { background: rgba(212,176,96,0.25); border-radius: 3px; }
+  #lista-contatos li { display: flex; flex-direction: column; gap: 4px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: border-color .15s, background .15s; }
+  #lista-contatos li:hover { background: rgba(255,255,255,0.055); border-color: var(--vidro-borda); }
+  #lista-contatos li.aberto { border-color: var(--ouro); background: rgba(212,176,96,0.08); }
   .contato-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .contato-tel { font-weight: 600; font-size: 12.5px; color: #e9f2ee; }
-  .contato-nome { font-weight: 600; font-size: 12.5px; color: #e9f2ee; }
-  .contato-tel-sub { font-size: 10.5px; color: var(--texto-fraco); }
+  .contato-nome { font-weight: 600; font-size: 13px; color: var(--ouro-claro); }
+  .contato-tel-sub { font-size: 10.5px; color: var(--texto-apagado); }
   .contato-tempo { font-size: 10.5px; color: var(--texto-fraco); white-space: nowrap; }
   .contato-msg { font-size: 12px; color: var(--texto-fraco); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .contato-tags { display: flex; gap: 6px; margin-top: 2px; }
-  .contato-tag { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; }
-  .contato-tag.fechou { background: rgba(52,211,153,0.18); color: #6ee7b7; }
-  .contato-tag.aguardando { background: rgba(232,200,135,0.18); color: #e8c887; }
-  .contato-tag.paciente { background: rgba(122,162,255,0.18); color: #a9c1ff; }
-  .alerta-pergunta { display: block; margin-top: 8px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.05); }
-  .alerta-pergunta .texto-pergunta { font-size: 13px; font-weight: 600; color: #ffe9a8; display: block; margin-bottom: 8px; }
-  .alerta-pergunta .botoes { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .alerta-pergunta button { border: none; border-radius: 8px; padding: 5px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
-  .alerta-pergunta .btn-sim { background: rgba(52,211,153,0.22); color: #6ee7b7; }
-  .alerta-pergunta .btn-nao { background: rgba(255,90,90,0.18); color: #ffb3b3; }
-  .alerta-pergunta button:disabled { opacity: 0.5; cursor: default; }
-  .alerta-pergunta input { flex: 1; min-width: 150px; border: none; border-radius: 8px; padding: 5px 10px; font-size: 12px; background: rgba(255,255,255,0.07); color: #e6efeb; }
-  .alerta-pergunta .respondido { font-size: 12px; color: #6ee7b7; }
-  .contato-botoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
-  .btn-silenciar-contato, .btn-marcar-contato { border: none; background: rgba(255,255,255,0.07); color: #c9d6d0; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
-  .btn-silenciar-contato:hover, .btn-marcar-contato:hover:not(:disabled) { background: rgba(255,255,255,0.13); }
-  .btn-silenciar-contato.ativo { background: rgba(255,90,90,0.18); color: #ffb3b3; }
-  .btn-marcar-contato.ativo { background: rgba(122,162,255,0.18); color: #a9c1ff; }
-  .btn-marcar-contato:disabled { opacity: 0.5; cursor: default; }
-  .btn-retomar-contato { border: none; background: rgba(232,200,135,0.16); color: #e8c887; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
-  .btn-retomar-contato:hover { background: rgba(232,200,135,0.28); }
-  /* Mensagem manual: sai crua pelo numero do consultorio, entao usa o dourado (acao de peso). */
-  .btn-mensagem-contato { border: none; background: rgba(203,160,90,0.16); color: var(--ouro-claro); border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
-  .btn-mensagem-contato:hover { background: rgba(203,160,90,0.3); }
-  .msg-manual { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-  .msg-manual textarea { width: 100%; resize: vertical; min-height: 64px; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--texto); font-family: inherit; line-height: 1.45; }
-  .msg-manual textarea:focus { outline: none; border-color: var(--acento); }
-  .msg-manual textarea::placeholder { color: var(--texto-fraco); }
-  .msg-manual-acoes { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
-  .msg-manual-aviso { flex: 1; font-size: 11px; color: #e8a5a5; }
-  .btn-cancelar-msg { border: none; background: rgba(255,255,255,0.07); color: var(--texto-fraco); border-radius: 8px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
-  .btn-enviar-msg { border: none; background: linear-gradient(135deg, var(--acento), var(--acento-escuro)); color: #06231a; border-radius: 8px; padding: 4px 12px; font-size: 11px; font-weight: 700; cursor: pointer; }
-  .btn-enviar-msg:disabled { opacity: .55; cursor: default; }
-  .btn-limpar-contato { border: none; background: rgba(255,90,90,0.1); color: #ffb3b3; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
-  .btn-limpar-contato:hover { background: rgba(255,90,90,0.22); }
-
-  /* Reaquecer manda mensagem pra fora e nao tem desfazer, entao usa o dourado (acao de
-     peso) em vez do cinza das acoes internas. Desabilitado fica visivelmente morto. */
-  .btn-reaquecer-contato { border: none; background: rgba(203,160,90,0.16); color: var(--ouro-claro); border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
-  .btn-reaquecer-contato:hover:not(:disabled) { background: rgba(203,160,90,0.3); }
+  .contato-linha { font-size: 11.5px; color: var(--texto-fraco); }
+  .contato-linha b { color: var(--texto); font-weight: 600; }
+  .contato-tags { display: flex; gap: 5px; margin-top: 2px; flex-wrap: wrap; }
+  .chip { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: rgba(255,255,255,0.07); color: var(--texto-fraco); white-space: nowrap; }
+  .chip.bom { background: rgba(95,199,143,0.16); color: var(--sucesso); }
+  .chip.atencao { background: rgba(240,194,102,0.18); color: var(--atencao); }
+  .chip.perda { background: rgba(255,143,143,0.16); color: var(--perda); }
+  .chip.info { background: rgba(143,182,255,0.16); color: var(--info); }
+  .chip.neutro { background: rgba(255,255,255,0.07); color: var(--texto-fraco); }
+  .chip.etiqueta { background: rgba(212,176,96,0.14); color: var(--ouro-claro); }
+  .chip.estagio { background: transparent; border: 1px solid var(--vidro-borda); color: var(--texto-fraco); }
+  .contato-botoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .btn-mini { border: none; background: rgba(255,255,255,0.07); color: var(--texto); border-radius: 8px; padding: 3px 9px; font-size: 10.5px; cursor: pointer; font-family: inherit; }
+  .btn-mini:hover:not(:disabled) { background: rgba(255,255,255,0.13); }
+  .btn-mini:disabled { opacity: .5; cursor: default; }
+  .btn-mini.ativo { background: rgba(143,182,255,0.18); color: var(--info); }
+  .btn-mini.perigo { background: rgba(255,90,90,0.1); color: var(--perda); }
+  .btn-mini.perigo:hover { background: rgba(255,90,90,0.22); }
+  .btn-mini.perigo.ativo { background: rgba(255,90,90,0.18); }
+  .btn-retomar-contato { border: none; background: rgba(240,194,102,0.16); color: var(--atencao); border-radius: 8px; padding: 3px 9px; font-size: 10.5px; cursor: pointer; font-family: inherit; }
+  .btn-retomar-contato:hover { background: rgba(240,194,102,0.28); }
+  /* Mensagem manual e reaquecer mandam mensagem pra fora e nao tem desfazer: dourado (peso). */
+  .btn-mensagem-contato, .btn-reaquecer-contato { border: none; background: rgba(212,176,96,0.16); color: var(--ouro-claro); border-radius: 8px; padding: 3px 9px; font-size: 10.5px; cursor: pointer; font-family: inherit; }
+  .btn-mensagem-contato:hover, .btn-reaquecer-contato:hover:not(:disabled) { background: rgba(212,176,96,0.3); }
   .btn-reaquecer-contato:disabled { background: rgba(255,255,255,0.05); color: var(--texto-fraco); cursor: default; }
 
-  .silenciar-form { display: flex; gap: 8px; margin-bottom: 12px; }
-  .silenciar-form input { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); }
-  .silenciar-form input::placeholder { color: var(--texto-fraco); }
-  .silenciar-form button { border: none; background: rgba(255,255,255,0.09); color: #c9d6d0; border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+  .silenciar-form { display: flex; gap: 8px; margin-bottom: 10px; }
+  .silenciar-form input { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); font-family: inherit; }
+  .silenciar-form input::placeholder { color: var(--texto-apagado); }
+  .silenciar-form button { border: none; background: rgba(255,255,255,0.09); color: var(--ouro-claro); border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; font-family: inherit; }
   .silenciar-form button:hover { background: rgba(255,255,255,0.15); }
+  details.mais { margin-bottom: 10px; }
+  details.mais summary { cursor: pointer; font-size: 12px; color: var(--texto-fraco); list-style: none; }
+  details.mais summary::before { content: "▸ "; color: var(--ouro); }
+  details.mais[open] summary::before { content: "▾ "; }
+  details.mais .conteudo { margin-top: 10px; }
   .chips-silenciados { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip-silenciado { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,90,90,0.1); border: 1px solid rgba(255,90,90,0.2); color: #ffb3b3; font-size: 11.5px; padding: 4px 6px 4px 10px; border-radius: 12px; }
   .chip-silenciado button { border: none; background: rgba(255,90,90,0.2); color: #ffd4d4; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; }
-  .chip-silenciado button:hover { background: rgba(255,90,90,0.35); }
+
+  /* ---- a ficha da família -------------------------------------------------- */
+  .ficha { position: sticky; top: 14px; }
+  .ficha .cartao { margin-bottom: 0; }
+  .ficha-vazia { color: var(--texto-fraco); font-size: 13px; line-height: 1.6; text-align: center; padding: 40px 20px; }
+  .ficha-vazia b { color: var(--ouro); }
+  .ficha-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+  .ficha-nome { font-family: "Poppins", sans-serif; font-size: 18px; font-weight: 700; color: var(--ouro); line-height: 1.2; }
+  .ficha-tel { font-size: 12.5px; color: var(--texto-fraco); margin-top: 2px; }
+  .ficha-tel a { color: var(--ouro-claro); text-decoration: none; }
+  .ficha-tel a:hover { text-decoration: underline; }
+  .btn-fechar-ficha { border: none; background: rgba(255,255,255,0.07); color: var(--texto); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 13px; flex-shrink: 0; }
+  .btn-fechar-ficha:hover { background: rgba(255,255,255,0.13); }
+  .ficha-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+  .ficha-secao { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--vidro-borda); }
+  .ficha-secao h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ouro); font-weight: 600; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ficha-secao h3 span { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--texto-apagado); font-size: 11px; }
+  .ficha-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .dado { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 10px; }
+  .dado-rotulo { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-apagado); }
+  .dado-valor { font-size: 13px; color: var(--texto); margin-top: 2px; font-weight: 600; }
+  .dado-valor.ouro { color: var(--ouro-claro); }
+  .ficha table { min-width: 0; font-size: 12.5px; }
+  .ficha th, .ficha td { padding: 7px 6px; }
+  .estado-consulta { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 8px; white-space: nowrap; }
+  .estado-consulta.pago { background: rgba(95,199,143,0.16); color: var(--sucesso); }
+  .estado-consulta.reservado { background: rgba(240,194,102,0.18); color: var(--atencao); }
+  .estado-consulta.cancelado, .estado-consulta.vencido { background: rgba(255,255,255,0.06); color: var(--texto-apagado); text-decoration: line-through; }
+
+  .modelos { display: flex; flex-wrap: wrap; gap: 6px; }
+  .modelos button { border: 1px solid var(--vidro-borda); background: rgba(212,176,96,0.08); color: var(--ouro-claro); border-radius: 10px; padding: 7px 11px; font-size: 12px; cursor: pointer; font-family: inherit; text-align: left; transition: all .15s; }
+  .modelos button:hover:not(:disabled) { border-color: var(--ouro); background: rgba(212,176,96,0.18); }
+  .modelos button:disabled { opacity: .45; cursor: not-allowed; }
+  .modelos button small { display: block; font-size: 10px; color: var(--texto-apagado); margin-top: 2px; }
+  .pos-consulta-aviso { font-size: 12px; color: var(--texto-fraco); line-height: 1.5; margin-bottom: 8px; }
+  .pos-consulta-aviso b { color: var(--info); }
+
+  .msg-manual { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .msg-manual textarea { width: 100%; resize: vertical; min-height: 84px; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 10px; padding: 9px 11px; font-size: 13px; color: var(--texto); font-family: inherit; line-height: 1.45; }
+  .msg-manual textarea:focus { outline: none; border-color: var(--ouro); }
+  .msg-manual textarea::placeholder { color: var(--texto-apagado); }
+  .msg-manual-acoes { display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .msg-manual-aviso { flex: 1; font-size: 11px; color: #e8a5a5; min-width: 120px; }
+  .msg-carla { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--texto-fraco); cursor: pointer; }
+  .msg-carla input { accent-color: var(--ouro); }
+  .btn-cancelar-msg { border: none; background: rgba(255,255,255,0.07); color: var(--texto-fraco); border-radius: 8px; padding: 6px 10px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
+  .btn-enviar-msg { border: none; background: linear-gradient(135deg, var(--ouro), var(--ouro-escuro)); color: #10203f; border-radius: 8px; padding: 6px 14px; font-size: 11.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .btn-enviar-msg:disabled { opacity: .55; cursor: default; }
+
+  .historico { display: flex; flex-direction: column; gap: 5px; max-height: 260px; overflow-y: auto; padding-right: 4px; }
+  .balao { max-width: 88%; padding: 7px 10px; border-radius: 12px; font-size: 12.5px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+  .balao.user { align-self: flex-start; background: rgba(255,255,255,0.06); color: var(--texto); border-bottom-left-radius: 3px; }
+  .balao.assistant { align-self: flex-end; background: rgba(212,176,96,0.14); color: var(--ouro-claro); border-bottom-right-radius: 3px; }
+
+  .notas-lista { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .nota { background: rgba(212,176,96,0.06); border-left: 2px solid var(--ouro); border-radius: 0 8px 8px 0; padding: 7px 10px; font-size: 12.5px; display: flex; justify-content: space-between; gap: 8px; }
+  .nota small { display: block; color: var(--texto-apagado); font-size: 10.5px; margin-top: 3px; }
+  .nota button { border: none; background: transparent; color: var(--texto-apagado); cursor: pointer; font-size: 12px; flex-shrink: 0; }
+  .nota button:hover { color: var(--perda); }
+  .nota-form { display: flex; gap: 6px; }
+  .nota-form input { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--texto); font-family: inherit; }
+  .nota-form input:focus { outline: none; border-color: var(--ouro); }
+  .nota-form button { border: none; background: rgba(212,176,96,0.18); color: var(--ouro-claro); border-radius: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .etiquetas-form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .etiquetas-form input { background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 999px; padding: 4px 10px; font-size: 11.5px; color: var(--texto); font-family: inherit; width: 150px; }
+  .chip.etiqueta button { border: none; background: transparent; color: inherit; cursor: pointer; font-size: 10px; margin-left: 4px; padding: 0; }
+
+  .linha-tempo { display: flex; flex-direction: column; gap: 0; max-height: 300px; overflow-y: auto; padding-right: 4px; }
+  .lt-item { display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; }
+  .lt-quando { color: var(--texto-apagado); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lt-texto { color: var(--texto); }
+  .lt-item.agendou .lt-texto, .lt-item.pagou .lt-texto { color: var(--sucesso); }
+  .lt-item.escalou .lt-texto, .lt-item.cancelou .lt-texto { color: var(--perda); }
+  .lt-item.nota .lt-texto { color: var(--ouro-claro); }
+  .lt-item.mensagem_manual .lt-texto, .lt-item.reaquecido .lt-texto { color: var(--info); }
+
+  /* Em tela estreita a ficha vira uma folha por cima da lista, senão ela ficaria lá
+     embaixo, depois de rolar a lista inteira. */
+  @media (max-width: 960px) {
+    body.ficha-aberta { overflow: hidden; }
+    body.ficha-aberta .ficha { position: fixed; inset: 0; z-index: 50; overflow-y: auto; padding: 12px; background: linear-gradient(180deg, var(--azul-topo), var(--azul-fundo)); }
+    body.ficha-aberta .ficha .cartao { min-height: 100%; border-radius: 14px; }
+    .ficha:not(.aberta) { display: none; }
+  }
+
+  /* ---- visão geral --------------------------------------------------------- */
+  .acao-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
+  .acao-item:last-child { border-bottom: 0; }
+  .acao-nome { font-weight: 600; color: var(--ouro-claro); }
+  .acao-motivo { font-size: 11.5px; color: var(--texto-fraco); }
+  .proximas-dia { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-fraco); margin: 10px 0 4px; }
+  .proximas-dia:first-child { margin-top: 0; }
+  .proxima { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .proxima-hora { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ouro); width: 46px; }
+  .proxima-quem { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proxima-quem small { color: var(--texto-fraco); }
+
+  .alerta-pergunta { display: block; margin-top: 8px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.05); }
+  .alerta-pergunta .texto-pergunta { font-size: 13px; font-weight: 600; color: #ffe9a8; display: block; margin-bottom: 8px; }
+  .alerta-pergunta .botoes { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .alerta-pergunta button { border: none; border-radius: 8px; padding: 5px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .alerta-pergunta .btn-sim { background: rgba(95,199,143,0.22); color: var(--sucesso); }
+  .alerta-pergunta .btn-nao { background: rgba(255,90,90,0.18); color: #ffb3b3; }
+  .alerta-pergunta button:disabled { opacity: 0.5; cursor: default; }
+  .alerta-pergunta input { flex: 1; min-width: 150px; border: none; border-radius: 8px; padding: 5px 10px; font-size: 12px; background: rgba(255,255,255,0.07); color: var(--texto); font-family: inherit; }
+  .alerta-pergunta .respondido { font-size: 12px; color: var(--sucesso); }
 
   .cartao-conversao { text-align: center; }
   .conversao-corpo { display: flex; flex-direction: column; align-items: center; gap: 10px; }
   .anel { width: 118px; height: 118px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: conic-gradient(rgba(255,255,255,0.08) 0 100%); transition: background 0.6s ease; }
-  .anel-interior { width: 90px; height: 90px; border-radius: 50%; background: #0b1713; display: flex; align-items: center; justify-content: center; }
-  #conversao-numero { font-family: "Poppins", sans-serif; font-size: 24px; font-weight: 700; color: var(--acento); }
+  .anel-interior { width: 90px; height: 90px; border-radius: 50%; background: #081633; display: flex; align-items: center; justify-content: center; }
+  #conversao-numero { font-family: "Poppins", sans-serif; font-size: 24px; font-weight: 700; color: var(--ouro); }
   .conversao-detalhe { font-size: 12px; color: var(--texto-fraco); line-height: 1.4; }
 
   /* ---- Funil -------------------------------------------------------------- */
-  .funil-periodo { display: flex; gap: 6px; align-items: center; }
-  .funil-periodo button {
-    background: transparent; border: 1px solid var(--vidro-borda); color: var(--texto-fraco);
-    border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer;
-    font-family: inherit; transition: all .15s;
-  }
-  .funil-periodo button:hover { color: var(--texto); border-color: var(--acento); }
-  .funil-periodo button[aria-pressed="true"] {
-    background: rgba(203,160,90,0.16); border-color: var(--acento); color: var(--ouro-claro);
-  }
+  .funil-periodo { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .funil-periodo button { background: transparent; border: 1px solid var(--vidro-borda); color: var(--texto-fraco); border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s; }
+  .funil-periodo button:hover { color: var(--texto); border-color: var(--ouro); }
+  .funil-periodo button[aria-pressed="true"] { background: rgba(212,176,96,0.16); border-color: var(--ouro); color: var(--ouro-claro); }
   .funil-etapa { margin-bottom: 12px; }
-  .funil-linha {
-    display: flex; justify-content: space-between; align-items: baseline;
-    font-size: 13px; margin-bottom: 5px;
-  }
+  .funil-linha { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; margin-bottom: 5px; }
   .funil-rotulo { color: var(--texto-fraco); }
-  .funil-valor { font-variant-numeric: tabular-nums; font-weight: 600; }
-  .funil-perda { color: #d98a8a; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .funil-valor { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ouro-claro); }
+  .funil-perda { color: var(--perda); font-size: 12px; font-variant-numeric: tabular-nums; }
   .funil-barra { height: 9px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
-  .funil-barra > i {
-    display: block; height: 100%; border-radius: 999px;
-    background: linear-gradient(90deg, var(--acento-escuro), var(--ouro-claro));
-    transition: width .4s ease;
-  }
-  .funil-gargalo {
-    margin: 16px 0 4px; padding: 11px 14px; border-radius: 10px;
-    background: rgba(217,138,138,0.09); border: 1px solid rgba(217,138,138,0.25);
-    font-size: 13px; line-height: 1.5;
-  }
-  .funil-gargalo b { color: #e8a5a5; }
+  .funil-barra > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--ouro-escuro), var(--ouro-claro)); transition: width .4s ease; }
+  .funil-gargalo { margin: 16px 0 4px; padding: 11px 14px; border-radius: 10px; background: rgba(255,143,143,0.08); border: 1px solid rgba(255,143,143,0.25); font-size: 13px; line-height: 1.5; }
+  .funil-gargalo b { color: var(--perda); }
   .funil-segmentos { margin-top: 18px; }
-  .funil-segmentos h3 {
-    font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
-    color: var(--texto-fraco); margin: 0 0 10px; font-weight: 600;
-  }
-  .funil-seg {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 13px;
-  }
+  .funil-segmentos h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--ouro); margin: 0 0 10px; font-weight: 600; }
+  .funil-seg { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 13px; }
   .funil-seg:last-child { border-bottom: 0; }
   .funil-seg-nome { display: flex; align-items: center; gap: 8px; }
-  .funil-tag {
-    font-size: 11px; padding: 2px 8px; border-radius: 999px;
-    background: rgba(255,255,255,0.06); color: var(--texto-fraco);
-  }
-  .funil-tag.convenio { background: rgba(217,138,138,0.16); color: #e8a5a5; }
+  .funil-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--texto-fraco); }
+  .funil-tag.convenio { background: rgba(255,143,143,0.16); color: var(--perda); }
   .funil-seg-num { font-variant-numeric: tabular-nums; color: var(--texto-fraco); }
   .funil-seg-num b { color: var(--texto); }
-  .funil-rodape {
-    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--vidro-borda);
-    display: flex; justify-content: space-between; align-items: center; gap: 12px;
-    font-size: 12px; color: var(--texto-fraco);
-  }
-  .funil-rodape a {
-    color: var(--ouro-claro); text-decoration: none; border: 1px solid var(--vidro-borda);
-    padding: 5px 12px; border-radius: 8px; transition: all .15s;
-  }
-  .funil-rodape a:hover { border-color: var(--acento); background: rgba(203,160,90,0.1); }
+  .funil-rodape { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--vidro-borda); display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; color: var(--texto-fraco); flex-wrap: wrap; }
+  .funil-rodape a { color: var(--ouro-claro); text-decoration: none; border: 1px solid var(--vidro-borda); padding: 5px 12px; border-radius: 8px; transition: all .15s; }
+  .funil-rodape a:hover { border-color: var(--ouro); background: rgba(212,176,96,0.1); }
   .funil-vazio { color: var(--texto-fraco); font-size: 13px; line-height: 1.6; }
   .funil-contexto { color: var(--texto-fraco); font-size: 12px; line-height: 1.5; margin: 0 0 16px; }
+
+  @media (max-width: 600px) {
+    .pagina { padding: 14px 12px 60px; }
+    .cartao { padding: 14px 14px; border-radius: 14px; }
+    .kpi-valor { font-size: 22px; }
+    h1 small { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -339,7 +459,7 @@
     <div class="marca">
       <img class="avatar" src="/icons/icon-192.png" alt="Carla">
       <div>
-        <h1>Painel da Carla</h1>
+        <h1>Carla <small>CRM do consultório</small></h1>
         <div class="subtitulo"><span class="status ok" id="status-dot"></span><span id="status-texto">Atualizando automaticamente...</span></div>
       </div>
     </div>
@@ -355,97 +475,146 @@
 
   <div id="erro-conexao">Não consegui atualizar. Confira se o painel (painel-server.js) ainda está rodando.</div>
 
-  <div class="layout-principal">
-    <main class="coluna-principal">
-
-      <div class="cartao">
-        <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>Agendamentos</span>
-          <span class="contagem" id="contagem-agendamentos">0</span>
-        </h2>
-        <div id="tabela-agendamentos"></div>
-      </div>
-
-      <div class="cartao" id="cartao-calendario">
-        <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Bloqueio de agenda</span>
-          <span class="calendario-nav">
-            <button id="cal-anterior" title="Mês anterior">◀</button>
-            <span class="calendario-mes" id="cal-mes-atual"></span>
-            <button id="cal-proximo" title="Próximo mês">▶</button>
-            <button id="btn-colapsar-calendario" class="btn-colapsar" title="Minimizar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
-          </span>
-        </h2>
-        <div class="colapsavel" id="colapsavel-calendario">
-          <div class="calendario" id="calendario"></div>
-          <div class="calendario-legenda">
-            <span><span class="legenda-cor" style="background:rgba(255,90,90,0.6)"></span> Bloqueado (sem vaga nova)</span>
-            <span><span class="legenda-cor" style="background:#4fb07d"></span> Tem consulta marcada</span>
-          </div>
-          <div class="painel-horarios-dia" id="painel-horarios-dia" style="display:none"></div>
-        </div>
-      </div>
-
-      <div class="cartao">
-        <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a5 5 0 0 0-5 5v3.5c0 .8-.3 1.6-.9 2.2L4 16h16l-2.1-2.3c-.6-.6-.9-1.4-.9-2.2V8a5 5 0 0 0-5-5Z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/></svg></span>Alertas <span class="contagem" id="contagem-alertas">0</span></span>
-          <button id="btn-limpar-alertas" class="btn-limpar">Limpar alertas</button>
-        </h2>
-        <ul id="lista-alertas"></ul>
-      </div>
-
-      <div class="cartao" id="cartao-funil">
-        <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v7l-4 2v-9L3 4Z"/></svg></span>Funil · atividade no período</span>
-          <span class="funil-periodo" id="funil-periodo">
-            <button data-periodo="7d">7 dias</button>
-            <button data-periodo="30d" aria-pressed="true">30 dias</button>
-            <button data-periodo="mes">Este mês</button>
-            <button data-periodo="tudo">Tudo</button>
-          </span>
-        </h2>
-        <div id="funil-corpo"></div>
-      </div>
-
-    </main>
-
-    <aside class="coluna-lateral">
-
-      <div class="cartao">
-        <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.7 14.2c2.4.3 4.3 2.1 4.3 4.8"/></svg></span>Contatos <span class="contagem" id="contagem-contatos">0</span></span>
-        </h2>
-        <input type="text" id="busca-contatos" class="busca-contatos" placeholder="Buscar por nome ou telefone...">
-        <div class="silenciar-form">
-          <input type="text" id="input-marcar-paciente" placeholder="Número já é paciente? Marca aqui">
-          <button id="btn-marcar-paciente">Marcar paciente</button>
-        </div>
-        <ul id="lista-contatos"></ul>
-      </div>
-
-      <div class="cartao">
-        <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4a5 5 0 1 1-9 3M3 3l18 18"/><path d="M12 4a5 5 0 0 1 5 5v3"/><path d="M6 9v3a6 6 0 0 0 6 6c.7 0 1.4-.1 2-.4M12 19v3"/></svg></span>Números silenciados</span>
-        </h2>
-        <div class="silenciar-form">
-          <input type="text" id="input-silenciar-manual" placeholder="Ex: 11999998888">
-          <button id="btn-silenciar-manual">Silenciar</button>
-        </div>
-        <div id="lista-silenciados" class="chips-silenciados"></div>
-      </div>
-
-      <div class="cartao cartao-conversao">
-        <h2>
-          <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span>Taxa de conversão</span>
-        </h2>
-        <div class="conversao-corpo">
-          <div class="anel" id="conversao-anel"><div class="anel-interior"><span id="conversao-numero">0%</span></div></div>
-          <div class="conversao-detalhe" id="conversao-detalhe">Sem dados ainda.</div>
-        </div>
-      </div>
-
-    </aside>
+  <!-- Os números do topo. Cada um é um botão: leva pra lista já filtrada. -->
+  <div class="resumo" id="resumo">
+    <button class="kpi" data-ir="agenda"><div class="kpi-rotulo">Hoje</div><div class="kpi-valor" id="kpi-hoje">0</div><div class="kpi-detalhe">consultas</div></button>
+    <button class="kpi" data-ir="agenda"><div class="kpi-rotulo">Próximos 7 dias</div><div class="kpi-valor" id="kpi-semana">0</div><div class="kpi-detalhe">consultas marcadas</div></button>
+    <button class="kpi atencao" data-ir="familias" data-filtro="aguardando_pagamento"><div class="kpi-rotulo">Aguardando pagamento</div><div class="kpi-valor" id="kpi-pagamento">0</div><div class="kpi-detalhe">reservas sem Pix</div></button>
+    <button class="kpi atencao" data-ir="familias" data-filtro="aguardando_humano"><div class="kpi-rotulo">Aguardando você</div><div class="kpi-valor" id="kpi-voce">0</div><div class="kpi-detalhe">conversas com a Carla quieta</div></button>
+    <button class="kpi" data-ir="familias" data-filtro="lead"><div class="kpi-rotulo">Leads quentes</div><div class="kpi-valor" id="kpi-leads">0</div><div class="kpi-detalhe">falaram nas últimas 48 h</div></button>
+    <button class="kpi" data-ir="familias" data-filtro="pos_consulta"><div class="kpi-rotulo">Pós-consulta</div><div class="kpi-valor" id="kpi-pos">0</div><div class="kpi-detalhe">dentro dos 30 dias</div></button>
+    <button class="kpi" data-ir="funil"><div class="kpi-rotulo">Conversão</div><div class="kpi-valor" id="kpi-conversao">0%</div><div class="kpi-detalhe" id="kpi-conversao-detalhe">leads particulares</div></button>
   </div>
+
+  <nav class="abas" id="abas" role="tablist">
+    <button role="tab" data-aba="visao" aria-selected="true">Visão geral <span class="badge atencao" id="badge-alertas" hidden>0</span></button>
+    <button role="tab" data-aba="familias" aria-selected="false">Famílias <span class="badge" id="badge-familias">0</span></button>
+    <button role="tab" data-aba="agenda" aria-selected="false">Agenda <span class="badge" id="contagem-agendamentos">0</span></button>
+    <button role="tab" data-aba="funil" aria-selected="false">Funil</button>
+  </nav>
+
+  <!-- ================================================================ VISÃO GERAL -->
+  <section class="aba" data-aba="visao" data-ativa="true">
+    <div class="layout-2">
+      <div class="coluna">
+        <div class="cartao">
+          <h2>
+            <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a5 5 0 0 0-5 5v3.5c0 .8-.3 1.6-.9 2.2L4 16h16l-2.1-2.3c-.6-.6-.9-1.4-.9-2.2V8a5 5 0 0 0-5-5Z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/></svg></span>Alertas <span class="contagem" id="contagem-alertas">0</span></span>
+            <button id="btn-limpar-alertas" class="btn-limpar">Limpar alertas</button>
+          </h2>
+          <ul id="lista-alertas"></ul>
+        </div>
+
+        <div class="cartao">
+          <h2>
+            <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M12 12v10M3 7l9 5 9-5"/></svg></span>Precisa de ação</span>
+          </h2>
+          <div id="lista-acoes"></div>
+        </div>
+      </div>
+
+      <aside class="coluna">
+        <div class="cartao">
+          <h2>
+            <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>Próximas consultas</span>
+          </h2>
+          <div id="lista-proximas"></div>
+        </div>
+
+        <div class="cartao cartao-conversao">
+          <h2>
+            <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span>Taxa de conversão</span>
+          </h2>
+          <div class="conversao-corpo">
+            <div class="anel" id="conversao-anel"><div class="anel-interior"><span id="conversao-numero">0%</span></div></div>
+            <div class="conversao-detalhe" id="conversao-detalhe">Sem dados ainda.</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ================================================================ FAMÍLIAS (CRM) -->
+  <section class="aba" data-aba="familias">
+    <div class="layout-crm">
+      <div class="coluna">
+        <div class="cartao">
+          <h2>
+            <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.7 14.2c2.4.3 4.3 2.1 4.3 4.8"/></svg></span>Famílias <span class="contagem" id="contagem-contatos">0</span></span>
+          </h2>
+          <div class="filtros" id="filtros"></div>
+          <input type="text" id="busca-contatos" class="busca-contatos" placeholder="Buscar por nome, telefone, criança ou etiqueta...">
+          <details class="mais">
+            <summary>Marcar paciente ou silenciar um número</summary>
+            <div class="conteudo">
+              <div class="silenciar-form">
+                <input type="text" id="input-marcar-paciente" placeholder="Número já é paciente? Marca aqui">
+                <button id="btn-marcar-paciente">Marcar paciente</button>
+              </div>
+              <div class="silenciar-form">
+                <input type="text" id="input-silenciar-manual" placeholder="Silenciar número (ex: 11999998888)">
+                <button id="btn-silenciar-manual">Silenciar</button>
+              </div>
+              <div id="lista-silenciados" class="chips-silenciados"></div>
+            </div>
+          </details>
+          <ul id="lista-contatos"></ul>
+        </div>
+      </div>
+
+      <aside class="coluna ficha" id="ficha-contato">
+        <div class="cartao" id="ficha-corpo">
+          <div class="ficha-vazia">Toque numa família pra abrir a <b>ficha</b>:<br>consultas, crianças, mensagens, notas e os botões de pós-consulta.</div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ================================================================ AGENDA -->
+  <section class="aba" data-aba="agenda">
+    <div class="cartao">
+      <h2>
+        <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>Agendamentos</span>
+      </h2>
+      <div id="tabela-agendamentos" class="rolagem-x"></div>
+    </div>
+
+    <div class="cartao" id="cartao-calendario">
+      <h2>
+        <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Bloqueio de agenda e horários extras</span>
+        <span class="calendario-nav">
+          <button id="cal-anterior" title="Mês anterior">◀</button>
+          <span class="calendario-mes" id="cal-mes-atual"></span>
+          <button id="cal-proximo" title="Próximo mês">▶</button>
+          <button id="btn-colapsar-calendario" class="btn-colapsar" title="Minimizar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        </span>
+      </h2>
+      <div class="colapsavel" id="colapsavel-calendario">
+        <div class="calendario" id="calendario"></div>
+        <div class="calendario-legenda">
+          <span><span class="legenda-cor" style="background:rgba(255,90,90,0.6)"></span> Bloqueado (sem vaga nova)</span>
+          <span><span class="legenda-cor" style="background:#5fc78f"></span> Tem consulta marcada</span>
+        </div>
+        <div class="painel-horarios-dia" id="painel-horarios-dia" style="display:none"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ FUNIL -->
+  <section class="aba" data-aba="funil">
+    <div class="cartao" id="cartao-funil">
+      <h2>
+        <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v7l-4 2v-9L3 4Z"/></svg></span>Funil · atividade no período</span>
+        <span class="funil-periodo" id="funil-periodo">
+          <button data-periodo="7d">7 dias</button>
+          <button data-periodo="30d" aria-pressed="true">30 dias</button>
+          <button data-periodo="mes">Este mês</button>
+          <button data-periodo="tudo">Tudo</button>
+        </span>
+      </h2>
+      <div id="funil-corpo"></div>
+    </div>
+  </section>
 
 </div>
 
@@ -472,6 +641,11 @@
     return `${d}/${m}/${y}`;
   }
 
+  function dataCurta(iso) {
+    const [, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  }
+
   function tempoRelativo(iso) {
     const diffMs = Date.now() - new Date(iso).getTime();
     const min = Math.floor(diffMs / 60000);
@@ -484,6 +658,38 @@
     if (d < 7) return `há ${d} dias`;
     return new Date(iso).toLocaleDateString("pt-BR");
   }
+
+  function quandoCurto(iso) {
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+
+  function postJSON(rota, corpo) {
+    return fetch(rota, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo || {}) });
+  }
+
+  // ---- abas ----------------------------------------------------------------
+  const ABAS = ["visao", "familias", "agenda", "funil"];
+  let abaAtual = localStorage.getItem("carla_aba") || "visao";
+  if (!ABAS.includes(abaAtual)) abaAtual = "visao";
+
+  function mostrarAba(nome) {
+    abaAtual = nome;
+    localStorage.setItem("carla_aba", nome);
+    document.querySelectorAll(".aba").forEach((s) => { s.dataset.ativa = String(s.dataset.aba === nome); });
+    document.querySelectorAll("#abas button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.aba === nome)));
+  }
+  document.getElementById("abas").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-aba]");
+    if (b) mostrarAba(b.dataset.aba);
+  });
+  document.getElementById("resumo").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-ir]");
+    if (!b) return;
+    if (b.dataset.filtro) definirFiltro(b.dataset.filtro);
+    mostrarAba(b.dataset.ir);
+  });
+  mostrarAba(abaAtual);
 
   let statusAtual = null; // { rodando, existe } — só usado pra saber o que o botão deve fazer
   let acaoEmAndamento = false;
@@ -547,11 +753,7 @@
     if (alternandoBloqueio) return;
     alternandoBloqueio = true;
     try {
-      const resp = await fetch("/api/bloqueio-toggle", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data }),
-      });
+      const resp = await postJSON("/api/bloqueio-toggle", { data });
       const resultado = await resp.json();
       bloqueiosAtuais = resultado.bloqueios || bloqueiosAtuais;
       renderizarCalendario();
@@ -655,11 +857,7 @@
     if (!hora) return;
     const soTeleconsulta = !!document.getElementById("input-extra-tele").checked;
     try {
-      await fetch("/api/horario-extra", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data, hora, soTeleconsulta }),
-      });
+      await postJSON("/api/horario-extra", { data, hora, soTeleconsulta });
     } catch (e) {
       // se falhar, o horário simplesmente não entra e dá pra tentar de novo
     }
@@ -668,11 +866,7 @@
 
   async function removerHorarioExtra(slotId, data) {
     try {
-      await fetch("/api/horario-extra-remover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId }),
-      });
+      await postJSON("/api/horario-extra-remover", { slotId });
     } catch (e) {
       // idem: sem efeito se falhar
     }
@@ -681,11 +875,7 @@
 
   async function alternarBloqueioHorario(slotId, data) {
     try {
-      await fetch("/api/bloqueio-horario-toggle", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId }),
-      });
+      await postJSON("/api/bloqueio-horario-toggle", { slotId });
     } catch (e) {
       // ignora — se falhar, o horário simplesmente não muda e o usuário pode tentar de novo
     }
@@ -814,6 +1004,15 @@
     return `<button class="btn-portal btn-guia" title="Mandar o link do guia pra família (libere o acesso no prontuário antes)" data-telefone="${escapeHtml(a.telefone)}">enviar</button>`;
   }
 
+  const NOME_TIPO = { urgencia: "Urgência", puericultura: "Puericultura", tnd: "Neurodesenv." };
+  function etiquetaTipo(a) {
+    if (!a.tipoConsulta) return `<span class="tag-tipo" title="Reserva de antes dos tipos">Consulta</span>`;
+    return `<span class="tag-tipo ${escapeHtml(a.tipoConsulta)}">${escapeHtml(NOME_TIPO[a.tipoConsulta] || a.tipoConsulta)}</span>`;
+  }
+  function etiquetaModalidade(a) {
+    return a.modalidade === "teleconsulta" ? `<span class="tag-mod" title="Teleconsulta">📹 vídeo</span>` : `<span class="tag-mod">presencial</span>`;
+  }
+
   async function avisarGuia(btn) {
     // O aviso do prontuário está na confirmação de propósito: mandar o link antes de
     // liberar o acesso faz a família abrir, não conseguir entrar, e desistir.
@@ -821,11 +1020,7 @@
     btn.disabled = true;
     btn.textContent = "...";
     try {
-      const resposta = await fetch("/api/avisar-guia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: btn.dataset.telefone }),
-      });
+      const resposta = await postJSON("/api/avisar-guia", { telefone: btn.dataset.telefone });
       const r = await resposta.json().catch(() => ({}));
       if (!r.ok) alert("Não deu pra mandar: " + (r.motivo || "erro desconhecido"));
     } catch (e) {
@@ -839,11 +1034,7 @@
     btn.disabled = true;
     btn.textContent = "...";
     try {
-      const resposta = await fetch("/api/avisar-portal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: btn.dataset.telefone }),
-      });
+      const resposta = await postJSON("/api/avisar-portal", { telefone: btn.dataset.telefone });
       const r = await resposta.json().catch(() => ({}));
       if (!r.ok) alert("Não deu pra mandar: " + (r.motivo || "erro desconhecido"));
     } catch (e) {
@@ -858,35 +1049,55 @@
     const novo = btn.dataset.pago !== "1";
     btn.disabled = true;
     try {
-      await fetch("/api/pagamento-toggle", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId: btn.dataset.slotId, pago: novo }),
-      });
+      await postJSON("/api/pagamento-toggle", { slotId: btn.dataset.slotId, pago: novo });
     } catch (e) {
       btn.disabled = false;
       alert("Não consegui salvar. Tenta de novo.");
       return;
     }
     atualizar();
+    atualizarCrm();
   }
 
   async function cancelarAgendamento(slotId) {
     if (!confirm("Cancelar esse agendamento? Ele sai da agenda, mas o registro fica guardado para conferência.")) return;
     try {
-      await fetch("/api/cancelar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId }),
-      });
+      await postJSON("/api/cancelar", { slotId });
     } catch (e) {
       // ignora — se falhar, a tabela simplesmente não vai atualizar e o dado continua lá
     }
     atualizar();
+    atualizarCrm();
   }
 
+  // Liga os botões de uma tabela de consultas (a da aba Agenda e a da ficha usam o mesmo).
+  function ligarBotoesDeConsulta(raiz) {
+    raiz.querySelectorAll(".btn-x").forEach((btn) => {
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); cancelarAgendamento(btn.dataset.slotId); });
+    });
+    raiz.querySelectorAll(".btn-pago").forEach((btn) => {
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); alternarPago(btn); });
+    });
+    // :not(.btn-guia) porque o botão do guia reaproveita a classe .btn-portal só pelo
+    // estilo — sem isso ele ganharia o listener do portal e mandaria a mensagem errada.
+    raiz.querySelectorAll(".btn-portal:not(.btn-guia)").forEach((btn) => {
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); avisarPortal(btn); });
+    });
+    raiz.querySelectorAll(".btn-guia").forEach((btn) => {
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); avisarGuia(btn); });
+    });
+    raiz.querySelectorAll(".btn-ficha[data-telefone]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); abrirFicha(btn.dataset.telefone); });
+    });
+  }
+
+  // ======================================================================== CRM
   let silenciadosAtuais = new Set();
   let contatosAtuais = [];
+  let crmAtual = null;
+  let filtroAtual = localStorage.getItem("carla_filtro") || "todos";
+  let telefoneAberto = null;
+  let fichaAtual = null;
 
   // Verdadeiro se algum campo dentro do seletor está em foco ou com texto. É o que segura o
   // redesenho automático das listas enquanto o Dr. Bruno digita nelas.
@@ -894,92 +1105,234 @@
     return [...document.querySelectorAll(seletor)].some((c) => c === document.activeElement || (c.value || "").trim());
   }
 
+  const TOM_SITUACAO = {};
+  function renderizarFiltros(crm) {
+    const alvo = document.getElementById("filtros");
+    const total = crm.contatos.length;
+    const botoes = [`<button data-filtro="todos" aria-pressed="${filtroAtual === "todos"}">Todas <b>${total}</b></button>`];
+    for (const s of crm.situacoes) {
+      TOM_SITUACAO[s.chave] = s.tom;
+      const n = crm.contagem[s.chave] || 0;
+      if (!n && filtroAtual !== s.chave) continue;
+      botoes.push(`<button class="${s.tom}" data-filtro="${s.chave}" aria-pressed="${filtroAtual === s.chave}">${escapeHtml(s.rotulo)} <b>${n}</b></button>`);
+    }
+    alvo.innerHTML = botoes.join("");
+  }
+  document.getElementById("filtros").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-filtro]");
+    if (b) definirFiltro(b.dataset.filtro);
+  });
+  function definirFiltro(chave) {
+    filtroAtual = chave;
+    localStorage.setItem("carla_filtro", chave);
+    if (crmAtual) { renderizarFiltros(crmAtual); aplicarBuscaContatos(); }
+  }
+
+  function chipsDe(c) {
+    return c.situacoes.map((s) => {
+      const def = (crmAtual && crmAtual.situacoes.find((x) => x.chave === s)) || { rotulo: s, tom: "neutro" };
+      let rotulo = def.rotulo;
+      if (s === "pos_consulta" && c.posConsulta) rotulo = `Pós-consulta · ${c.posConsulta.diasRestantes} dias restantes`;
+      return `<span class="chip ${def.tom}">${escapeHtml(rotulo)}</span>`;
+    }).concat((c.etiquetas || []).map((e) => `<span class="chip etiqueta">${escapeHtml(e)}</span>`)).join("");
+  }
+
   function renderizarContatos(contatos) {
     contatosAtuais = contatos || [];
     document.getElementById("contagem-contatos").textContent = contatosAtuais.length;
-    // A caixa de mensagem mora dentro da lista: redesenhar com ela aberta apagaria o texto.
-    if (alguemDigitandoEm("#lista-contatos textarea")) return;
+    document.getElementById("badge-familias").textContent = contatosAtuais.length;
     aplicarBuscaContatos();
   }
 
   function aplicarBuscaContatos() {
     const termo = document.getElementById("busca-contatos").value.trim().toLowerCase();
     const lista = document.getElementById("lista-contatos");
-    const filtrados = !termo ? contatosAtuais : contatosAtuais.filter((c) =>
-      (c.nome || "").toLowerCase().includes(termo) || c.telefone.toLowerCase().includes(termo)
-    );
+    let filtrados = filtroAtual === "todos" ? contatosAtuais : contatosAtuais.filter((c) => c.situacoes.includes(filtroAtual));
+    if (termo) {
+      filtrados = filtrados.filter((c) =>
+        (c.nome || "").toLowerCase().includes(termo) || c.telefone.toLowerCase().includes(termo)
+        || (c.criancas || []).some((k) => k.toLowerCase().includes(termo))
+        || (c.etiquetas || []).some((k) => k.toLowerCase().includes(termo))
+      );
+    }
 
     if (contatosAtuais.length === 0) {
-      lista.innerHTML = "<div class='vazio'>Nenhum contato registrado ainda.</div>";
+      lista.innerHTML = "<div class='vazio'>Nenhuma família registrada ainda.</div>";
       return;
     }
     if (filtrados.length === 0) {
-      lista.innerHTML = "<div class='vazio'>Nenhum contato encontrado pra essa busca.</div>";
+      lista.innerHTML = "<div class='vazio'>Ninguém nesse filtro agora.</div>";
       return;
     }
 
     lista.innerHTML = filtrados.map((c) => {
-      const tags = [
-        c.contatoSalvo ? `<span class="contato-tag paciente">Paciente</span>` : "",
-        c.fechou ? `<span class="contato-tag fechou">Fechou consulta</span>` : "",
-        c.aguardandoHumano ? `<span class="contato-tag aguardando">Aguardando humano</span>` : "",
-      ].join("");
-      const silenciado = silenciadosAtuais.has(c.telefone);
-      const tempo = c.ultimaAtividade ? tempoRelativo(c.ultimaAtividade) : "Nunca conversou com a Carla";
+      const tempo = c.ultimaAtividade ? tempoRelativo(c.ultimaAtividade) : "nunca conversou";
       const titulo = c.nome
-        ? `<span class="contato-nome">${escapeHtml(c.nome)}</span><span class="contato-tel-sub"> · ${escapeHtml(c.telefone)}</span>`
-        : `<span class="contato-tel">${escapeHtml(c.telefone)}</span>`;
-      return `<li>
+        ? `<span class="contato-nome">${escapeHtml(c.nome)}</span> <span class="contato-tel-sub">${escapeHtml(c.telefone)}</span>`
+        : `<span class="contato-nome">${escapeHtml(c.telefone)}</span>`;
+      const criancas = c.criancas && c.criancas.length ? `<div class="contato-linha">Criança${c.criancas.length > 1 ? "s" : ""}: <b>${escapeHtml(c.criancas.join(", "))}</b></div>` : "";
+      const proxima = c.proximaConsulta
+        ? `<div class="contato-linha">Próxima: <b>${dataCurta(c.proximaConsulta.data)} ${escapeHtml(c.proximaConsulta.horario)}</b> · ${escapeHtml(c.proximaConsulta.tipoNome)}${c.proximaConsulta.pago ? "" : " · <span style='color:var(--atencao)'>não pago</span>"}</div>`
+        : "";
+      return `<li data-telefone="${escapeHtml(c.telefone)}" class="${c.telefone === telefoneAberto ? "aberto" : ""}">
         <div class="contato-topo">
           <span>${titulo}</span>
           <span class="contato-tempo">${tempo}</span>
         </div>
         ${c.ultimaMensagem ? `<div class="contato-msg">"${escapeHtml(c.ultimaMensagem)}"</div>` : ""}
-        ${tags ? `<div class="contato-tags">${tags}</div>` : ""}
-        <div class="contato-botoes">
-          <button class="btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado — reativar" : "Silenciar"}</button>
-          <button class="btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${c.ehPaciente ? "Remover marcação de paciente" : "Marcar como paciente"}</button>
-          ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
-          ${c.ultimaAtividade ? `<button class="btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
-          ${podeMostrarReaquecer(c, silenciado) ? `<button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}">Reaquecer</button>` : ""}
-          <button class="btn-mensagem-contato" data-telefone="${escapeHtml(c.telefone)}">Mensagem</button>
-        </div>
-        <div class="msg-manual" data-caixa="${escapeHtml(c.telefone)}" hidden>
-          <textarea rows="3" placeholder="Escreva pra ${escapeHtml(c.nome || c.telefone)}. Sai pelo número do consultório, do jeito que você digitar. A Carla fica quieta nessa conversa até você retomar."></textarea>
-          <div class="msg-manual-acoes">
-            <span class="msg-manual-aviso"></span>
-            <button class="btn-cancelar-msg" type="button">Cancelar</button>
-            <button class="btn-enviar-msg" type="button" data-telefone="${escapeHtml(c.telefone)}">Enviar</button>
-          </div>
-        </div>
+        ${criancas}${proxima}
+        <div class="contato-tags"><span class="chip estagio">${escapeHtml(c.estagio.rotulo)}</span>${chipsDe(c)}</div>
+        ${c.aguardandoHumano ? `<div class="contato-botoes"><button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button></div>` : ""}
       </li>`;
     }).join("");
 
-    lista.querySelectorAll(".btn-silenciar-contato").forEach((btn) => {
-      btn.addEventListener("click", () => alternarSilencio(btn.dataset.telefone));
-    });
-    lista.querySelectorAll(".btn-marcar-contato:not(:disabled)").forEach((btn) => {
-      btn.addEventListener("click", () => alternarMarcacaoPaciente(btn.dataset.telefone));
+    lista.querySelectorAll("li[data-telefone]").forEach((li) => {
+      li.addEventListener("click", () => abrirFicha(li.dataset.telefone));
     });
     lista.querySelectorAll(".btn-retomar-contato").forEach((btn) => {
-      btn.addEventListener("click", () => retomarAtendimentoContato(btn.dataset.telefone));
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); retomarAtendimentoContato(btn.dataset.telefone); });
     });
-    lista.querySelectorAll(".btn-limpar-contato").forEach((btn) => {
-      btn.addEventListener("click", () => limparConversaContato(btn.dataset.telefone));
-    });
-    lista.querySelectorAll(".btn-reaquecer-contato").forEach((btn) => {
-      btn.addEventListener("click", () => reaquecerContato(btn, btn.dataset.telefone));
-    });
-    lista.querySelectorAll(".btn-mensagem-contato").forEach((btn) => {
-      btn.addEventListener("click", () => abrirCaixaDeMensagem(btn.dataset.telefone));
-    });
-    lista.querySelectorAll(".btn-cancelar-msg").forEach((btn) => {
-      btn.addEventListener("click", () => fecharCaixaDeMensagem(btn.closest(".msg-manual")));
-    });
-    lista.querySelectorAll(".btn-enviar-msg").forEach((btn) => {
-      btn.addEventListener("click", () => enviarMensagemManual(btn.dataset.telefone, btn.closest(".msg-manual")));
-    });
-    lista.querySelectorAll(".msg-manual textarea").forEach((campo) => {
+  }
+
+  document.getElementById("busca-contatos").addEventListener("input", aplicarBuscaContatos);
+
+  // ---- a ficha -------------------------------------------------------------
+  async function abrirFicha(telefone) {
+    telefoneAberto = telefone;
+    mostrarAba("familias");
+    document.body.classList.add("ficha-aberta");
+    document.getElementById("ficha-contato").classList.add("aberta");
+    document.querySelectorAll("#lista-contatos li").forEach((li) => li.classList.toggle("aberto", li.dataset.telefone === telefone));
+    document.getElementById("ficha-corpo").innerHTML = "<div class='vazio'>Abrindo a ficha...</div>";
+    await atualizarFicha(true);
+  }
+
+  function fecharFicha() {
+    telefoneAberto = null;
+    fichaAtual = null;
+    document.body.classList.remove("ficha-aberta");
+    document.getElementById("ficha-contato").classList.remove("aberta");
+    document.getElementById("ficha-corpo").innerHTML = `<div class="ficha-vazia">Toque numa família pra abrir a <b>ficha</b>:<br>consultas, crianças, mensagens, notas e os botões de pós-consulta.</div>`;
+    document.querySelectorAll("#lista-contatos li.aberto").forEach((li) => li.classList.remove("aberto"));
+  }
+
+  // A ficha se redesenha junto com o resto, mas NUNCA enquanto o Dr. Bruno está escrevendo
+  // nela: a caixa de mensagem, a nota e a etiqueta moram aqui, e redesenhar apagaria o texto.
+  async function atualizarFicha(forcar = false) {
+    if (!telefoneAberto) return;
+    if (!forcar && alguemDigitandoEm("#ficha-contato textarea, #ficha-contato input")) return;
+    try {
+      const resp = await fetch(`/api/crm/contato?telefone=${encodeURIComponent(telefoneAberto)}`);
+      const f = await resp.json();
+      if (!f.ok) { document.getElementById("ficha-corpo").innerHTML = `<div class="vazio">${escapeHtml(f.erro || "Não achei essa família.")}</div>`; return; }
+      fichaAtual = f;
+      renderizarFicha(f);
+    } catch (e) {
+      // a próxima rodada tenta de novo
+    }
+  }
+
+  function renderizarFicha(f) {
+    const c = f.contato;
+    const alvo = document.getElementById("ficha-corpo");
+    const silenciado = silenciadosAtuais.has(c.telefone);
+    const numeroLimpo = String(c.telefone).replace(/\D/g, "");
+    const consultasFuturas = f.consultas.filter((k) => (k.estado === "reservado" || k.estado === "pago") && k.data >= dataStr(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()));
+
+    const dados = `<div class="ficha-grade">
+      <div class="dado"><div class="dado-rotulo">Estágio</div><div class="dado-valor ouro">${escapeHtml(c.estagio.rotulo)}</div></div>
+      <div class="dado"><div class="dado-rotulo">Consultas</div><div class="dado-valor">${c.totalConsultas}${c.consultasCanceladas ? ` <span style="color:var(--texto-apagado);font-weight:500">(+${c.consultasCanceladas} cancelada${c.consultasCanceladas > 1 ? "s" : ""})</span>` : ""}</div></div>
+      <div class="dado"><div class="dado-rotulo">Última conversa</div><div class="dado-valor">${c.ultimaAtividade ? escapeHtml(tempoRelativo(c.ultimaAtividade)) : "nunca"}</div></div>
+      <div class="dado"><div class="dado-rotulo">Chegou perguntando</div><div class="dado-valor">${escapeHtml(NOME_PERGUNTA[c.primeiraPergunta] || (c.primeiraPergunta ? c.primeiraPergunta : "sem registro"))}</div></div>
+    </div>`;
+
+    const criancas = c.criancas.length
+      ? `<div class="ficha-secao"><h3>Criança${c.criancas.length > 1 ? "s" : ""}</h3><div>${c.criancas.map((k) => `<span class="chip info" style="font-size:12px;padding:4px 10px;margin:0 4px 4px 0">${escapeHtml(k)}</span>`).join("")}</div></div>`
+      : "";
+
+    const consultas = `<div class="ficha-secao"><h3>Consultas <span>${f.consultas.length ? "da mais recente pra mais antiga" : ""}</span></h3>
+      ${f.consultas.length === 0 ? "<div class='vazio'>Nenhuma consulta com esta família ainda.</div>" : `<div class="rolagem-x"><table>
+        <thead><tr><th>Quando</th><th>Criança</th><th>Tipo</th><th>Estado</th><th class="col-x">Pago</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th class="col-x"></th></tr></thead>
+        <tbody>${f.consultas.map((k) => `<tr>
+          <td><b>${dataCurta(k.data)}</b> ${escapeHtml(k.horario)}<br><span class="tag-mod">${k.modalidade === "teleconsulta" ? "📹 vídeo" : "presencial"}</span></td>
+          <td>${escapeHtml(k.crianca || "")}</td>
+          <td>${etiquetaTipo(k)}</td>
+          <td><span class="estado-consulta ${escapeHtml(k.estado)}">${k.estado === "pago" ? "paga" : k.estado === "reservado" ? "reservada" : k.estado === "cancelado" ? "cancelada" : "venceu"}</span></td>
+          <td class="col-x">${k.estado === "cancelado" || k.estado === "vencido" ? "" : botaoPago({ ...k, telefone: c.telefone })}</td>
+          <td class="col-x">${k.estado === "cancelado" || k.estado === "vencido" ? "" : botaoPortal({ ...k, telefone: c.telefone })}</td>
+          <td class="col-x">${k.estado === "cancelado" || k.estado === "vencido" ? "" : botaoGuia({ ...k, telefone: c.telefone })}</td>
+          <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? `<button class="btn-x" title="Cancelar consulta" data-slot-id="${escapeHtml(k.slotId)}">✕</button>` : ""}</td>
+        </tr>`).join("")}</tbody></table></div>`}
+    </div>`;
+
+    const pos = c.posConsulta
+      ? `<div class="pos-consulta-aviso">Consulta de <b>${escapeHtml(c.posConsulta.crianca || "criança")}</b> em ${formatarDataBR(c.posConsulta.data)}: faz <b>${c.posConsulta.diasDesde} dia${c.posConsulta.diasDesde === 1 ? "" : "s"}</b>, restam <b>${c.posConsulta.diasRestantes}</b> dos 30 de acompanhamento pelo WhatsApp.</div>`
+      : `<div class="pos-consulta-aviso">Cada botão preenche a mensagem abaixo com o nome da criança. Você lê, ajusta se quiser, e manda.</div>`;
+    const modelos = `<div class="ficha-secao"><h3>Pós-consulta</h3>${pos}<div class="modelos">${f.modelos.map((m) =>
+      `<button data-modelo="${escapeHtml(m.id)}" ${m.disponivel ? "" : "disabled"} title="${escapeHtml(m.disponivel ? (m.carlaContinua ? "Depois dessa a Carla continua a conversa" : "Depois dessa a Carla fica quieta até você retomar") : m.motivo)}">${escapeHtml(m.nome)}<small>${escapeHtml(m.quando)}</small></button>`
+    ).join("")}</div></div>`;
+
+    const acoes = `<div class="ficha-secao"><h3>Ações</h3><div class="contato-botoes">
+      <button class="btn-mensagem-contato" data-telefone="${escapeHtml(c.telefone)}">Mensagem</button>
+      ${podeMostrarReaquecer(c, silenciado) ? `<button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}">Reaquecer</button>` : ""}
+      ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
+      <button class="btn-mini btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${c.ehPaciente ? "É paciente · desmarcar" : "Marcar como paciente"}</button>
+      <button class="btn-mini perigo btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado · reativar" : "Silenciar"}</button>
+      ${c.ultimaAtividade ? `<button class="btn-mini perigo btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
+    </div></div>`;
+
+    const caixa = `<div class="msg-manual" data-caixa="${escapeHtml(c.telefone)}" hidden>
+      <textarea rows="3" placeholder="Escreva pra ${escapeHtml(c.nome || c.telefone)}. Sai pelo número do consultório, do jeito que você digitar. A Carla fica quieta nessa conversa até você retomar."></textarea>
+      <div class="msg-manual-acoes">
+        <span class="msg-manual-aviso"></span>
+        <label class="msg-carla" title="Marcado: a Carla continua respondendo depois dessa mensagem. Desmarcado: ela fica quieta até você retomar."><input type="checkbox" class="input-carla-continua"> a Carla continua a conversa</label>
+        <button class="btn-cancelar-msg" type="button">Cancelar</button>
+        <button class="btn-enviar-msg" type="button" data-telefone="${escapeHtml(c.telefone)}">Enviar</button>
+      </div>
+    </div>`;
+
+    const historico = `<div class="ficha-secao"><h3>Últimas mensagens <span>o que a Carla guarda da conversa atual</span></h3>
+      ${f.historico.length === 0 ? "<div class='vazio'>Sem conversa recente guardada.</div>" : `<div class="historico">${f.historico.map((m) =>
+        `<div class="balao ${m.role === "user" ? "user" : "assistant"}">${escapeHtml(m.content || "")}</div>`).join("")}</div>`}
+    </div>`;
+
+    const notas = `<div class="ficha-secao"><h3>Notas <span>só você vê</span></h3>
+      <div class="notas-lista">${f.notas.slice().reverse().map((n) => `<div class="nota"><div>${escapeHtml(n.texto)}<small>${escapeHtml(quandoCurto(n.em))}</small></div><button data-remover-nota="${escapeHtml(n.id)}" title="Apagar nota">✕</button></div>`).join("")}</div>
+      <div class="nota-form"><input type="text" id="input-nota" placeholder="Anotar algo sobre esta família e teclar Enter" maxlength="1000"><button id="btn-nota">Anotar</button></div>
+    </div>`;
+
+    const etiquetas = `<div class="ficha-secao"><h3>Etiquetas</h3><div class="etiquetas-form">
+      ${f.etiquetas.map((e) => `<span class="chip etiqueta">${escapeHtml(e)}<button data-remover-etiqueta="${escapeHtml(e)}" title="Tirar etiqueta">✕</button></span>`).join("")}
+      <input type="text" id="input-etiqueta" placeholder="+ etiqueta (Enter)" maxlength="24">
+    </div></div>`;
+
+    const linha = `<div class="ficha-secao"><h3>Linha do tempo</h3>
+      ${f.linhaDoTempo.length === 0 ? "<div class='vazio'>Nada registrado ainda. O registro começou junto com o funil e não retroage.</div>" : `<div class="linha-tempo">${f.linhaDoTempo.map((i) =>
+        `<div class="lt-item ${escapeHtml(i.tipo)}"><span class="lt-quando">${escapeHtml(quandoCurto(i.em))}</span><span class="lt-texto">${escapeHtml(i.texto)}</span></div>`).join("")}</div>`}
+    </div>`;
+
+    alvo.innerHTML = `
+      <div class="ficha-topo">
+        <div>
+          <div class="ficha-nome">${escapeHtml(c.nome || c.telefone)}</div>
+          <div class="ficha-tel">${c.nome ? escapeHtml(c.telefone) + " · " : ""}<a href="https://wa.me/${escapeHtml(numeroLimpo)}" target="_blank" rel="noopener">abrir no WhatsApp</a></div>
+        </div>
+        <button class="btn-fechar-ficha" title="Fechar ficha">✕</button>
+      </div>
+      <div class="ficha-chips"><span class="chip estagio">${escapeHtml(c.estagio.rotulo)}</span>${chipsDe(c)}</div>
+      ${dados}${criancas}${consultas}${modelos}${acoes}${caixa}${historico}${notas}${etiquetas}${linha}`;
+
+    alvo.querySelector(".btn-fechar-ficha").addEventListener("click", fecharFicha);
+    ligarBotoesDeConsulta(alvo);
+    alvo.querySelectorAll(".btn-silenciar-contato").forEach((btn) => btn.addEventListener("click", () => alternarSilencio(btn.dataset.telefone)));
+    alvo.querySelectorAll(".btn-marcar-contato").forEach((btn) => btn.addEventListener("click", () => alternarMarcacaoPaciente(btn.dataset.telefone)));
+    alvo.querySelectorAll(".btn-retomar-contato").forEach((btn) => btn.addEventListener("click", () => retomarAtendimentoContato(btn.dataset.telefone)));
+    alvo.querySelectorAll(".btn-limpar-contato").forEach((btn) => btn.addEventListener("click", () => limparConversaContato(btn.dataset.telefone)));
+    alvo.querySelectorAll(".btn-reaquecer-contato").forEach((btn) => btn.addEventListener("click", () => reaquecerContato(btn, btn.dataset.telefone)));
+    alvo.querySelectorAll(".btn-mensagem-contato").forEach((btn) => btn.addEventListener("click", () => abrirCaixaDeMensagem(btn.dataset.telefone)));
+    alvo.querySelectorAll(".btn-cancelar-msg").forEach((btn) => btn.addEventListener("click", () => fecharCaixaDeMensagem(btn.closest(".msg-manual"))));
+    alvo.querySelectorAll(".btn-enviar-msg").forEach((btn) => btn.addEventListener("click", () => enviarMensagemManual(btn.dataset.telefone, btn.closest(".msg-manual"))));
+    alvo.querySelectorAll(".msg-manual textarea").forEach((campo) => {
       // Ctrl+Enter envia; Enter sozinho é quebra de linha, porque mensagem de WhatsApp tem parágrafo.
       campo.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -988,6 +1341,38 @@
         }
       });
     });
+    alvo.querySelectorAll(".modelos button[data-modelo]").forEach((btn) => btn.addEventListener("click", () => usarModelo(btn.dataset.modelo)));
+    alvo.querySelectorAll("[data-remover-nota]").forEach((btn) => btn.addEventListener("click", () => removerNota(c.telefone, btn.dataset.removerNota)));
+    const inputNota = alvo.querySelector("#input-nota");
+    alvo.querySelector("#btn-nota").addEventListener("click", () => adicionarNota(c.telefone, inputNota));
+    inputNota.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); adicionarNota(c.telefone, inputNota); } });
+    const inputEtiqueta = alvo.querySelector("#input-etiqueta");
+    inputEtiqueta.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const nova = inputEtiqueta.value.trim();
+      if (!nova) return;
+      inputEtiqueta.value = "";
+      salvarEtiquetas(c.telefone, [...f.etiquetas, nova]);
+    });
+    alvo.querySelectorAll("[data-remover-etiqueta]").forEach((btn) => btn.addEventListener("click", () => salvarEtiquetas(c.telefone, f.etiquetas.filter((e) => e !== btn.dataset.removerEtiqueta))));
+  }
+
+  // O botão do modelo só preenche a caixa. Ele não manda nada: o Dr. Bruno lê, ajusta e
+  // aperta Enviar, como em qualquer mensagem manual.
+  function usarModelo(id) {
+    if (!fichaAtual) return;
+    const m = fichaAtual.modelos.find((x) => x.id === id);
+    if (!m || !m.disponivel) return;
+    const caixa = document.querySelector(`#ficha-contato .msg-manual[data-caixa="${CSS.escape(fichaAtual.contato.telefone)}"]`);
+    if (!caixa) return;
+    caixa.hidden = false;
+    const campo = caixa.querySelector("textarea");
+    campo.value = m.texto;
+    caixa.querySelector(".input-carla-continua").checked = !!m.carlaContinua;
+    caixa.querySelector(".msg-manual-aviso").textContent = "";
+    campo.focus();
+    campo.setSelectionRange(campo.value.length, campo.value.length);
   }
 
   function abrirCaixaDeMensagem(telefone) {
@@ -1001,15 +1386,18 @@
     if (!caixa) return;
     caixa.querySelector("textarea").value = "";
     caixa.querySelector(".msg-manual-aviso").textContent = "";
+    caixa.querySelector(".input-carla-continua").checked = false;
     caixa.hidden = true;
-    atualizar();
+    atualizarCrm();
   }
 
-  // Sai pelo número do consultório, sem a IA no meio, e cala a Carla naquela conversa.
+  // Sai pelo número do consultório, sem a IA no meio, e cala a Carla naquela conversa
+  // (a não ser que a caixinha "a Carla continua" esteja marcada, como no convite pra rotina).
   async function enviarMensagemManual(telefone, caixa) {
     const campo = caixa.querySelector("textarea");
     const aviso = caixa.querySelector(".msg-manual-aviso");
     const botao = caixa.querySelector(".btn-enviar-msg");
+    const carlaContinua = !!caixa.querySelector(".input-carla-continua").checked;
     const texto = campo.value.trim();
     if (!texto) return;
     botao.disabled = true;
@@ -1019,7 +1407,7 @@
       const resp = await fetch("/api/mensagem-manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone, texto }),
+        body: JSON.stringify({ telefone, texto, carlaContinua }),
       });
       const r = await resp.json();
       if (!r.ok) {
@@ -1036,11 +1424,41 @@
     }
   }
 
+  async function adicionarNota(telefone, input) {
+    const texto = input.value.trim();
+    if (!texto) return;
+    input.disabled = true;
+    try {
+      const resp = await postJSON("/api/crm/nota", { telefone, texto });
+      const r = await resp.json();
+      if (!r.ok) alert("Não salvei a nota: " + (r.motivo || "erro"));
+      else input.value = "";
+    } catch (e) {
+      alert("Não salvei a nota: sem conexão com o painel.");
+    }
+    input.disabled = false;
+    await atualizarFicha(true);
+    atualizarCrm();
+  }
+
+  async function removerNota(telefone, id) {
+    if (!confirm("Apagar esta nota?")) return;
+    try { await postJSON("/api/crm/nota-remover", { telefone, id }); } catch (e) { /* tenta de novo depois */ }
+    await atualizarFicha(true);
+    atualizarCrm();
+  }
+
+  async function salvarEtiquetas(telefone, etiquetas) {
+    try { await postJSON("/api/crm/etiquetas", { telefone, etiquetas }); } catch (e) { /* idem */ }
+    await atualizarFicha(true);
+    atualizarCrm();
+  }
+
   // O botão só aparece pra quem faz sentido. As travas de VERDADE estão no servidor
   // (reaquecimento.js), porque esconder botão não é segurança: isto aqui só evita mostrar
   // uma opção que vai ser recusada. A conversa precisa ter pelo menos um dia parada.
   function podeMostrarReaquecer(c, silenciado) {
-    if (silenciado || c.aguardandoHumano || c.fechou) return false;
+    if (silenciado || c.aguardandoHumano || c.fechou || c.proximaConsulta) return false;
     if (!c.ultimaAtividade) return false;
     return Date.now() - new Date(c.ultimaAtividade).getTime() >= 24 * 60 * 60 * 1000;
   }
@@ -1052,11 +1470,7 @@
     botao.disabled = true;
     botao.textContent = "Enviando...";
     try {
-      const resp = await fetch("/api/reaquecer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone }),
-      });
+      const resp = await postJSON("/api/reaquecer", { telefone });
       const r = await resp.json();
       if (!r.ok) {
         alert("Não deu pra reaquecer: " + (r.motivo || "motivo desconhecido"));
@@ -1071,46 +1485,37 @@
       botao.textContent = "Reaquecer";
     }
     atualizar();
+    atualizarCrm();
     atualizarFunil();
   }
 
   async function retomarAtendimentoContato(telefone) {
     try {
-      await fetch("/api/retomar-atendimento", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone }),
-      });
+      await postJSON("/api/retomar-atendimento", { telefone });
     } catch (e) {
       // ignora — se falhar, o usuário pode tentar de novo
     }
     atualizar();
+    atualizarCrm();
+    atualizarFicha(true);
   }
 
   async function limparConversaContato(telefone) {
     if (!confirm("Apagar todo o histórico de conversa desse número? A Carla vai tratar a próxima mensagem como se fosse a primeira vez. Não dá pra desfazer.")) return;
     try {
-      await fetch("/api/limpar-conversa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone }),
-      });
+      await postJSON("/api/limpar-conversa", { telefone });
     } catch (e) {
       // ignora — se falhar, a conversa continua lá e o usuário pode tentar de novo
     }
     atualizar();
+    atualizarCrm();
+    atualizarFicha(true);
   }
-
-  document.getElementById("busca-contatos").addEventListener("input", aplicarBuscaContatos);
 
   async function alternarSilencio(telefone) {
     const rota = silenciadosAtuais.has(telefone) ? "/api/dessilenciar" : "/api/silenciar";
     try {
-      const resp = await fetch(rota, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone }),
-      });
+      const resp = await postJSON(rota, { telefone });
       const resultado = await resp.json();
       if (!resp.ok || !resultado.ok) throw new Error(resultado.erro || "Não foi possível alterar o silêncio.");
       silenciadosAtuais = new Set(resultado.silenciados || []);
@@ -1118,6 +1523,8 @@
       alert(e.message || "Não foi possível alterar o silêncio deste contato.");
     }
     atualizar();
+    atualizarCrm();
+    atualizarFicha(true);
   }
 
   // Responder uma escalada. Desabilita os botões na hora: a resposta dispara uma mensagem
@@ -1126,11 +1533,7 @@
     const card = elemento.closest(".alerta-pergunta");
     if (card) card.querySelectorAll("button, input").forEach((e) => { e.disabled = true; });
     try {
-      const r = await fetch("/api/responder-escalada", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ alertaId, resposta }),
-      });
+      const r = await postJSON("/api/responder-escalada", { alertaId, resposta });
       const dados = await r.json().catch(() => ({}));
       if (!dados.ok) alert("Não consegui responder: " + (dados.motivo || dados.erro || "erro desconhecido"));
     } catch (e) {
@@ -1153,22 +1556,23 @@
         responderEscalada(campo.dataset.alertaTexto, texto, campo);
       });
     });
+    document.querySelectorAll("#lista-alertas .btn-ficha[data-telefone]").forEach((btn) => {
+      btn.addEventListener("click", () => abrirFicha(btn.dataset.telefone));
+    });
   }
 
   async function alternarMarcacaoPaciente(telefone) {
     const contato = contatosAtuais.find((c) => c.telefone === telefone);
-    const ehPaciente = !!(contato && contato.ehPaciente);
+    const ehPaciente = !!(contato && contato.marcadoManualmente) || !!(contato && contato.contatoSalvo);
     const rota = ehPaciente ? "/api/desmarcar-paciente" : "/api/marcar-paciente";
     try {
-      await fetch(rota, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone }),
-      });
+      await postJSON(rota, { telefone });
     } catch (e) {
       // ignora — se falhar, o estado simplesmente não muda e o usuário pode tentar de novo
     }
     atualizar();
+    atualizarCrm();
+    atualizarFicha(true);
   }
 
   document.getElementById("btn-marcar-paciente").addEventListener("click", async () => {
@@ -1176,16 +1580,13 @@
     const valor = input.value.trim();
     if (!valor) return;
     try {
-      await fetch("/api/marcar-paciente", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: valor }),
-      });
+      await postJSON("/api/marcar-paciente", { telefone: valor });
       input.value = "";
     } catch (e) {
       // ignora — se falhar, o usuário pode tentar de novo
     }
     atualizar();
+    atualizarCrm();
   });
 
   function renderizarSilenciados(silenciados) {
@@ -1208,11 +1609,7 @@
     const valor = input.value.trim();
     if (!valor) return;
     try {
-      const resp = await fetch("/api/silenciar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: valor }),
-      });
+      const resp = await postJSON("/api/silenciar", { telefone: valor });
       const resultado = await resp.json();
       if (!resp.ok || !resultado.ok) throw new Error(resultado.erro || "Não foi possível silenciar o número.");
       silenciadosAtuais = new Set(resultado.silenciados || []);
@@ -1221,7 +1618,87 @@
       alert(e.message || "Não foi possível silenciar o número.");
     }
     atualizar();
+    atualizarCrm();
   });
+
+  // ---- o CRM inteiro (lista, filtros, números do topo, "precisa de ação") --------
+  function renderizarResumo(crm) {
+    const r = crm.resumo;
+    document.getElementById("kpi-hoje").textContent = r.consultasHoje;
+    document.getElementById("kpi-semana").textContent = r.consultasSemana;
+    document.getElementById("kpi-pagamento").textContent = r.aguardandoPagamento;
+    document.getElementById("kpi-voce").textContent = r.aguardandoVoce;
+    document.getElementById("kpi-leads").textContent = r.leadsQuentes;
+    document.getElementById("kpi-pos").textContent = r.posConsulta;
+  }
+
+  const MOTIVO_ACAO = {
+    aguardando_humano: "A Carla está quieta esperando você",
+    aguardando_pagamento: "Reservou e ainda não pagou",
+    parou_no_preco: "Soube o valor e sumiu",
+  };
+  function renderizarAcoes(crm) {
+    const alvo = document.getElementById("lista-acoes");
+    const itens = [];
+    for (const chave of ["aguardando_humano", "aguardando_pagamento", "parou_no_preco"]) {
+      for (const c of crm.contatos) {
+        if (!c.situacoes.includes(chave) || itens.some((i) => i.c === c)) continue;
+        itens.push({ c, chave });
+        if (itens.length >= 10) break;
+      }
+      if (itens.length >= 10) break;
+    }
+    if (!itens.length) {
+      alvo.innerHTML = "<div class='vazio'>Nada pendente: ninguém esperando você, nenhuma reserva sem pagamento, ninguém parado depois do valor.</div>";
+      return;
+    }
+    alvo.innerHTML = itens.map(({ c, chave }) => {
+      let motivo = MOTIVO_ACAO[chave];
+      if (chave === "aguardando_pagamento" && c.proximaConsulta) motivo += ` · consulta ${dataCurta(c.proximaConsulta.data)} ${c.proximaConsulta.horario}`;
+      if (chave === "parou_no_preco" && c.ultimaAtividade) motivo += ` ${tempoRelativo(c.ultimaAtividade)}`;
+      return `<div class="acao-item"><div><div class="acao-nome">${escapeHtml(c.nome || c.telefone)}</div><div class="acao-motivo">${escapeHtml(motivo)}</div></div><button class="btn-ficha" data-telefone="${escapeHtml(c.telefone)}">Abrir ficha</button></div>`;
+    }).join("");
+    alvo.querySelectorAll(".btn-ficha").forEach((btn) => btn.addEventListener("click", () => abrirFicha(btn.dataset.telefone)));
+  }
+
+  function renderizarProximas(agendamentos) {
+    const alvo = document.getElementById("lista-proximas");
+    const hojeStr = dataStr(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    const limite = new Date(hoje.getTime() + 7 * 86400000);
+    const limiteStr = dataStr(limite.getFullYear(), limite.getMonth(), limite.getDate());
+    const proximas = agendamentos.filter((a) => a.data >= hojeStr && a.data <= limiteStr).sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario));
+    if (!proximas.length) { alvo.innerHTML = "<div class='vazio'>Nenhuma consulta nos próximos 7 dias.</div>"; return; }
+    const amanha = new Date(hoje.getTime() + 86400000);
+    const amanhaStr = dataStr(amanha.getFullYear(), amanha.getMonth(), amanha.getDate());
+    const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+    let html = ""; let diaAtual = null;
+    for (const a of proximas) {
+      if (a.data !== diaAtual) {
+        diaAtual = a.data;
+        const [y, m, d] = a.data.split("-").map(Number);
+        const nome = a.data === hojeStr ? "Hoje" : a.data === amanhaStr ? "Amanhã" : DIAS[new Date(y, m - 1, d).getDay()];
+        html += `<div class="proximas-dia">${nome} · ${dataCurta(a.data)}</div>`;
+      }
+      html += `<div class="proxima"><span class="proxima-hora">${escapeHtml(a.horario)}</span><span class="proxima-quem">${escapeHtml(a.crianca)} <small>· ${escapeHtml(NOME_TIPO[a.tipoConsulta] || "Consulta")}${a.modalidade === "teleconsulta" ? " · 📹" : ""}</small></span>${a.pago ? '<span class="chip bom">pago</span>' : '<span class="chip atencao">não pago</span>'}<button class="btn-ficha" data-telefone="${escapeHtml(a.telefone)}">ficha</button></div>`;
+    }
+    alvo.innerHTML = html;
+    alvo.querySelectorAll(".btn-ficha").forEach((btn) => btn.addEventListener("click", () => abrirFicha(btn.dataset.telefone)));
+  }
+
+  async function atualizarCrm() {
+    try {
+      const resp = await fetch("/api/crm");
+      if (!resp.ok) throw new Error("resposta ruim");
+      crmAtual = await resp.json();
+      renderizarResumo(crmAtual);
+      renderizarFiltros(crmAtual);
+      renderizarContatos(crmAtual.contatos);
+      renderizarAcoes(crmAtual);
+      atualizarFicha();
+    } catch (e) {
+      // o erro geral de conexão (em atualizar) já avisa
+    }
+  }
 
   // O ANEL BEBE DO FUNIL, não mais de metricasConversao. Aquele número contava a vida
   // inteira do sistema no denominador (então só cai, faça o atendimento o que fizer) e
@@ -1230,11 +1707,13 @@
   function renderizarConversao(f) {
     const c = (f && f.conversaoParticular) || { base: 0, fecharam: 0, taxa: 0 };
     const anel = document.getElementById("conversao-anel");
-    anel.style.background = `conic-gradient(#cba05a ${c.taxa}%, rgba(255,255,255,0.07) 0)`;
+    anel.style.background = `conic-gradient(#d4b060 ${c.taxa}%, rgba(255,255,255,0.07) 0)`;
     document.getElementById("conversao-numero").textContent = `${c.taxa}%`;
     document.getElementById("conversao-detalhe").textContent = c.base === 0
       ? "Sem dados ainda."
       : `${c.fecharam} de ${c.base} leads particulares fecharam consulta`;
+    document.getElementById("kpi-conversao").textContent = `${c.taxa}%`;
+    document.getElementById("kpi-conversao-detalhe").textContent = c.base === 0 ? "sem dados ainda" : `${c.fecharam} de ${c.base} leads particulares`;
   }
 
   // ---- Funil ---------------------------------------------------------------
@@ -1341,46 +1820,40 @@
       document.getElementById("status-dot").className = "status ok";
       document.getElementById("status-texto").textContent = "Atualizado às " + new Date().toLocaleTimeString("pt-BR");
 
-      const agendamentos = dados.agendamentos.slice().sort((a, b) => a.slotId.localeCompare(b.slotId));
+      const agendamentos = dados.agendamentos.slice().sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario));
       document.getElementById("contagem-agendamentos").textContent = agendamentos.length;
       const tabela = document.getElementById("tabela-agendamentos");
       if (agendamentos.length === 0) {
         tabela.innerHTML = "<div class='vazio'>Nenhum agendamento ainda.</div>";
       } else {
         tabela.innerHTML = `<table>
-          <thead><tr><th>Data</th><th>Hora</th><th>Responsável</th><th>Criança</th><th>Telefone</th><th class="col-x">Pago</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th class="col-x"></th></tr></thead>
+          <thead><tr><th>Data</th><th>Hora</th><th>Criança</th><th>Responsável</th><th>Tipo</th><th>Modalidade</th><th class="col-x">Pago</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th></th><th class="col-x"></th></tr></thead>
           <tbody>${agendamentos.map((a) => `
-            <tr>
+            <tr class="clicavel" data-telefone="${escapeHtml(a.telefone)}">
               <td>${formatarDataBR(a.data)}</td>
-              <td>${a.horario}</td>
-              <td>${escapeHtml(a.responsavel)}</td>
-              <td>${escapeHtml(a.crianca)}</td>
-              <td>${escapeHtml(a.telefone)}</td>
+              <td>${escapeHtml(a.horario)}</td>
+              <td><b>${escapeHtml(a.crianca)}</b></td>
+              <td>${escapeHtml(a.responsavel)}<br><span class="tag-mod">${escapeHtml(a.telefone)}</span></td>
+              <td>${etiquetaTipo(a)}</td>
+              <td>${etiquetaModalidade(a)}</td>
               <td class="col-x">${botaoPago(a)}</td>
               <td class="col-x">${botaoPortal(a)}</td>
               <td class="col-x">${botaoGuia(a)}</td>
+              <td><button class="btn-ficha" data-telefone="${escapeHtml(a.telefone)}">ficha</button></td>
               <td class="col-x"><button class="btn-x" title="Cancelar agendamento" data-slot-id="${escapeHtml(a.slotId)}">✕</button></td>
             </tr>`).join("")}</tbody>
         </table>`;
-
-        tabela.querySelectorAll(".btn-x").forEach((btn) => {
-          btn.addEventListener("click", () => cancelarAgendamento(btn.dataset.slotId));
-        });
-        tabela.querySelectorAll(".btn-pago").forEach((btn) => {
-          btn.addEventListener("click", () => alternarPago(btn));
-        });
-        // :not(.btn-guia) porque o botão do guia reaproveita a classe .btn-portal só pelo
-        // estilo — sem isso ele ganharia o listener do portal e mandaria a mensagem errada.
-        tabela.querySelectorAll(".btn-portal:not(.btn-guia)").forEach((btn) => {
-          btn.addEventListener("click", () => avisarPortal(btn));
-        });
-        tabela.querySelectorAll(".btn-guia").forEach((btn) => {
-          btn.addEventListener("click", () => avisarGuia(btn));
-        });
+        ligarBotoesDeConsulta(tabela);
+        tabela.querySelectorAll("tr.clicavel").forEach((tr) => tr.addEventListener("click", () => abrirFicha(tr.dataset.telefone)));
       }
+      renderizarProximas(agendamentos);
 
       const alertas = dados.alertas.slice().reverse();
       document.getElementById("contagem-alertas").textContent = alertas.length;
+      const pendentes = alertas.filter((al) => al.pergunta && al.id && !al.respondidoEm).length;
+      const badge = document.getElementById("badge-alertas");
+      badge.textContent = pendentes;
+      badge.hidden = pendentes === 0;
       const lista = document.getElementById("lista-alertas");
       // O CAMPO QUE SUMIA. Esta lista é redesenhada a cada 8 segundos com innerHTML, e o
       // campo de resposta era recriado no meio da digitação: o texto ia embora. Enquanto
@@ -1394,12 +1867,12 @@
           const classe = al.tipo === "nao_entendida" ? "nao_entendida" : al.tipo === "comercial" ? "comercial" : "urgencia";
           const rotulo = al.tipo === "nao_entendida" ? "NÃO ENTENDIDA" : al.tipo === "comercial" ? "COMERCIAL" : "URGÊNCIA";
           const quando = new Date(al.quando).toLocaleString("pt-BR");
-          const linha = `<strong>[${rotulo}]</strong> ${quando} — ${escapeHtml(al.telefone)}: "${escapeHtml(al.mensagem)}"`;
+          const linha = `<strong>[${rotulo}]</strong> ${quando} — ${escapeHtml(al.telefone)} <button class="btn-ficha" data-telefone="${escapeHtml(al.telefone)}">ficha</button>: "${escapeHtml(al.mensagem)}"`;
           // Alerta com pergunta vira card com botão: o Dr. Bruno responde num toque e a Carla
           // continua a conversa sozinha, sem ele precisar assumir e digitar.
           if (!al.pergunta || !al.id) return `<li class="${classe}">${linha}</li>`;
           const abrindo = al.dataPedida && al.horaPedida
-            ? `<div style="font-size:11px;color:#9fb3ab;margin-bottom:6px">Sim também abre ${escapeHtml(al.dataPedida)} às ${escapeHtml(al.horaPedida)} na agenda.</div>`
+            ? `<div style="font-size:11px;color:#b8a77a;margin-bottom:6px">Sim também abre ${escapeHtml(al.dataPedida)} às ${escapeHtml(al.horaPedida)} na agenda.</div>`
             : "";
           const corpo = al.respondidoEm
             ? `<span class="respondido">Respondido: ${escapeHtml(al.resposta || "")}</span>`
@@ -1419,7 +1892,6 @@
       if (!alguemDigitandoEm("#lista-alertas input[data-alerta-texto]")) ligarBotoesDeEscalada();
 
       renderizarSilenciados(dados.silenciados || []);
-      renderizarContatos(dados.contatos || []);
 
       bloqueiosAtuais = dados.bloqueios || [];
       diasComConsultaAtuais = new Set(agendamentos.map((a) => a.data));
@@ -1434,8 +1906,11 @@
   atualizar();
   atualizarStatusBot();
   atualizarFunil();
+  atualizarCrm();
   setInterval(atualizar, 8000);
   setInterval(atualizarStatusBot, 5000);
+  // O CRM cruza tudo no servidor; 12 segundos é tempo de sobra pra uma lista de famílias.
+  setInterval(atualizarCrm, 12000);
   // Mais devagar que o resto: o funil lê um arquivo que só cresce, e ninguém precisa dele
   // atualizado de 8 em 8 segundos.
   setInterval(atualizarFunil, 60000);

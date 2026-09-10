@@ -1,10 +1,10 @@
 {
-  "name": "Painel da Carla",
+  "name": "Carla CRM",
   "short_name": "Carla",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1E3324",
-  "theme_color": "#1E3324",
+  "background_color": "#0b1a3f",
+  "theme_color": "#0b1a3f",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }

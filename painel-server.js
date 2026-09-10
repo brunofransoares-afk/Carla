@@ -20,6 +20,12 @@ const Storage = require(path.join(__dirname, "storage-node.js"));
 const { criarIntegracoesDuraveis } = require(path.join(__dirname, "integracoes-duraveis.js"));
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const PainelWebhook = require(path.join(__dirname, "painel-webhook.js"));
+const Crm = require(path.join(__dirname, "crm.js"));
+
+// Notas e etiquetas do CRM. Arquivo próprio, fora do SQLite e das sessões: é anotação do
+// Dr. Bruno, não estado da Carla, e limpar uma conversa não pode apagar o que ele escreveu.
+const ARQ_CRM = path.join(__dirname, "data", "crm.json");
+const LINK_AVALIACAO = String(process.env.LINK_AVALIACAO_GOOGLE || "").trim() || null;
 
 // Painel e bot compartilham a mesma caixa de efeitos. O lock e o lease da caixa garantem
 // que os dois processos possam reconciliar sem executar o mesmo efeito ao mesmo tempo.
@@ -138,28 +144,28 @@ function paginaLogin(mensagem = "") {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#07140d">
-  <title>Entrar · Painel da Carla</title>
+  <meta name="theme-color" content="#0b1a3f">
+  <title>Entrar · Carla CRM</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
-      background: #07140d; color: #edf7ef; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    main { width: min(100%, 390px); padding: 30px 24px; border: 1px solid #284536;
-      border-radius: 22px; background: #10251a; box-shadow: 0 20px 60px #0008; }
-    h1 { margin: 0 0 8px; font-size: 27px; }
-    p { margin: 0 0 22px; color: #b8cbbd; line-height: 1.45; }
+      background: linear-gradient(180deg, #102a5c 0%, #0a1a3d 45%, #040a1c 100%); background-color: #040a1c; color: #efe3c2; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width: min(100%, 390px); padding: 30px 24px; border: 1px solid rgba(212,176,96,0.3);
+      border-radius: 22px; background: rgba(255,255,255,0.045); backdrop-filter: blur(20px); box-shadow: 0 20px 60px #0008; }
+    h1 { margin: 0 0 8px; font-size: 27px; color: #d4b060; }
+    p { margin: 0 0 22px; color: #b8a77a; line-height: 1.45; }
     .aviso { color: #ffb4ab; }
-    label { display: block; margin-bottom: 8px; font-weight: 650; }
-    input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid #456452;
-      border-radius: 13px; background: #07140d; color: #fff; font-size: 18px; outline: none; }
-    input:focus { border-color: #d6a84b; box-shadow: 0 0 0 3px #d6a84b33; }
+    label { display: block; margin-bottom: 8px; font-weight: 650; color: #edd28a; }
+    input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid rgba(212,176,96,0.35);
+      border-radius: 13px; background: #050c22; color: #fff; font-size: 18px; outline: none; }
+    input:focus { border-color: #d4b060; box-shadow: 0 0 0 3px #d4b06033; }
     button { width: 100%; min-height: 50px; margin-top: 16px; border: 0; border-radius: 13px;
-      background: #d6a84b; color: #162016; font-size: 17px; font-weight: 750; }
+      background: linear-gradient(135deg, #d4b060, #a8843a); color: #10203f; font-size: 17px; font-weight: 750; }
   </style>
 </head>
 <body>
   <main>
-    <h1>Painel da Carla</h1>
+    <h1>Carla CRM</h1>
     ${aviso}
     <form method="post" action="/login">
       <label for="senha">Senha</label>
@@ -452,6 +458,92 @@ async function atenderRequisicao(req, res) {
     return;
   }
 
+  // O CRM. Cruza contatos, consultas (inclusive as passadas), funil, notas e etiquetas e
+  // devolve cada família já com a situação escrita. O cruzamento é aqui, não no navegador,
+  // pelo mesmo motivo do funil: a lista de eventos cresce sem teto.
+  if (caminhoPedido === "/api/crm" && req.method === "GET") {
+    const crm = Crm.montarCrm({
+      contatos: Storage.listarTodosContatos(),
+      agendamentos: Storage.lerTodosAgendamentos(),
+      funilContatos: Eventos.funil({}).contatos,
+      dadosCrm: Crm.lerCrm(ARQ_CRM),
+    });
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ...crm, temLinkAvaliacao: !!LINK_AVALIACAO }));
+    return;
+  }
+
+  // A ficha de uma família: consultas, últimas mensagens, linha do tempo, notas, etiquetas
+  // e os modelos de pós-consulta já preenchidos com o nome da criança e do responsável.
+  if (caminhoPedido === "/api/crm/contato" && req.method === "GET") {
+    const telefone = new URL(req.url, "http://x").searchParams.get("telefone") || "";
+    if (!telefone) {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: false, erro: "Sem telefone." }));
+      return;
+    }
+    const dadosCrm = Crm.lerCrm(ARQ_CRM);
+    const crm = Crm.montarCrm({
+      contatos: Storage.listarTodosContatos().filter((c) => c.telefone === telefone),
+      agendamentos: Storage.lerTodosAgendamentos().filter((a) => a.telefone === telefone),
+      funilContatos: Eventos.funil({}).contatos.filter((c) => c.telefone === telefone),
+      dadosCrm,
+    });
+    const contato = crm.contatos[0] || null;
+    if (!contato) {
+      res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: false, erro: "Contato não encontrado." }));
+      return;
+    }
+    const consultas = Crm.consultasDoTelefone(Storage.lerTodosAgendamentos(), telefone);
+    const notas = dadosCrm.notas[telefone] || [];
+    const eventos = Eventos.lerEventos({}).filter((e) => e.telefone === telefone);
+    const sessao = Storage.obterSessao(telefone);
+    const ultimaConsulta = consultas.find((c) => c.estado === "pago" || c.estado === "reservado") || consultas[0] || null;
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({
+      ok: true,
+      contato,
+      consultas,
+      notas,
+      etiquetas: dadosCrm.etiquetas[telefone] || [],
+      linhaDoTempo: Crm.linhaDoTempo({ eventos, notas }),
+      // As últimas falas da conversa, do jeito que a Carla as guarda. É o que responde
+      // "onde essa conversa parou?" sem abrir o WhatsApp.
+      historico: ((sessao && sessao.historico) || []).slice(-12),
+      modelos: Crm.modelosPara({
+        responsavel: contato.responsavel || contato.nome || null,
+        crianca: (ultimaConsulta && ultimaConsulta.crianca) || (contato.criancas && contato.criancas[0]) || null,
+        linkAvaliacao: LINK_AVALIACAO,
+      }),
+    }));
+    return;
+  }
+
+  if (caminhoPedido === "/api/crm/nota" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.adicionarNota(ARQ_CRM, corpo.telefone, corpo.texto);
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
+  if (caminhoPedido === "/api/crm/nota-remover" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.removerNota(ARQ_CRM, corpo.telefone, corpo.id);
+    res.writeHead(r.ok ? 200 : 404, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
+  if (caminhoPedido === "/api/crm/etiquetas" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.definirEtiquetas(ARQ_CRM, corpo.telefone, corpo.etiquetas);
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
   if (req.url === "/api/dados") {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({
@@ -669,7 +761,9 @@ async function atenderRequisicao(req, res) {
   // WhatsApp vive lá); isto só encaminha. A Carla cala naquela conversa até ele retomar.
   if (req.url === "/api/mensagem-manual" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
-    const r = await encaminharAoBot("/interno/mensagem-manual", JSON.stringify({ telefone: corpo.telefone, texto: corpo.texto }));
+    // carlaContinua só vem dos modelos do CRM que esperam uma resposta que a Carla atende
+    // (o convite pra rotina). Texto livre continua calando ela, como antes.
+    const r = await encaminharAoBot("/interno/mensagem-manual", JSON.stringify({ telefone: corpo.telefone, texto: corpo.texto, carlaContinua: corpo.carlaContinua === true }));
     res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
     res.end(r.texto);
     return;

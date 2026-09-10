@@ -36,8 +36,10 @@ const JS = TELA.match(/<script>([\s\S]*)<\/script>/)[1];
     "1c. a lista de alertas não redesenha enquanto o campo de resposta está em uso");
   ok(/if \(!alguemDigitandoEm\("#lista-alertas input\[data-alerta-texto\]"\)\) ligarBotoesDeEscalada\(\);/.test(JS),
     "1d. e não religa os botões (que duplicaria o Enter) quando não redesenhou");
-  ok(/if \(alguemDigitandoEm\("#lista-contatos textarea"\)\) return;/.test(JS),
-    "1e. a lista de contatos tem a mesma proteção, porque a caixa de mensagem mora nela");
+  // A caixa de mensagem mudou de casa com o CRM: saiu do cartão da lista e foi pra FICHA da
+  // família, junto com a nota e a etiqueta. A proteção foi junto, e cobre os três campos.
+  ok(/if \(!forcar && alguemDigitandoEm\("#ficha-contato textarea, #ficha-contato input"\)\) return;/.test(JS),
+    "1e. a ficha da família tem a mesma proteção, porque a caixa de mensagem mora nela");
   // A proteção precisa vir ANTES do innerHTML, senão é decoração.
   const posGuarda = JS.indexOf('alguemDigitandoEm("#lista-alertas input[data-alerta-texto]")');
   const posInner = JS.indexOf("lista.innerHTML = alertas.map(");
@@ -59,7 +61,7 @@ const JS = TELA.match(/<script>([\s\S]*)<\/script>/)[1];
 
 // ------------------------------------------------- 3. o painel só encaminha
 {
-  ok(/encaminharAoBot\("\/interno\/mensagem-manual", JSON\.stringify\(\{ telefone: corpo\.telefone, texto: corpo\.texto \}\)\)/.test(PAINEL),
+  ok(/encaminharAoBot\("\/interno\/mensagem-manual", JSON\.stringify\(\{ telefone: corpo\.telefone, texto: corpo\.texto, carlaContinua: corpo\.carlaContinua === true \}\)\)/.test(PAINEL),
     "3. o painel encaminha pro bot, que é quem tem o WhatsApp");
   ok(/req\.url === "\/interno\/mensagem-manual"/.test(SERVER), "3b. e o bot atende nessa rota");
 }
