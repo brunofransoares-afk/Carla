@@ -211,8 +211,8 @@ const x = (date, time) => ({ id: `extra-${date}-${time}`, date, time, label: `${
 {
   ok(/Ofereça no máximo 2 opções por vez, nunca liste a semana toda/.test(SEM_COMENTARIO),
     "11. duas opções por vez continua");
-  ok(/chame consultar_horarios IMEDIATAMENTE, sem perguntar dia ou período antes/.test(SEM_COMENTARIO),
-    "11b. e consultar direto, sem perguntar dia antes, também");
+  ok(/Nunca pergunte o dia \("qual dia você prefere\?"\): dia é a ferramenta que escolhe/.test(SEM_COMENTARIO),
+    "11b. e continua sem perguntar dia: só o período, e o dia é a ferramenta que escolhe");
   ok(/Nunca invente ou assuma horário livre/.test(SEM_COMENTARIO), "11c. a proibição de inventar horário continua");
   eq(Ordem.ordenarCandidatos([g("2026-08-24", "08:00", 1)], [x("2026-08-18", "11:00")],
     { periodo: null, dataPreferida: "2026-08-18", diaPreferido: null })[0].id, "extra-2026-08-18-11:00",

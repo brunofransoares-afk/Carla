@@ -110,7 +110,7 @@ const DIA = "2026-09-14";                           // segunda
   ok(/const modalidade = input\.modalidade === "teleconsulta" \? "teleconsulta" : "presencial";/.test(CEREBRO),
     "6c. e qualquer outra coisa é presencial, o lado seguro");
   ok(/Storage\.reservar\(\{[\s\S]{0,120}modalidade,/.test(CEREBRO), "6d. a modalidade vai pra reserva");
-  ok(/\$\{modalidade === "teleconsulta" \? "Teleconsulta" : "Consulta"\} - \$\{crianca\}/.test(CEREBRO),
+  ok(/\$\{rotuloTipo\}\$\{modalidade === "teleconsulta" \? " \(vídeo\)" : ""\} - \$\{crianca\}/.test(CEREBRO),
     "6e. e pro título do evento na agenda, pra ele saber que é vídeo sem abrir");
   ok(/\$\{agendamento\.modalidade === "teleconsulta" \? "Teleconsulta" : "Consulta"\} - \$\{agendamento\.crianca\}/.test(SERVER),
     "6f. inclusive na sincronização durável do server");

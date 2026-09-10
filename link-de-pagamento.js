@@ -1,8 +1,9 @@
 "use strict";
 
-// O link antigo tem valor fixo de R$ 550. Um horário de fim de semana custa R$ 800 e não
-// pode reutilizá-lo. O link de R$ 800 precisa ser configurado explicitamente; sem ele, a
-// Carla oferece Pix e leva um pedido de cartão para o Dr. Bruno, nunca cobra valor errado.
+// Um link de cartão por VALOR. O link antigo (R$ 550) continua valendo pra consulta de tnd,
+// que custa isso. Os outros valores precisam do link configurado no .env; sem ele, a Carla
+// oferece Pix e leva o pedido de cartão pro Dr. Bruno gerar o link certo. Nunca manda o
+// link de um valor diferente do que a família ouviu.
 const LINK_SEMANA_PADRAO =
   "https://link.infinitepay.io/brunoffsoares/VC1DLTMtSQ-n2bxJy5HPf-550,00";
 
@@ -20,16 +21,11 @@ function limpar(valor) {
 }
 
 function linkParaCentavos(centavos) {
-  if (Number(centavos) === 55000) {
-    return limpar(process.env.LINK_PAGAMENTO_SEMANA) || LINK_SEMANA_PADRAO;
-  }
-  if (Number(centavos) === 80000) {
-    return limpar(process.env.LINK_PAGAMENTO_FIM_DE_SEMANA);
-  }
-  // Irmãos juntos: um link por tamanho de grupo, um pagamento só. Sem o link configurado a
-  // Carla oferece Pix e leva o pedido de cartão pro Dr. Bruno, igual ao fim de semana.
-  if (Number(centavos) === 100000) return limpar(process.env.LINK_PAGAMENTO_IRMAOS_2);
-  if (Number(centavos) === 150000) return limpar(process.env.LINK_PAGAMENTO_IRMAOS_3);
+  const c = Number(centavos);
+  if (c === 35000) return limpar(process.env.LINK_PAGAMENTO_URGENCIA);
+  if (c === 45000) return limpar(process.env.LINK_PAGAMENTO_PUERICULTURA);
+  if (c === 55000) return limpar(process.env.LINK_PAGAMENTO_TND) || limpar(process.env.LINK_PAGAMENTO_SEMANA) || LINK_SEMANA_PADRAO;
+  if (c === 60000) return limpar(process.env.LINK_PAGAMENTO_URGENCIA_FIM_DE_SEMANA);
   return null;
 }
 
@@ -41,7 +37,7 @@ function formasParaPreco(centavos) {
     linkCartao,
     avisoCartao: linkCartao
       ? null
-      : "Não existe link de cartão configurado para este valor. Não envie o link de R$ 550 nem outro link de valor diferente. Ofereça Pix; se a família precisar de cartão, escale para o Dr. Bruno gerar o link correto.",
+      : "Não existe link de cartão configurado para este valor. Não envie link de outro valor. Ofereça Pix; se a família precisar de cartão, escale para o Dr. Bruno gerar o link correto.",
   };
 }
 

@@ -103,8 +103,11 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
 
 // ------------------------------------------------- 7. o resto do agendamento não mudou
 {
-  ok(/AGENDAMENTO: assim que souber o motivo da consulta, chame consultar_horarios IMEDIATAMENTE/.test(SEM_COMENTARIO),
-    "7. a regra de oferecer horário direto continua");
+  // Com os tipos de consulta a ordem virou tipo > valor > período > horário; o que esta
+  // trava vigia é que a regra de agendar continua existindo e continua sendo a ferramenta
+  // quem escolhe o dia.
+  ok(/AGENDAMENTO: depois do valor, você pergunta o PERÍODO/.test(SEM_COMENTARIO),
+    "7. a regra de agendar continua, agora perguntando o período depois do valor");
   ok(/Ofereça no máximo 2 opções por vez/.test(SEM_COMENTARIO), "7b. duas opções por vez continua");
   ok(/Use o parâmetro horarioAjustado em confirmar_agendamento/.test(SEM_COMENTARIO),
     "7c. o ajuste de 30 minutos continua funcionando");
