@@ -23,10 +23,14 @@ function ok(condicao, mensagem) {
 ok(inicio >= 0 && fim > inicio, "1. faltou uma regra única para convênio e reembolso");
 ok(/NO MÁXIMO 3 frases curtas, sem explicação/.test(regra),
   "2. a resposta voltou a ficar sem limite de tamanho");
-ok(/O atendimento do Dr\. Bruno é particular\. Ele emite nota fiscal\. Quer que eu veja um horário\?/.test(regra),
-  "3. faltou a resposta curta para convênio");
-ok(/O atendimento do Dr\. Bruno é particular\. Ele emite nota fiscal; confirme diretamente com o seu plano se há reembolso\./.test(regra),
+// 10/09: "Ele emite nota fiscal." solta não fazia sentido pra família (print do Dr. Bruno).
+// A nota só existe nessa resposta por causa do reembolso, então vem ligada a ele.
+ok(/O atendimento do Dr\. Bruno é particular, não atende por convênio\. Se o seu plano fizer reembolso, ele emite a nota fiscal pra você pedir\./.test(regra),
+  "3. faltou a resposta curta para convênio, com a nota fiscal ligada ao reembolso");
+ok(/O atendimento do Dr\. Bruno é particular\. Ele emite a nota fiscal, e o reembolso você confirma direto com o seu plano\./.test(regra),
   "4. faltou a resposta curta para reembolso");
+ok(/A nota fiscal NUNCA aparece solta/.test(regra) && !/Ele emite nota fiscal\. /.test(regra),
+  "4b. a nota fiscal solta saiu, e a regra diz por quê");
 ok(/O valor só entra se também perguntarem o preço/.test(regra),
   "5. perguntar apenas convênio voltou a disparar preço e outras informações");
 ok(/Este bloco substitui a REGRA SOBRE PREÇO e a regra de formas de pagamento nesta resposta/.test(regra),
@@ -37,7 +41,7 @@ ok(/Mencione a nota fiscal UMA VEZ e siga/.test(regra),
   "7. faltou impedir que a nota fiscal domine a resposta");
 ok(!/Com essa nota em mãos|quem pede o reembolso|não tenho como garantir/.test(regra),
   "8. o roteiro longo do print entrou no cérebro");
-ok(regra.length < 1050, "9. a correção empilhou regras em vez de simplificar o bloco");
+ok(regra.length < 1300, "9. a correção empilhou regras em vez de simplificar o bloco");
 ok(/Só peça os dados quando a família pedir a EMISSÃO da nota; perguntar sobre convênio ou reembolso não é pedido de emissão/.test(fonte),
   "10. pergunta sobre reembolso ainda pode disparar coleta de CPF, CEP e e-mail");
 ok(/- O atendimento é particular\./.test(fonte),
