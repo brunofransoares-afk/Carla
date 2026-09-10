@@ -75,13 +75,13 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
 
 // ------------------------------------------------- 4. o preço na abertura vem cortado
 {
-  ok(/O PREÇO NA PRIMEIRA MENSAGEM DA CONVERSA É MAIS CURTO:/.test(SEM_COMENTARIO),
+  ok(/O PREÇO NA PRIMEIRA MENSAGEM DA CONVERSA:/.test(SEM_COMENTARIO),
     "4. a regra do preço agora sabe que existe um caso em que ela é curta");
   ok(/O espaço da criança no sistema NÃO entra aqui/.test(SEM_COMENTARIO),
     "4b. e o que sai é o portal, que é o quarto assunto de uma mensagem que já tem três");
-  ok(/quem perguntou "quanto custa" não veio fazer tour do consultório/.test(SEM_COMENTARIO),
+  ok(/[Qq]uem perguntou "quanto custa" não veio fazer tour do consultório/.test(SEM_COMENTARIO),
     "4c. com o motivo escrito");
-  ok(/individualizada\. Depois, a família continua com suporte por WhatsApp durante 30 dias\." seguido de "O atendimento é particular, e o valor é R\$ 550/.test(SEM_COMENTARIO),
+  ok(/seguido de "O atendimento é particular\. A consulta de puericultura é R\$ 450, em Pix ou cartão via link de pagamento\."/.test(SEM_COMENTARIO),
     "4d. e um exemplo do tamanho certo, senão 'curta' cada dia quer dizer uma coisa");
 }
 
@@ -91,7 +91,7 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
   // sair da mensagem mais cheia dela.
   ok(/Isso vale só na primeira mensagem: perguntou o preço no meio da conversa, use a descrição inteira/.test(SEM_COMENTARIO),
     "5. o escopo está escrito, senão ela corta o portal pra sempre");
-  ok(/tem um espaço só da criança no sistema, onde guarda os exames e a carteira de vacinação/.test(SEM_COMENTARIO),
+  ok(/além de um espaço só da criança no sistema, onde guarda os exames e a carteira de vacinação/.test(SEM_COMENTARIO),
     "5b. a descrição completa continua existindo pro caso normal");
   ok(/Ele entra depois, se a conversa seguir e o assunto encaixar \(rotina, vacina, recém-nascido\)/.test(SEM_COMENTARIO),
     "5c. e diz quando ele volta, em vez de só mandar tirar");
@@ -105,10 +105,12 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
     "6. a apresentação continua a mesma");
   ok(/NESSE CASO a parte 2 fica só em quem você é/.test(SEM_COMENTARIO),
     "6b. quem chegou perguntando continua sem a lista do que ela resolve");
-  ok(/nunca responda só "O valor é R\$ 550\." secamente/.test(SEM_COMENTARIO),
+  ok(/nunca responda só "O valor é R\$ 450\." secamente/.test(SEM_COMENTARIO),
     "6c. e o valor continua proibido de sair seco: enxugar não é voltar a ser frio");
-  ok(/CONVITE PRA AGENDAR: a mensagem em que você informa o VALOR da consulta SEMPRE termina puxando pro próximo passo/.test(SEM_COMENTARIO),
-    "6d. o convite depois do valor continua, porque é o que fecha consulta");
+  // A regra mudou de nome com os três tipos: o convite virou a pergunta do período (manhã ou
+  // tarde), mas continua sendo a mensagem do valor que puxa pro próximo passo.
+  ok(/A PERGUNTA DEPOIS DO VALOR: a mensagem em que você informa o VALOR da consulta SEMPRE termina puxando pro próximo passo/.test(SEM_COMENTARIO),
+    "6d. a pergunta depois do valor continua, porque é o que fecha consulta");
 }
 
 console.log(`\nprimeira-mensagem-enxuta: ${passou} passaram, ${falhou} falharam`);

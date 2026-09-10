@@ -149,8 +149,10 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
   ok(/Você não é médica/.test(SEM_COMENTARIO), "8. continua proibida de dar parecer clínico (agora dito pelo motivo certo)");
   ok(/NUNCA DESCARTE A CONSULTA/.test(SEM_COMENTARIO), "8b. a regra do TEA e do encaminhamento continua intacta");
   ok(/humana, educada, objetiva, acolhedora, natural, firme, premium/.test(SEM_COMENTARIO), "8c. o TOM não mudou");
-  ok(/Consulta de segunda a sexta: R\$ 550/.test(SEM_COMENTARIO), "8d. o preço não mudou");
-  ok(/A consulta fica em R\$ 800/.test(SEM_COMENTARIO), "8e. o valor de fim de semana não mudou");
+  // Os preços viraram tabela por tipo (10/09/2026). O que esta bateria vigia é que a mudança
+  // de identidade não mexeu neles: eles são os da tabela, e estão no prompt.
+  ok(/CONSULTA DE URGÊNCIA[\s\S]{0,300}R\$ 350/.test(SEM_COMENTARIO), "8d. os preços são os da tabela de tipos");
+  ok(/só existe consulta de urgência, e ela fica em R\$ 600/.test(SEM_COMENTARIO), "8e. e fim de semana é urgência a R$ 600");
   ok(/Chave Pix: brunofransoares@gmail\.com/.test(SEM_COMENTARIO), "8f. a chave Pix não mudou");
 }
 

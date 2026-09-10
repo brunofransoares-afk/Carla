@@ -604,7 +604,7 @@ function limparDadosPendentes(telefone) {
 // Retorna false se o horário já tiver sido reservado por outra família (nunca deixa
 // duplicar). Quando dá certo devolve o agendamento criado, porque quem chama precisa
 // saber se veio e-mail/nascimento junto (do bolso de pendentes) pra mandar pro prontuário.
-function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, expiraEm = null, expiresAt = null, modalidade = "presencial" }) {
+function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, expiraEm = null, expiresAt = null, modalidade = "presencial", tipoConsulta = null }) {
   // O que a família adiantou antes de ter horário entra aqui, no agendamento certo.
   const pendentes = lerDadosPendentes(telefone);
   const agora = new Date();
@@ -619,6 +619,10 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, 
     agendaSlotId: slot.id,
     // "presencial" ou "teleconsulta". Vai pro painel e pro título do evento na agenda.
     modalidade: modalidade === "teleconsulta" ? "teleconsulta" : "presencial",
+    // "urgencia" | "puericultura" | "tnd". É o que define o preço (preco-da-consulta.js).
+    // Reservas antigas, de antes dos tipos, não têm isso, e são lidas como tnd (o preço da
+    // época era o mesmo, R$ 550).
+    tipoConsulta: tipoConsulta || null,
     data: slot.date,
     horario: slot.time,
     diaLabel: slot.label,

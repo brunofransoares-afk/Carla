@@ -532,21 +532,13 @@ function valorEscrito(conteudo, centavos) {
 function precoParticularInformado(texto) {
   const conteudo = String(texto || "");
   if (!/atendimento\s+(?:é\s+|eh\s+)?particular|consulta\s+(?:é\s+|eh\s+)?particular|particular[^\n]{0,100}R\$/i.test(conteudo)) return null;
+  // Os valores vêm da tabela de tipos (350, 450, 550, 600). Quando a Carla lista os três
+  // tipos com os três preços, a mensagem tem mais de um valor e NÃO registra nada: o preço
+  // só é registrado depois que a família escolheu o tipo e ela disse UM valor. Que é
+  // exatamente o momento em que a reserva pode acontecer.
   const valores = new Set();
-  if (valorEscrito(conteudo, 55000)) valores.add(55000);
-  if (valorEscrito(conteudo, 80000)) valores.add(80000);
-  // Irmãos: o valor POR CRIANÇA (R$ 500) e os TOTAIS do grupo (R$ 1.000, R$ 1.500...).
-  if (valorEscrito(conteudo, Preco.IRMAOS_POR_CRIANCA_CENTAVOS)) valores.add(Preco.IRMAOS_POR_CRIANCA_CENTAVOS);
-  const totais = Preco.totaisDeGrupoConhecidos();
-  for (const total of totais) if (valorEscrito(conteudo, total)) valores.add(total);
-
-  if (valores.size === 1) return [...valores][0];
-  // "R$ 500 cada, R$ 1.000 pelas duas" é UMA informação, não duas: o que vale é o total do
-  // grupo. Só quando a mensagem traz exatamente um total é que a ambiguidade desaparece;
-  // dois totais (ou nenhum) continua sendo "não sei", que é o comportamento seguro.
-  const totaisNaMensagem = [...valores].filter((v) => totais.includes(v));
-  if (totaisNaMensagem.length === 1) return totaisNaMensagem[0];
-  return null;
+  for (const centavos of Preco.valoresConhecidos()) if (valorEscrito(conteudo, centavos)) valores.add(centavos);
+  return valores.size === 1 ? [...valores][0] : null;
 }
 
 function combinarEfeitos(...efeitos) {
