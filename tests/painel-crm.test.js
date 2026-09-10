@@ -361,5 +361,28 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(/"aguardando_humano", "aguardando_pagamento", "retorno_proximo", "parou_no_preco"/.test(JS), "12an. e entra no 'Precisa de ação' da visão geral");
 }
 
+// ------------------------------------------------- 13. quem já era paciente antes do registro
+{
+  // O painel subiu com 18 pacientes marcados e 0% de conversão: as marcações eram de antes
+  // de o clique gravar evento. A reconciliação dá o evento a quem falta, datado na última
+  // conversa, e nunca duas vezes.
+  const sessoes = { "+31": { ultimaAtividade: "2026-08-01T10:00:00Z" }, "+32": { ultimaAtividade: "2026-08-02T10:00:00Z" }, "+33": {}, "+35": { ultimaAtividade: "2026-08-05T10:00:00Z" } };
+  const eventos = [
+    { em: "2026-08-02T11:00:00Z", tipo: "virou_paciente", telefone: "+32" },
+    { em: "2026-08-05T11:00:00Z", tipo: "virou_paciente", telefone: "+35" },
+    { em: "2026-08-06T11:00:00Z", tipo: "paciente_desmarcado", telefone: "+35" },
+  ];
+  const lista = Crm.pacientesSemConversao({ pacientesManuais: ["+31", "+32", "+33", "+34", "+35"], sessoes, eventos, agora: AGORA });
+  const tels = lista.map((p) => p.telefone);
+  ok(tels.includes("+31"), "13. marcado sem evento e com sessão: ganha a conversão");
+  ok(!tels.includes("+32"), "13b. quem já tem virou_paciente não ganha outro");
+  ok(tels.includes("+33") && lista.find((p) => p.telefone === "+33").em === AGORA, "13c. sessão sem data: entra datado de agora");
+  ok(!tels.includes("+34"), "13d. sem sessão (nunca falou com a Carla) não é conversão, é cadastro");
+  ok(tels.includes("+35"), "13e. desmarcado e marcado de novo: o último evento manda, então ganha");
+  eq(lista.find((p) => p.telefone === "+31").em.toISOString(), "2026-08-01T10:00:00.000Z", "13f. datado na última conversa, pra cair no período certo do funil");
+  ok(/function reconciliarConversoesDePacientes\(\)/.test(PAINEL) && /reconciliarConversoesDePacientes\(\);\s*\n\s*const timerReconciliarConversoes = setInterval\(reconciliarConversoesDePacientes, 10 \* 60_000\)/.test(PAINEL), "13g. o painel roda isso ao subir e a cada 10 minutos");
+  ok(/Eventos\.registrar\("virou_paciente", p\.telefone, \{ origem: "retroativo" \}, p\.em\)/.test(PAINEL), "13h. gravando com a data certa e a origem marcada");
+}
+
 console.log(`\npainel-crm: ${passou} passaram, ${falhou} falharam`);
 if (falhou) { erros.forEach((e) => console.log("  FALHOU: " + e)); process.exit(1); }

@@ -263,6 +263,23 @@ async function recuperarCancelamentosNaoEnfileirados() {
   }
 }
 
+// Marcações de paciente feitas antes de o clique virar evento de conversão ganham o evento
+// agora, datado na última conversa. Roda ao subir e de tempos em tempos; é idempotente,
+// porque só entra quem ainda não tem virou_paciente vigente.
+function reconciliarConversoesDePacientes() {
+  try {
+    const pendentes = Crm.pacientesSemConversao({
+      pacientesManuais: Storage.lerPacientesManuais(),
+      sessoes: Storage.lerSessoes(),
+      eventos: Eventos.lerEventos({}),
+    });
+    for (const p of pendentes) Eventos.registrar("virou_paciente", p.telefone, { origem: "retroativo" }, p.em);
+    if (pendentes.length) console.log(`[CRM] ${pendentes.length} paciente(s) marcado(s) antes do registro ganharam a conversão retroativa.`);
+  } catch (erro) {
+    console.error("[CRM] Não consegui reconciliar as conversões de pacientes:", erro.message);
+  }
+}
+
 async function atenderRequisicao(req, res) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -914,6 +931,9 @@ servidor.listen(PORTA, "127.0.0.1", () => {
 // rede, timeout ou reinício ficam registrados para nova tentativa. Pode coexistir com o
 // reconciliador do bot porque a caixa concede um lease exclusivo por efeito.
 Integracoes.iniciarReconciliacao();
+reconciliarConversoesDePacientes();
+const timerReconciliarConversoes = setInterval(reconciliarConversoesDePacientes, 10 * 60_000);
+if (typeof timerReconciliarConversoes.unref === "function") timerReconciliarConversoes.unref();
 void recuperarCancelamentosNaoEnfileirados();
 const timerRecuperarCancelamentos = setInterval(recuperarCancelamentosNaoEnfileirados, 60_000);
 if (typeof timerRecuperarCancelamentos.unref === "function") timerRecuperarCancelamentos.unref();

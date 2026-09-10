@@ -474,6 +474,34 @@ function modelosPara({ responsavel = null, crianca = null, linkAvaliacao = null,
   });
 }
 
+// ---------------------------------------------------------------- conversão retroativa
+
+// Quem já estava marcado como paciente ANTES de o clique virar evento de conversão. Sem
+// isto o painel subia dizendo 0% de conversão com dezoito pacientes marcados: o funil só
+// sabe o que está no registro, e essas marcações foram feitas quando o clique não registrava
+// nada. Devolve quem precisa ganhar o evento, datado na última conversa (a melhor
+// aproximação de quando fechou), pra entrar no período certo do funil.
+//
+// Regras iguais às do clique: só quem tem sessão (falou com a Carla), e só se não existe
+// virou_paciente depois do último paciente_desmarcado.
+function pacientesSemConversao({ pacientesManuais = [], sessoes = {}, eventos = [], agora = new Date() } = {}) {
+  const estado = new Map();
+  for (const e of eventos) {
+    if (!e || !e.telefone) continue;
+    if (e.tipo === "virou_paciente") estado.set(e.telefone, true);
+    if (e.tipo === "paciente_desmarcado") estado.set(e.telefone, false);
+  }
+  const lista = [];
+  for (const telefone of pacientesManuais) {
+    const sessao = sessoes[telefone];
+    if (!sessao) continue;
+    if (estado.get(telefone) === true) continue;
+    const em = new Date(sessao.ultimaAtividade || "");
+    lista.push({ telefone, em: Number.isNaN(em.getTime()) ? agora : em });
+  }
+  return lista;
+}
+
 // ---------------------------------------------------------------- notas e etiquetas
 
 function lerCrm(arquivo) {
@@ -575,5 +603,6 @@ module.exports = {
   preencherModelo, modelosPara,
   lerCrm, adicionarNota, removerNota, definirEtiquetas,
   registrarConsultaRealizada, removerConsultaRealizada, marcarRetornoAvisado,
+  pacientesSemConversao,
   _dataLocal: dataLocal,
 };
