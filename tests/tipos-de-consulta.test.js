@@ -137,5 +137,20 @@ const lerPreco = extrairLeitorDePreco();
   ok(/você não troca o tipo pra baratear/.test(SEM_COMENTARIO), "8e. e 'não consegue pagar' também");
 }
 
+// ------------------------------------------------- 10. parcelamento: só a de R$ 550
+{
+  // Dito pelo Dr. Bruno em 10/09: ele só divide em 3x a consulta de R$ 550, e só se
+  // perguntarem. Puericultura e urgência continuam por link de cartão, mas à vista; se a
+  // família parcelar no cartão dela mesmo assim, as taxas são dela.
+  ok(/PARCELAMENTO: só a consulta de neurodesenvolvimento \(R\$ 550\) pode ser dividida, em até 3x sem juros no cartão, e só se a família perguntar/.test(SEM_COMENTARIO), "10. a regra está escrita, com o valor e a condição");
+  ok(/Puericultura \(R\$ 450\) e urgência \(R\$ 350 ou R\$ 600\) são à vista/.test(SEM_COMENTARIO), "10b. e diz quais são à vista");
+  ok(/as taxas do parcelamento ficam por conta dela/.test(SEM_COMENTARIO), "10c. com a regra de quem paga a taxa se a família parcelar mesmo assim");
+  ok(/Nunca diga "em até 3x" pra consulta de R\$ 350, R\$ 450 ou R\$ 600/.test(SEM_COMENTARIO), "10d. e a proibição na cara");
+  ok(!/Pix ou cartão de crédito em até 3x/.test(SEM_COMENTARIO), "10e. o FATO de pagamento não promete mais 3x pra todo mundo");
+  ok(/Se preferir cartão, me avisa que te mando o link\."/.test(SEM_COMENTARIO) && !/Se preferir cartão em até 3x/.test(SEM_COMENTARIO), "10f. a mensagem de Pix não fala mais em 3x");
+  ok(/e só se for a consulta de neurodesenvolvimento \(R\$ 550\), você pode mencionar por conta própria que dá pra dividir/.test(SEM_COMENTARIO), "10g. quem não consegue pagar só ouve do parcelamento se for a de R$ 550");
+  ok(/formasPagamento\.parcelamento/.test(SEM_COMENTARIO), "10h. e a ferramenta é a fonte do caso daquela reserva");
+}
+
 console.log(`\ntipos-de-consulta: ${passou} passaram, ${falhou} falharam`);
 if (falhou) { erros.forEach((e) => console.log("  FALHOU: " + e)); process.exit(1); }
