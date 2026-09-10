@@ -161,7 +161,7 @@ const em = (data, hora) => {
   // consulta acontece some quando fica no meio de um parágrafo ou uma tela acima.
   ok(/\n\*O horário fica guardado até o pagamento/.test(fonte),
     "10. a linha do pagamento fica sozinha e em negrito na mensagem de reserva");
-  ok(/A chave Pix é o e-mail \(R\$ 550,00\):/.test(fonte),
+  ok(/A chave Pix é o e-mail \(\[valorDaConsulta que a ferramenta devolveu, ex: R\$ 450,00\]\):/.test(fonte),
     "10. e a chave Pix vai com o valor entre parênteses");
 
   // O botão "Pago" do painel é o gatilho da confirmação: é o Dr. Bruno dizendo que viu o

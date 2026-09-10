@@ -141,10 +141,13 @@ const QUARTA_10H = new Date(2026, 8, 9, 10, 0); // quarta-feira 09/09/2026 às 1
   ok(/terça às 20h, quarta às 20h e sexta às 18h, 19h e 20h/.test(SEM_COMENTARIO), "9. a grade está escrita no prompt");
   ok(/ANTES DE BUSCAR HORÁRIO você faz UMA pergunta, numa mensagem sozinha: se prefere em horário comercial, durante o dia, ou à noite/.test(SEM_COMENTARIO),
     "9b. pergunta comercial ou noite antes de buscar");
-  ok(/É a única situação em que você pergunta período antes de consultar \(a regra AGENDAMENTO sabe disso\)/.test(SEM_COMENTARIO),
-    "9c. e diz que é a única exceção, apontando pra regra que ela contraria");
-  ok(/A ÚNICA exceção é teleconsulta, que tem uma pergunta própria antes/.test(SEM_COMENTARIO),
-    "9d. a regra AGENDAMENTO, do lado dela, reconhece a exceção: as duas conversam");
+  // Desde os tipos de consulta, TODA consulta pergunta o período depois do valor; a tele só
+  // muda a pergunta (comercial/noite em vez de manhã/tarde). As duas regras apontam uma
+  // pra outra, que é o que impede o par de brigar.
+  ok(/A regra AGENDAMENTO manda perguntar o período em toda consulta; pra teleconsulta a pergunta é comercial ou noite/.test(SEM_COMENTARIO),
+    "9c. a regra de tele aponta pra AGENDAMENTO e diz qual é a pergunta dela");
+  ok(/comercial ou noite se for teleconsulta\) e SÓ então chama consultar_horarios/.test(SEM_COMENTARIO),
+    "9d. e AGENDAMENTO, do lado dela, sabe que tele pergunta comercial ou noite: as duas conversam");
   ok(/periodo="comercial" ou periodo="noite"/.test(SEM_COMENTARIO), "9e. e busca com o período respondido");
   ok(/Nunca liste a grade de vídeo inteira de cabeça/.test(SEM_COMENTARIO), "9f. sem recitar a grade: oferece o que a ferramenta devolver");
   ok(/dia sem atendimento PRESENCIAL nenhum/.test(SEM_COMENTARIO) && /à noite tem teleconsulta/.test(SEM_COMENTARIO),

@@ -1,77 +1,77 @@
 /*
- * Bateria do preço da consulta.
+ * Bateria do preço por tipo de consulta.
  *
- * O Dr. Bruno perguntou: "quando a pessoa marca de fim de semana, como vai cobrar 800?"
+ * Três tipos, três valores (decisão do Dr. Bruno, 10/09/2026): urgência R$ 350 (R$ 600 no
+ * fim de semana, e é a única que existe lá; nunca por teleconsulta), puericultura R$ 450,
+ * investigação/acompanhamento de neurodesenvolvimento R$ 550. Sem preço de irmãos.
  *
- * A pergunta expôs um buraco. A grade padrão não tem sábado nem domingo, e quando a família
- * pergunta sobre fim de semana a Carla escala em vez de marcar — esse caminho está certo.
- * Mas adicionarHorarioExtra não tem trava de dia: ele abre um extra num sábado pelo painel,
- * o horário entra na roda como qualquer outro, e a Carla marcava cobrando R$ 550.
- *
- * Enquanto o preço era só texto do prompt, errar era mandar uma frase errada. Depois que ela
- * passou a gerar cobrança de verdade, errar virou cobrar o valor errado de uma família.
+ * A tabela mora aqui e só aqui: o valor que a Carla escreve é lido de volta e conferido
+ * antes de reservar. Prompt e código dizendo números diferentes é a Carla travada em loop.
  *
  * Roda com:  node tests/preco-da-consulta.test.js
  */
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const { precoDaConsulta, ehFimDeSemana } = require(path.join(__dirname, "..", "preco-da-consulta.js"));
+const { precoDaConsulta, valoresConhecidos, permiteTeleconsulta, ehFimDeSemana, TIPOS } = require("../preco-da-consulta.js");
 
 let passou = 0, falhou = 0;
 const erros = [];
 function ok(cond, msg) { if (cond) { passou++; return; } falhou++; erros.push(msg); }
 function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + ", veio " + JSON.stringify(a) + ")"); }
+const slot = (date, time = "10:00") => ({ date, time });
+const SEG = slot("2026-09-14"), SAB = slot("2026-09-12"), DOM = slot("2026-09-13");
 
-// 03/08/2026 seg, 04 ter, 05 qua, 06 qui, 07 sex, 08 SÁB, 09 DOM, 10 seg.
-const slot = (date, time = "08:00") => ({ date, time });
-
-// ------------------------------------------------- 1. dia de semana
+// ------------------------------------------------- 1. a tabela
 {
-  for (const d of ["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07"]) {
-    const p = precoDaConsulta(slot(d));
-    eq(p.centavos, 55000, `1. ${d} é dia de semana: R$ 550,00`);
-    eq(p.fimDeSemana, false, `1. ${d} não é fim de semana`);
-  }
+  eq(precoDaConsulta(SEG, "urgencia").centavos, 35000, "1. urgência: R$ 350");
+  eq(precoDaConsulta(SEG, "puericultura").centavos, 45000, "1b. puericultura: R$ 450");
+  eq(precoDaConsulta(SEG, "tnd").centavos, 55000, "1c. neurodesenvolvimento: R$ 550");
+  eq(precoDaConsulta(SEG, "puericultura").reais, "R$ 450,00", "1d. texto em reais, com vírgula");
+  ok(/urgência/.test(TIPOS.urgencia.nome) && /puericultura/.test(TIPOS.puericultura.nome) && /neurodesenvolvimento/.test(TIPOS.tnd.nome),
+    "1e. cada tipo tem o nome que a família ouve");
+  ok(Object.keys(TIPOS).length === 3, "1f. três tipos, nem mais nem menos");
 }
 
-// ------------------------------------------------- 2. sábado e domingo
+// ------------------------------------------------- 2. fim de semana: só urgência, R$ 600
 {
-  for (const d of ["2026-08-08", "2026-08-09"]) {
-    const p = precoDaConsulta(slot(d));
-    eq(p.centavos, 80000, `2. ${d} é fim de semana: R$ 800,00`);
-    eq(p.fimDeSemana, true, `2. ${d} é fim de semana`);
-  }
-  eq(precoDaConsulta(slot("2026-08-08")).reais, "R$ 800,00", "2. o texto sai em reais, com vírgula");
-  eq(precoDaConsulta(slot("2026-08-03")).reais, "R$ 550,00", "2. e o de semana também");
+  eq(precoDaConsulta(SAB, "urgencia").centavos, 60000, "2. urgência no sábado: R$ 600");
+  eq(precoDaConsulta(DOM, "urgencia").centavos, 60000, "2b. e no domingo");
+  ok(precoDaConsulta(SAB, "urgencia").fimDeSemana, "2c. marcada como fim de semana");
+  const p = precoDaConsulta(SAB, "puericultura");
+  ok(p.valido === false && /só tem consulta de urgência/.test(p.motivoInvalido), "2d. puericultura no sábado NÃO existe, e diz por quê");
+  ok(precoDaConsulta(DOM, "tnd").valido === false, "2e. neurodesenvolvimento no domingo idem");
+  ok(!("centavos" in p), "2f. inválido não tem preço: ninguém cobra o que não existe");
 }
 
-// ------------------------------------------------- 3. o horário do dia não muda nada
+// ------------------------------------------------- 3. teleconsulta
 {
-  // O corte é o DIA, não a hora. Um extra às 18h de sexta continua sendo dia de semana.
-  eq(precoDaConsulta(slot("2026-08-07", "18:00")).centavos, 55000, "3. sexta às 18h ainda é R$ 550");
-  eq(precoDaConsulta(slot("2026-08-08", "08:00")).centavos, 80000, "3. sábado de manhã já é R$ 800");
+  ok(!permiteTeleconsulta("urgencia"), "3. urgência não existe por vídeo");
+  ok(permiteTeleconsulta("puericultura") && permiteTeleconsulta("tnd"), "3b. puericultura e neurodesenvolvimento sim");
+  ok(!permiteTeleconsulta("x"), "3c. tipo desconhecido não");
 }
 
-// ------------------------------------------------- 4. entrada torta não vira preço de fim de semana
-// Errar pra R$ 800 numa data que não deu pra ler seria cobrar a mais de quem não devia.
+// ------------------------------------------------- 4. tipo desconhecido não é preço
 {
-  for (const ruim of [{}, { date: null }, { date: "" }, { date: "abacaxi" }, null, undefined]) {
-    eq(ehFimDeSemana(ruim), false, `4. ${JSON.stringify(ruim)} não é lido como fim de semana`);
-  }
-  eq(precoDaConsulta({}).centavos, 55000, "4. e o preço cai no de semana, nunca no mais caro");
+  const p = precoDaConsulta(SEG, "consulta");
+  ok(p.valido === false && /desconhecido/.test(p.motivoInvalido), "4. tipo fora da tabela é inválido, com motivo");
+  ok(precoDaConsulta(SEG, undefined).valido === false, "4b. sem tipo também");
+  ok(precoDaConsulta({}, "puericultura").valido && precoDaConsulta({}, "puericultura").centavos === 45000,
+    "4c. data ilegível cai em dia de semana, nunca no mais caro");
 }
 
-// ------------------------------------------------- 5. quem usa isso é quem cria a cobrança
+// ------------------------------------------------- 5. os valores que a máquina reconhece
+{
+  eq(valoresConhecidos().join(","), "35000,45000,55000,60000", "5. exatamente os quatro valores que existem");
+  for (const d of ["2026-09-12", "2026-09-13"]) ok(ehFimDeSemana(slot(d)), `5b. ${d} é fim de semana`);
+  ok(!ehFimDeSemana(SEG), "5c. segunda não é");
+}
+
+// ------------------------------------------------- 6. quem usa isso é quem cria a cobrança
 {
   const fonte = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
-  // A intenção é "o valor vem deste módulo". A chamada passou de precoDaConsulta(slot) para
-  // precoDoGrupo(slot, criancasJuntas) quando entrou o preço de irmãos; travar o NOME da
-  // função quebrava sem nada ter regredido. O que não pode existir é conta de preço solta.
-  ok(/Preco\.precoDoGrupo\(slotFinal, criancasJuntas\)/.test(fonte),
-    "5. o valor da cobrança vem daqui, não de uma constante solta");
-  ok(!/PRECO_CONSULTA_CENTAVOS \|\| 55000\);/.test(fonte),
-    "5. e a constante antiga de valor único saiu do cerebro-ia.js");
+  ok(/Preco\.precoDaConsulta\(slotFinal, tipoConsulta\)/.test(fonte), "6. o valor da cobrança vem daqui, pelo tipo");
+  ok(!/precoDoGrupo|criancasJuntas/.test(fonte), "6b. o preço de grupo de irmãos não existe mais em lugar nenhum");
 }
 
 console.log(erros.map((e) => "  FALHA " + e).join("\n"));
