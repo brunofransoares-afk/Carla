@@ -30,89 +30,59 @@ const em = (data, hora) => {
   return new Date(a, m - 1, d, hh, mm);
 };
 
-// ------------------------------------------------- 1. consulta de tarde
+// ------------------------------------------------- 1. o prazo é o horário da consulta, e ponto
+// Dito pelo Dr. Bruno em 10/09, depois de uma consulta de verdade ter vencido em 13 minutos:
+// "o prazo do pagamento é até o horário da consulta". Quem confirma é ele, no "pago".
 {
-  // Marcando na segunda uma consulta de quinta à tarde: paga até quinta de manhã.
-  const r = prazoDePagamento(slot("2026-08-06", "14:00"), em("2026-08-03", "10:00"));
-  eq(r.agora, false, "1. tem prazo, não precisa pagar na hora");
-  eq(r.texto, "até quinta-feira (06/08) de manhã", "1. o prazo é a manhã do dia da consulta");
+  for (const [data, hora, agora] of [
+    ["2026-08-06", "14:00", ["2026-08-03", "10:00"]],
+    ["2026-08-06", "08:00", ["2026-08-03", "10:00"]],
+    ["2026-08-03", "16:00", ["2026-08-03", "08:30"]],
+    ["2026-08-03", "14:00", ["2026-08-03", "13:47"]],
+    ["2026-08-04", "08:00", ["2026-08-03", "23:59"]],
+  ]) {
+    const r = prazoDePagamento(slot(data, hora), em(...agora));
+    eq(r.texto, "até o horário da consulta", `1. ${data} ${hora}, marcada em ${agora.join(" ")}: a frase é sempre a mesma`);
+    eq(r.expiraEm, null, "1b. e não existe vencimento automático");
+    eq(r.agora, false, "1c. nem 'pague agora'");
+  }
+  ok(/em cima da hora|13 minutos/.test(fs.readFileSync(path.join(__dirname, "..", "prazo-de-pagamento.js"), "utf8")),
+    "1d. o arquivo conta o caso que derrubou a regra antiga, pra ninguém trazer ela de volta sem saber");
 }
 
-// ------------------------------------------------- 2. consulta de manhã
+// ------------------------------------------------- 2. a validação do horário continua
 {
-  // Consulta quinta de manhã: o dinheiro tem que entrar na quarta.
-  const r = prazoDePagamento(slot("2026-08-06", "08:00"), em("2026-08-03", "10:00"));
-  eq(r.agora, false, "2. tem prazo");
-  eq(r.texto, "até quarta-feira (05/08)", "2. consulta de manhã fecha no dia anterior, sem 'de manhã'");
+  let erro = null;
+  try { prazoDePagamento(slot("2026-13-01", "14:00"), em("2026-08-03", "10:00")); } catch (e) { erro = e; }
+  ok(erro instanceof TypeError, "2. data inválida ainda estoura");
+  erro = null;
+  try { prazoDePagamento(slot("2026-08-06", "25:00"), em("2026-08-03", "10:00")); } catch (e) { erro = e; }
+  ok(erro instanceof TypeError, "2b. hora inválida também");
 }
 
-// ------------------------------------------------- 3. amanhã
+// ------------------------------------------------- 3. a reserva não vence sozinha
 {
-  eq(prazoDePagamento(slot("2026-08-04", "15:00"), em("2026-08-03", "18:00")).texto,
-    "até amanhã de manhã", "3. consulta amanhã à tarde: paga até amanhã de manhã");
-  eq(prazoDePagamento(slot("2026-08-05", "08:00"), em("2026-08-03", "18:00")).texto,
-    "até amanhã", "3. consulta depois de amanhã de manhã: paga até amanhã");
+  const storage = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8");
+  ok(!/limiteDePagamento/.test(storage), "3. o cálculo de vencimento padrão saiu do storage");
+  ok(/expiresAt: expiracao \? expiracao\.toISOString\(\) : null,/.test(storage), "3b. reserva nova nasce sem expiresAt, a não ser que alguém passe um explicitamente");
+  ok(/if \(!copia\.expiresAt\) copia\.expiresAt = null;/.test(storage), "3c. e a normalização não inventa um");
+  ok(/item\.expiresAt = null;\n    \/\/ Se um clique em "Pago" foi desfeito/.test(storage), "3d. desmarcar pago não recoloca prazo");
+  ok(/NÃO EXISTE MAIS PRAZO AUTOMÁTICO/.test(storage), "3e. escrito no lugar onde o cálculo morava");
+  const cerebro = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
+  ok(!/pagarAgora|expiraEm/.test(cerebro), "3f. a ferramenta não devolve mais 'pague agora' nem vencimento");
 }
 
-// ------------------------------------------------- 4. hoje
+// ------------------------------------------------- 4. o prompt parou de apressar
 {
-  // Marcou hoje de manhã uma consulta pra hoje à tarde: dá, mas é hoje mesmo.
-  const r = prazoDePagamento(slot("2026-08-03", "16:00"), em("2026-08-03", "08:30"));
-  eq(r.agora, false, "4. consulta hoje à tarde, marcada de manhã, ainda tem prazo");
-  eq(r.texto, "ainda hoje de manhã", "4. e o prazo é hoje de manhã");
-
-  // Consulta amanhã de manhã: o dia anterior é hoje.
-  const r2 = prazoDePagamento(slot("2026-08-04", "08:00"), em("2026-08-03", "14:00"));
-  eq(r2.agora, false, "4. consulta amanhã de manhã ainda tem prazo hoje");
-  eq(r2.texto, "ainda hoje", "4. e o prazo é hoje");
-}
-
-// ------------------------------------------------- 5. o prazo já passou: paga na hora
-{
-  // Consulta hoje à tarde, mas já são 14h: a manhã acabou.
-  const r = prazoDePagamento(slot("2026-08-03", "16:00"), em("2026-08-03", "14:00"));
-  eq(r.agora, true, "5. consulta hoje à tarde depois do meio-dia: só confirma pagando agora");
-  eq(r.texto, "agora", "5. e o texto diz isso");
-
-  // Consulta hoje de manhã: o dia anterior já foi.
-  const r2 = prazoDePagamento(slot("2026-08-03", "09:00"), em("2026-08-03", "07:00"));
-  eq(r2.agora, true, "5. consulta hoje de manhã: o prazo era ontem, então é agora");
-}
-
-// ------------------------------------------------- 6. a fronteira do meio-dia
-{
-  // 11:59 ainda é manhã da consulta de tarde. 12:00 já não é.
-  eq(prazoDePagamento(slot("2026-08-03", "14:00"), em("2026-08-03", "11:59")).agora, false,
-    "6. 11:59 ainda está dentro do prazo");
-  eq(prazoDePagamento(slot("2026-08-03", "14:00"), em("2026-08-03", "12:00")).agora, true,
-    "6. 12:00 em ponto já passou do prazo");
-
-  // E o corte de manhã/tarde da própria consulta é o mesmo meio-dia.
-  eq(prazoDePagamento(slot("2026-08-06", "11:59"), em("2026-08-03", "10:00")).texto,
-    "até quarta-feira (05/08)", "6. consulta às 11:59 conta como manhã");
-  eq(prazoDePagamento(slot("2026-08-06", "12:00"), em("2026-08-03", "10:00")).texto,
-    "até quinta-feira (06/08) de manhã", "6. consulta às 12:00 conta como tarde");
-}
-
-// ------------------------------------------------- 7. vira o mês e vira a semana
-{
-  // Consulta terça 01/09 de manhã: o dia anterior é segunda 31/08, outro mês.
-  const r = prazoDePagamento(slot("2026-09-01", "08:00"), em("2026-08-28", "10:00"));
-  eq(r.texto, "até segunda-feira (31/08)", "7. atravessa a virada de mês sem errar o dia");
-
-  // Consulta segunda de manhã: o dia anterior é domingo, dia em que o consultório não
-  // atende. Continua valendo: é prazo do dinheiro, não de atendimento.
-  const r2 = prazoDePagamento(slot("2026-08-10", "08:00"), em("2026-08-06", "10:00"));
-  eq(r2.texto, "até domingo (09/08)", "7. o prazo pode cair num dia sem atendimento");
-}
-
-// ------------------------------------------------- 8. a meia-noite do limite
-{
-  // 23:59 do dia anterior ainda vale pra consulta de manhã. Meia-noite não.
-  eq(prazoDePagamento(slot("2026-08-06", "08:00"), em("2026-08-05", "23:59")).agora, false,
-    "8. 23:59 do dia anterior ainda está dentro");
-  eq(prazoDePagamento(slot("2026-08-06", "08:00"), em("2026-08-06", "00:00")).agora, true,
-    "8. passou da meia-noite, acabou o prazo");
+  const cerebro = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
+  const prompt = cerebro.slice(cerebro.indexOf("const PROMPT_ESTAVEL = `"), cerebro.indexOf("function montarSystemPrompt("));
+  ok(/O PRAZO DE PAGAMENTO É ATÉ O HORÁRIO DA CONSULTA, SEMPRE\./.test(prompt), "4. a regra nova está no prompt");
+  ok(/nunca diga "até amanhã", "ainda hoje", "de manhã", "agora"/.test(prompt), "4b. com as frases antigas proibidas uma a uma");
+  ok(/Mas também NUNCA apressa/.test(prompt) && /contagem regressiva nem ameaça de perder o horário/.test(prompt), "4c. e a pressa proibida por nome");
+  ok(/\nO pagamento pode ser feito até o horário da consulta\.\n/.test(prompt), "4d. a linha do pagamento na mensagem de reserva é essa, sozinha e sem negrito");
+  ok(!/O horário fica guardado até o pagamento/.test(prompt), "4e. a frase do print de 10/09 saiu");
+  ok(!/que precisa ser feito/.test(prompt) && (prompt.match(/precisa ser feito/g) || []).length === 1, "4f. e 'precisa ser feito' só sobrevive dentro da própria proibição");
+  ok(!/pagarAgora/.test(prompt), "4g. e a Carla não sabe mais o que é 'pague agora'");
 }
 
 // ------------------------------------------------- 9. a trava reconhece as palavras novas
@@ -159,8 +129,8 @@ const em = (data, hora) => {
   // A linha do pagamento tem que ficar sozinha e em negrito, e o valor tem que aparecer
   // junto da chave Pix. As duas coisas são o mesmo problema: a informação que decide se a
   // consulta acontece some quando fica no meio de um parágrafo ou uma tela acima.
-  ok(/\n\*O horário fica guardado até o pagamento/.test(fonte),
-    "10. a linha do pagamento fica sozinha e em negrito na mensagem de reserva");
+  ok(/\nO pagamento pode ser feito até o horário da consulta\.\n/.test(fonte),
+    "10. a linha do pagamento fica sozinha na mensagem de reserva, sem pressa");
   ok(/A chave Pix é o e-mail \(\[valorDaConsulta que a ferramenta devolveu, ex: R\$ 450,00\]\):/.test(fonte),
     "10. e a chave Pix vai com o valor entre parênteses");
 

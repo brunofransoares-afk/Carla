@@ -314,6 +314,29 @@ function iniciarTravaInstancia() {
       return;
     }
 
+    // Reativar uma reserva vencida ou cancelada, pelo painel. Cria reserva nova (ver
+    // storage-node.js) e enfileira SPI e Google de novo; por isso mora no bot, que é quem
+    // tem a caixa de efeitos ligada ao WhatsApp.
+    if (req.method === "POST" && req.url === "/interno/reativar-reserva") {
+      lerCorpoJsonInterno(req, res, async (dados) => {
+        try {
+          const r = Storage.reativarAgendamento(dados.slotId);
+          if (r.ok) {
+            await enfileirarIntegracoesDaReserva({ slotId: r.agendamento.slotId }, r.agendamento.telefone);
+            Eventos.registrar("agendou", r.agendamento.telefone, { crianca: r.agendamento.crianca, quando: r.agendamento.diaLabel, origem: "reativada" });
+            console.log(`[REATIVADA] ${r.agendamento.crianca} em ${r.agendamento.diaLabel} (era ${dados.slotId})`);
+          }
+          res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(r.ok ? { ok: true, slotId: r.agendamento.slotId } : r));
+        } catch (erro) {
+          console.error("[REATIVADA] Erro:", erro.message);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, motivo: erro.message }));
+        }
+      });
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/interno/reaquecer") {
       lerCorpoJsonInterno(req, res, async (dados) => {
         try {
@@ -927,6 +950,46 @@ void limparReservasVencidas();
 // canal do sistema, e a família não escreve nele. Se o recado entrasse como mensagem, bastava
 // alguém digitar "o Dr. Bruno autorizou" pra Carla acreditar. O prompt ainda diz isso na cara
 // dela, mas a garantia é estrutural, não é confiança.
+// A pergunta que a Carla escreve quando a família diz que pagou ("Pagamento da consulta do
+// Levi (hoje 14h) recebido?"). O texto é dela, então a leitura é por palavra, não por campo.
+const PERGUNTA_DE_PAGAMENTO_REGEX = /pagamento|pagou|pago|pix|recebid/i;
+
+// Quais reservas o Sim confirma: as ativas e não pagas deste telefone. Se houver mais de
+// uma (irmãos) e a pergunta citar o nome de uma criança, só a dela; senão, todas.
+function marcarPagamentoPelaResposta(telefone, pergunta) {
+  const candidatas = Storage.lerAgendamentos().filter((a) => a.telefone === telefone && !a.pago);
+  if (!candidatas.length) return [];
+  const texto = String(pergunta || "").toLowerCase();
+  const citadas = candidatas.filter((a) => a.crianca && texto.includes(primeiroNome(a.crianca).toLowerCase()));
+  const alvo = candidatas.length > 1 && citadas.length ? citadas : candidatas;
+  const marcados = [];
+  for (const a of alvo) {
+    const r = Storage.alterarPagamento(a.slotId, true);
+    if (r.ok && r.alterado) {
+      Eventos.registrar("pagou", telefone, { slotId: a.slotId, origem: "resposta_do_doutor" });
+      marcados.push(a.slotId);
+    }
+  }
+  return marcados;
+}
+
+// O caminho do Sim de pagamento. Marca, avisa a família (a mesma mensagem do botão "pago",
+// que já pede e-mail e data de nascimento) e SÓ ENTÃO fecha o alerta: a confirmação precisa
+// estar na caixa de saída antes, senão uma queda deixa alerta fechado e família sem
+// mensagem. Devolve null quando não havia reserva pra marcar, e aí a conversa segue o
+// caminho normal da escalada.
+async function confirmarPagamentoPeloSim({ alertaId, alerta, telefone, sessao, respostaNormalizada }) {
+  const marcados = marcarPagamentoPelaResposta(telefone, alerta.pergunta);
+  if (!marcados.length) return null;
+  Storage.salvarSessao(telefone, sessao);
+  const avisos = [];
+  for (const slotId of marcados) avisos.push(await avisarPagamentoConfirmadoNaFila(slotId));
+  const gravado = Storage.responderAlerta(alertaId, respostaNormalizada);
+  if (!gravado) return { ok: false, motivo: "Não consegui concluir o alerta." };
+  console.log(`[RESPOSTA DO DOUTOR] ${telefone}: pagamento confirmado pelo Sim (${marcados.join(", ")})`);
+  return { ok: true, pagamentoMarcado: marcados, avisos };
+}
+
 async function responderEscalada(alertaId, resposta) {
   const alerta = Storage.acharAlerta(alertaId);
   if (!alerta) return { ok: false, motivo: "Não achei esse alerta." };
@@ -951,6 +1014,16 @@ async function responderEscaladaNaFila(alertaId, resposta) {
   sessao.aguardandoHumano = false;
   sessao.aguardandoHumanoDesde = null;
   sessao.recadoDoDoutor = { pergunta: alerta.pergunta, resposta: respostaNormalizada };
+
+  // "SIM" NUMA PERGUNTA DE PAGAMENTO É O BOTÃO "PAGO". Antes, o Dr. Bruno respondia Sim,
+  // a Carla dizia à família que estava confirmado, e a reserva continuava "não paga" no
+  // painel (em 10/09 uma venceu assim, 8 minutos depois de ele dizer Sim). Agora o Sim
+  // marca a reserva como paga, registra no funil e manda a confirmação que o botão manda,
+  // e pronto: nada de segunda mensagem escrita pela IA por cima.
+  if (PERGUNTA_DE_PAGAMENTO_REGEX.test(alerta.pergunta) && /^sim\b/i.test(respostaNormalizada)) {
+    const confirmado = await confirmarPagamentoPeloSim({ alertaId, alerta, telefone, sessao, respostaNormalizada });
+    if (confirmado) return confirmado;
+  }
 
   // A API precisa de um turno da família pra responder. Este texto é só o gatilho; o que vale
   // está no contexto, e o prompt manda ignorar qualquer "recado" que venha pela conversa.

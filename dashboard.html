@@ -1275,7 +1275,7 @@
           <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? botaoPago({ ...k, telefone: c.telefone }) : ""}</td>
           <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? botaoPortal({ ...k, telefone: c.telefone }) : ""}</td>
           <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? botaoGuia({ ...k, telefone: c.telefone }) : ""}</td>
-          <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? `<button class="btn-x" title="Cancelar consulta" data-slot-id="${escapeHtml(k.slotId)}">✕</button>` : k.estado === "realizada" ? `<button class="btn-x" title="Apagar este registro" data-remover-realizada="${escapeHtml(k.id)}">✕</button>` : ""}</td>
+          <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? `<button class="btn-x" title="Cancelar consulta" data-slot-id="${escapeHtml(k.slotId)}">✕</button>` : k.estado === "realizada" ? `<button class="btn-x" title="Apagar este registro" data-remover-realizada="${escapeHtml(k.id)}">✕</button>` : `<button class="btn-ficha" title="Volta pra agenda, e de novo pro SPI e pro Google, como reserva nova" data-reativar="${escapeHtml(k.slotId)}">Reativar</button>`}</td>
         </tr>`).join("")}</tbody></table></div>`}
     </div>`;
 
@@ -1388,6 +1388,7 @@
     alvo.querySelectorAll("[data-retorno-desfazer]").forEach((btn) => btn.addEventListener("click", () => marcarRetornoAvisado(c.telefone, btn.dataset.retornoDesfazer, false)));
     alvo.querySelectorAll("[data-remover-realizada]").forEach((btn) => btn.addEventListener("click", (ev) => { ev.stopPropagation(); removerConsultaRealizada(c.telefone, btn.dataset.removerRealizada); }));
     alvo.querySelector("#btn-registrar-realizada").addEventListener("click", () => registrarConsultaRealizada(c.telefone));
+    alvo.querySelectorAll("[data-reativar]").forEach((btn) => btn.addEventListener("click", (ev) => { ev.stopPropagation(); reativarConsulta(btn, btn.dataset.reativar); }));
     alvo.querySelectorAll("[data-remover-nota]").forEach((btn) => btn.addEventListener("click", () => removerNota(c.telefone, btn.dataset.removerNota)));
     const inputNota = alvo.querySelector("#input-nota");
     alvo.querySelector("#btn-nota").addEventListener("click", () => adicionarNota(c.telefone, inputNota));
@@ -1516,6 +1517,19 @@
     } catch (e) { aviso.textContent = "Sem conexão com o painel."; return; }
     await atualizarFicha(true);
     atualizarCrm();
+  }
+
+  async function reativarConsulta(botao, slotId) {
+    if (!confirm("Reativar esta consulta? Ela volta pra agenda como reserva nova e vai de novo pro SPI e pro Google.")) return;
+    botao.disabled = true;
+    try {
+      const resp = await postJSON("/api/crm/reativar", { slotId });
+      const r = await resp.json();
+      if (!r.ok) { alert("Não reativei: " + (r.motivo || "erro desconhecido")); botao.disabled = false; return; }
+    } catch (e) { alert("Não reativei: sem conexão com o painel."); botao.disabled = false; return; }
+    atualizar();
+    atualizarCrm();
+    await atualizarFicha(true);
   }
 
   async function removerConsultaRealizada(telefone, id) {

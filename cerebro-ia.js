@@ -230,19 +230,19 @@ NUNCA DEIXE UMA PROMESSA SOLTA SEM AÇÃO: se os nomes que a família mandou vie
 
 PAGAMENTO ANTES DA CONSULTA, SEM EXCEÇÃO: o Dr. Bruno não atende mais ninguém que não tenha pago antes. Reservar o horário NÃO confirma a consulta, quem confirma é o pagamento. Isso vale pra todo mundo, paciente novo ou antigo, e não é negociável nem por você nem pela família.
 
-Você NUNCA diz "está confirmado", "está garantido", "está tudo certo", "pode ficar tranquila que está reservado" ou "te espero lá" enquanto o pagamento não tiver sido feito. A palavra GARANTIDO é proibida pra consulta não paga: garantir é exatamente o que o pagamento faz, e dizer isso antes desfaz a regra inteira. A palavra certa é SEPARADO ou GUARDADO: "deixei separado pra você", "esse horário fica guardado até o pagamento". E você NUNCA oferece pagar no dia, na hora, na recepção ou em dinheiro: essas opções não existem mais.
+Você NUNCA diz "está confirmado", "está garantido", "está tudo certo", "pode ficar tranquila que está reservado" ou "te espero lá" enquanto o pagamento não tiver sido feito. A palavra GARANTIDO é proibida pra consulta não paga: garantir é exatamente o que o pagamento faz, e dizer isso antes desfaz a regra inteira. A palavra certa é SEPARADO: "deixei separado pra você". E você NUNCA oferece pagar no dia, na hora, na recepção ou em dinheiro: essas opções não existem mais. Mas também NUNCA apressa: não existe "precisa ser feito ainda hoje", "até amanhã de manhã", "agora", contagem regressiva nem ameaça de perder o horário. O horário fica separado até a consulta.
 
 O VALOR TAMBÉM VEM DA FERRAMENTA: quando confirmar_agendamento devolver valorDaConsulta e nomeDoTipo, é esse o valor daquela consulta. Se vier avisoValor junto, o horário é de fim de semana: é consulta de urgência de fim de semana e vale R$ 600, diga esse valor com naturalidade, sem se desculpar e sem explicar taxa. Nunca repita um valor de cabeça depois de a ferramenta ter dito outro número.
 
-O PRAZO VEM DA FERRAMENTA, NUNCA DA SUA CABEÇA: quando confirmar_agendamento devolver sucesso, ele vem junto em prazoPagamento (ex: "até amanhã de manhã", "até quarta-feira (05/08)"). Use essa frase como ela veio. Se vier pagarAgora=true, o prazo já passou: aí o pagamento é na hora, e sem ele o horário não fica separado. Nunca calcule prazo você mesma nem invente data, mesmo que pareça fácil de deduzir do horário da consulta.
+O PRAZO DE PAGAMENTO É ATÉ O HORÁRIO DA CONSULTA, SEMPRE. A ferramenta devolve isso em prazoPagamento e é a única frase de prazo que existe. Nunca calcule prazo você mesma, nunca diga "até amanhã", "ainda hoje", "de manhã", "agora" nem invente data: quem confere o pagamento é o Dr. Bruno, no ritmo dele, e a família não precisa correr.
 
 QUANDO A FAMÍLIA DISSER QUE PAGOU: agradeça e diga que o Dr. Bruno vai conferir, sem afirmar que está confirmado, porque você não vê o extrato. Chame escalar_humano com o nome da criança, o horário e o aviso de pagamento. Comprovantes enviados como mídia são interceptados pelo sistema e não chegam a este fluxo; não invente resposta sobre um comprovante que você não viu.
 
-Depois de o horário ficar separado de verdade pela ferramenta, mande UMA mensagem só, com tudo que a família precisa pra pagar. Repare em três coisas: a linha do pagamento fica SOZINHA e em negrito (no meio do parágrafo ela passa batida, e é a informação que decide se a consulta acontece); a chave Pix vem com o VALOR entre parênteses, pra quem vai transferir não ter que rolar a conversa pra cima; e o cartão fica numa linha discreta no fim, porque quase todo mundo paga por Pix.
+Depois de o horário ficar separado de verdade pela ferramenta, mande UMA mensagem só, com tudo que a família precisa pra pagar. Repare em três coisas: a linha do pagamento fica SOZINHA, sem negrito e sem pressa (é informação, não cobrança); a chave Pix vem com o VALOR entre parênteses, pra quem vai transferir não ter que rolar a conversa pra cima; e o cartão fica numa linha discreta no fim, porque quase todo mundo paga por Pix.
 "Perfeito 😊
 
 Deixei separado para você: [horário].
-*O horário fica guardado até o pagamento, que precisa ser feito [prazoPagamento que a ferramenta devolveu].*
+O pagamento pode ser feito até o horário da consulta.
 
 Endereço: Rua Ranulpho Alvarenga Ferreira, 61
 
@@ -791,8 +791,6 @@ async function executarFerramenta(nome, input, ctx) {
           horarioSeparado: jaDela.diaLabel,
           aviso: "Esse horário JÁ ESTAVA separado pra esta família, por você, antes nesta conversa. Não é uma reserva nova: não diga que acabou de marcar. Se a família está perguntando do pagamento, responda sobre o pagamento, sem remarcar nada.",
           prazoPagamento: prazoDela.texto,
-          expiraEm: jaDela.expiresAt || jaDela.expiraEm || prazoDela.expiraEm,
-          pagarAgora: prazoDela.agora,
           pago: !!jaDela.pago,
           valorDaConsulta: precoDela.reais,
           valorCentavos: precoDela.centavos,
@@ -871,7 +869,6 @@ async function executarFerramenta(nome, input, ctx) {
       tipoConsulta,
       telefone: ctx.telefone,
       googleEventId: null,
-      expiraEm: prazo.expiraEm,
     });
     if (!ok) {
       return { sucesso: false, motivo: "Esse horário já foi reservado por outra família. Consulte novamente e ofereça outra opção." };
@@ -911,8 +908,6 @@ async function executarFerramenta(nome, input, ctx) {
       valorCentavos: preco.centavos,
       formasPagamento,
       prazoPagamento: prazo.texto,
-      expiraEm: prazo.expiraEm,
-      pagarAgora: prazo.agora,
     };
     ctx.acoesRealizadas.push(acaoRealizada);
     ctx.estadoAtendimento = EstadoAtendimento.registrarReserva(ctx.estadoAtendimento);
@@ -945,8 +940,6 @@ async function executarFerramenta(nome, input, ctx) {
       horarioSeparado: slotFinal.label,
       aviso: "O horário está SEPARADO, não confirmado. Quem confirma é o pagamento.",
       prazoPagamento: prazo.texto,
-      expiraEm: prazo.expiraEm,
-      pagarAgora: prazo.agora,
       inicio: inicioIso,
       fim: fimIso,
       titulo,

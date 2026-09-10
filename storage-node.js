@@ -100,7 +100,6 @@ function atualizarJSON(caminho, padrao, alterar) {
 // node:sqlite faz parte do Node usado em produção (22+), então não acrescenta dependência.
 const ESTADOS_AGENDAMENTO = new Set(["reservado", "pago", "vencido", "cancelado"]);
 const ESTADOS_ATIVOS = new Set(["reservado", "pago"]);
-const PAGAMENTO_IMEDIATO_MINUTOS = Math.max(1, Number(process.env.PAGAMENTO_IMEDIATO_TOLERANCIA_MIN) || 30);
 let bancoAgendamentos = null;
 const ESPERA_LOCK = new Int32Array(new SharedArrayBuffer(4));
 
@@ -108,28 +107,9 @@ function chaveHorarioReal(data, horario) {
   return `${String(data || "").trim()}T${String(horario || "").trim()}`;
 }
 
-function limiteDePagamento({ data, horario }, criadoEm = new Date()) {
-  const [ano, mes, dia] = String(data || "").split("-").map(Number);
-  const [hora = 0, minuto = 0] = String(horario || "00:00").split(":").map(Number);
-  if (![ano, mes, dia, hora, minuto].every(Number.isFinite)) {
-    return new Date(criadoEm.getTime() + PAGAMENTO_IMEDIATO_MINUTOS * 60000);
-  }
-
-  const limite = new Date(ano, mes - 1, dia);
-  if (String(horario) >= "12:00") {
-    limite.setHours(12, 0, 0, 0);
-  } else {
-    limite.setDate(limite.getDate() - 1);
-    limite.setHours(23, 59, 59, 999);
-  }
-
-  // Reserva feita depois do prazo ainda precisa de uma janela curta para o Pix/cartão
-  // "agora". Sem esta tolerância ela nasceria vencida no mesmo milissegundo.
-  if (limite <= criadoEm) {
-    return new Date(criadoEm.getTime() + PAGAMENTO_IMEDIATO_MINUTOS * 60000);
-  }
-  return limite;
-}
+// NÃO EXISTE MAIS PRAZO AUTOMÁTICO. A reserva fica na agenda até a consulta, paga ou não;
+// quem confirma é o Dr. Bruno, clicando "pago" no ritmo dele (ver prazo-de-pagamento.js).
+// Um expiresAt só existe se alguém passar explicitamente (teste, ou uma regra futura).
 
 function estadoLegado(item) {
   if (ESTADOS_AGENDAMENTO.has(item && item.estado)) return item.estado;
@@ -147,12 +127,8 @@ function normalizarAgendamento(item, now = new Date()) {
   copia.estado = estadoLegado(copia);
   copia.pago = copia.estado === "pago";
   if (!copia.expiresAt && copia.expiraEm) copia.expiresAt = copia.expiraEm;
-  if (copia.estado === "reservado" && !copia.expiresAt) {
-    const criado = new Date(copia.registradoEm || now);
-    const base = Number.isNaN(criado.getTime()) ? now : criado;
-    copia.expiresAt = limiteDePagamento(copia, base).toISOString();
-  }
   if (copia.estado !== "reservado") copia.expiresAt = null;
+  if (!copia.expiresAt) copia.expiresAt = null;
   return copia;
 }
 
@@ -609,9 +585,7 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, 
   const pendentes = lerDadosPendentes(telefone);
   const agora = new Date();
   const expiracaoRecebida = new Date(expiresAt || expiraEm || "");
-  const expiracao = Number.isNaN(expiracaoRecebida.getTime())
-    ? limiteDePagamento({ data: slot.date, horario: slot.time }, agora)
-    : expiracaoRecebida;
+  const expiracao = Number.isNaN(expiracaoRecebida.getTime()) ? null : expiracaoRecebida;
   const item = {
     // slotId é a identidade desta RESERVA e nunca volta a ser usado. agendaSlotId é a vaga
     // da grade, que pode ser ocupada novamente quando esta reserva ficar inativa.
@@ -640,7 +614,7 @@ function reservar({ slot, responsavel, crianca, telefone, googleEventId = null, 
     // existe integração que avise que o Pix caiu.
     pago: false,
     estado: "reservado",
-    expiresAt: expiracao.toISOString(),
+    expiresAt: expiracao ? expiracao.toISOString() : null,
     // Permite ao reconciliador distinguir reservas novas, que devem ter efeitos duráveis,
     // de registros legados/manuais que podem já existir fora daqui sem IDs locais.
     integracoesDuraveis: true,
@@ -822,7 +796,7 @@ function alterarPagamento(slotId, pago, detalhes = null) {
     item.pago = !!pago;
     item.pagoEm = item.pago ? agora.toISOString() : null;
     item.pagamento = item.pago && detalhes ? detalhes : null;
-    item.expiresAt = item.pago ? null : limiteDePagamento(item, agora).toISOString();
+    item.expiresAt = null;
     // Se um clique em "Pago" foi desfeito, um pagamento futuro é uma confirmação nova.
     // A marca antiga não pode impedir a nova mensagem, e uma confirmação ainda na caixa de
     // saída não pode ser entregue depois que o pagamento deixou de valer.
@@ -888,6 +862,30 @@ function marcarGuiaAvisado(slotId) {
 // Cancela um agendamento pelo slotId. Ele some das consultas ativas, mas fica no banco com
 // estado cancelado para auditoria. Retorna o registro (inclui ids externos para limpeza),
 // ou null se não encontrar/ele já estiver inativo.
+// REATIVAR uma reserva vencida ou cancelada. Não ressuscita o registro antigo: cria uma
+// reserva NOVA, com identidade nova, copiando os dados. É de propósito: o cancelamento da
+// antiga já pode ter ido pro SPI e pro Google, e uma reserva nova enfileira criação nova
+// nos dois, com chave nova, em vez de tentar desfazer efeito concluído. A antiga fica no
+// histórico como estava. Recusa se a vaga já foi ocupada por outra família.
+function reativarAgendamento(slotId, now = new Date()) {
+  const antiga = lerTodosAgendamentos(now).find((a) => a.slotId === slotId);
+  if (!antiga) return { ok: false, motivo: "Não achei essa consulta." };
+  if (ESTADOS_ATIVOS.has(antiga.estado)) return { ok: false, motivo: "Essa consulta já está ativa." };
+  const vaga = antiga.agendaSlotId || antiga.slotId;
+  if (idsOcupados(now).has(vaga)) return { ok: false, motivo: "Esse horário já foi ocupado por outra família." };
+  const nova = reservar({
+    slot: { id: vaga, date: antiga.data, time: antiga.horario, label: antiga.diaLabel },
+    responsavel: antiga.responsavel, crianca: antiga.crianca, telefone: antiga.telefone,
+    modalidade: antiga.modalidade, tipoConsulta: antiga.tipoConsulta || null,
+  });
+  if (!nova) return { ok: false, motivo: "Não consegui recriar a reserva." };
+  if (antiga.responsavelEmail || antiga.criancaDataNascimento) {
+    registrarDadosDoPacientePorSlot(nova.slotId, { email: antiga.responsavelEmail || null, dataNascimento: antiga.criancaDataNascimento || null });
+  }
+  atualizarAgendamento(nova.slotId, (item) => { item.reativadaDe = antiga.slotId; });
+  return { ok: true, agendamento: acharAgendamentoPorSlot(nova.slotId), antiga };
+}
+
 function cancelarAgendamento(slotId) {
   const removido = acharAgendamentoPorSlot(slotId);
   if (!removido) return null;
@@ -1295,7 +1293,7 @@ function dessilenciarContato(telefone) {
 module.exports = {
   registrarDadosDoPaciente, registrarDadosDoPacientePorSlot, guardarDadosPendentes, lerDadosPendentes, limparDadosPendentes,
   acharAgendamentoPorEmail, marcarPortalAvisado, marcarGuiaAvisado, marcarPagamento, alterarPagamento, marcarPagamentoAvisado, acharAgendamentoPorSlot, selecionarAgendamento, historicoExpirou, proximaConsultaDoTelefone,
-  lerAgendamentos, lerTodosAgendamentos, vencerReservas, listarVencimentosPendentesDeLimpeza, marcarVencimentoSincronizado, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, definirGoogleEventId,
+  lerAgendamentos, lerTodosAgendamentos, vencerReservas, reativarAgendamento, listarVencimentosPendentesDeLimpeza, marcarVencimentoSincronizado, idsOcupados, reservar, cancelarAgendamento, definirAppAgendamentoId, definirGoogleEventId,
   listarCancelamentosPendentesDeFila, marcarCancelamentoEnfileirado,
   lerAlertas, registrarAlertaUrgencia, acharAlerta, responderAlerta,
   _fecharBancoAgendamentosParaTeste: fecharBancoAgendamentosParaTeste,
