@@ -116,7 +116,7 @@
   #erro-conexao { display: none; color: var(--perda); background: rgba(255,90,90,0.12); border: 1px solid rgba(255,90,90,0.25); padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
 
   /* ---- resumo (os números do topo) ------------------------------------------ */
-  .resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); gap: 10px; margin-bottom: 16px; }
   .kpi { background: var(--vidro); border: 1px solid var(--vidro-borda); border-radius: 14px; padding: 12px 14px; cursor: pointer; transition: border-color .15s, background .15s; text-align: left; font-family: inherit; color: inherit; }
   .kpi:hover { border-color: var(--vidro-borda-forte); background: var(--vidro-forte); }
   .kpi-rotulo { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--texto-fraco); }
@@ -334,6 +334,17 @@
   .pos-consulta-aviso { font-size: 12px; color: var(--texto-fraco); line-height: 1.5; margin-bottom: 8px; }
   .pos-consulta-aviso b { color: var(--info); }
 
+  .retornos { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .retorno { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); font-size: 12.5px; }
+  .retorno.pendente { border-color: rgba(240,194,102,0.45); background: rgba(240,194,102,0.07); }
+  .retorno b { color: var(--ouro-claro); }
+  .retorno-acoes { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .registrar-realizada { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--vidro-borda); }
+  .registrar-form { display: flex; gap: 6px; flex-wrap: wrap; }
+  .registrar-form input, .registrar-form select { background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--texto); font-family: inherit; color-scheme: dark; min-width: 0; }
+  .registrar-form input[type=text] { flex: 1; min-width: 120px; }
+  .registrar-form button { border: none; background: rgba(212,176,96,0.18); color: var(--ouro-claro); border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .estado-consulta.realizada { background: rgba(95,199,143,0.16); color: var(--sucesso); }
   .msg-manual { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .msg-manual textarea { width: 100%; resize: vertical; min-height: 84px; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 10px; padding: 9px 11px; font-size: 13px; color: var(--texto); font-family: inherit; line-height: 1.45; }
   .msg-manual textarea:focus { outline: none; border-color: var(--ouro); }
@@ -483,6 +494,7 @@
     <button class="kpi atencao" data-ir="familias" data-filtro="aguardando_humano"><div class="kpi-rotulo">Aguardando você</div><div class="kpi-valor" id="kpi-voce">0</div><div class="kpi-detalhe">conversas com a Carla quieta</div></button>
     <button class="kpi" data-ir="familias" data-filtro="lead"><div class="kpi-rotulo">Leads quentes</div><div class="kpi-valor" id="kpi-leads">0</div><div class="kpi-detalhe">falaram nas últimas 48 h</div></button>
     <button class="kpi" data-ir="familias" data-filtro="pos_consulta"><div class="kpi-rotulo">Pós-consulta</div><div class="kpi-valor" id="kpi-pos">0</div><div class="kpi-detalhe">dentro dos 30 dias</div></button>
+    <button class="kpi atencao" data-ir="familias" data-filtro="retorno_proximo"><div class="kpi-rotulo">Retornos a avisar</div><div class="kpi-valor" id="kpi-retornos">0</div><div class="kpi-detalhe">3 ou 6 meses chegando</div></button>
     <button class="kpi" data-ir="funil"><div class="kpi-rotulo">Conversão</div><div class="kpi-valor" id="kpi-conversao">0%</div><div class="kpi-detalhe" id="kpi-conversao-detalhe">leads particulares</div></button>
   </div>
 
@@ -548,7 +560,7 @@
             <summary>Marcar paciente ou silenciar um número</summary>
             <div class="conteudo">
               <div class="silenciar-form">
-                <input type="text" id="input-marcar-paciente" placeholder="Número já é paciente? Marca aqui">
+                <input type="text" id="input-marcar-paciente" placeholder="Fechou com você? Marca o número aqui (conta como conversão)">
                 <button id="btn-marcar-paciente">Marcar paciente</button>
               </div>
               <div class="silenciar-form">
@@ -1129,10 +1141,12 @@
   }
 
   function chipsDe(c) {
-    return c.situacoes.map((s) => {
+    // "Fechou com você" já é o estágio quando foi assim que fechou: não repete como situação.
+    return c.situacoes.filter((s) => !(s === "fechou_com_voce" && c.estagio.rotulo === "Fechou com você")).map((s) => {
       const def = (crmAtual && crmAtual.situacoes.find((x) => x.chave === s)) || { rotulo: s, tom: "neutro" };
       let rotulo = def.rotulo;
       if (s === "pos_consulta" && c.posConsulta) rotulo = `Pós-consulta · ${c.posConsulta.diasRestantes} dias restantes`;
+      if (s === "retorno_proximo" && c.retornoPendente) rotulo = c.retornoPendente.diasFaltando >= 0 ? `Retorno de ${c.retornoPendente.meses} meses em ${c.retornoPendente.diasFaltando} d` : `Retorno de ${c.retornoPendente.meses} meses venceu`;
       return `<span class="chip ${def.tom}">${escapeHtml(rotulo)}</span>`;
     }).concat((c.etiquetas || []).map((e) => `<span class="chip etiqueta">${escapeHtml(e)}</span>`)).join("");
   }
@@ -1257,12 +1271,39 @@
           <td><b>${dataCurta(k.data)}</b> ${escapeHtml(k.horario)}<br><span class="tag-mod">${k.modalidade === "teleconsulta" ? "📹 vídeo" : "presencial"}</span></td>
           <td>${escapeHtml(k.crianca || "")}</td>
           <td>${etiquetaTipo(k)}</td>
-          <td><span class="estado-consulta ${escapeHtml(k.estado)}">${k.estado === "pago" ? "paga" : k.estado === "reservado" ? "reservada" : k.estado === "cancelado" ? "cancelada" : "venceu"}</span></td>
-          <td class="col-x">${k.estado === "cancelado" || k.estado === "vencido" ? "" : botaoPago({ ...k, telefone: c.telefone })}</td>
-          <td class="col-x">${k.estado === "cancelado" || k.estado === "vencido" ? "" : botaoPortal({ ...k, telefone: c.telefone })}</td>
-          <td class="col-x">${k.estado === "cancelado" || k.estado === "vencido" ? "" : botaoGuia({ ...k, telefone: c.telefone })}</td>
-          <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? `<button class="btn-x" title="Cancelar consulta" data-slot-id="${escapeHtml(k.slotId)}">✕</button>` : ""}</td>
+          <td><span class="estado-consulta ${escapeHtml(k.estado)}" title="${k.estado === "realizada" ? "Registrada à mão no painel" : ""}">${k.estado === "pago" ? "paga" : k.estado === "reservado" ? "reservada" : k.estado === "cancelado" ? "cancelada" : k.estado === "realizada" ? "realizada" : "venceu"}</span></td>
+          <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? botaoPago({ ...k, telefone: c.telefone }) : ""}</td>
+          <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? botaoPortal({ ...k, telefone: c.telefone }) : ""}</td>
+          <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? botaoGuia({ ...k, telefone: c.telefone }) : ""}</td>
+          <td class="col-x">${k.estado === "reservado" || k.estado === "pago" ? `<button class="btn-x" title="Cancelar consulta" data-slot-id="${escapeHtml(k.slotId)}">✕</button>` : k.estado === "realizada" ? `<button class="btn-x" title="Apagar este registro" data-remover-realizada="${escapeHtml(k.id)}">✕</button>` : ""}</td>
         </tr>`).join("")}</tbody></table></div>`}
+    </div>`;
+
+    const registrar = `<div class="registrar-realizada">
+      <span class="pos-consulta-aviso" style="margin:0">Consulta feita fora da Carla? Registra aqui: ela passa a contar no pós-consulta e nos retornos.</span>
+      <div class="registrar-form">
+        <input type="date" id="input-realizada-data" max="${dataStr(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())}">
+        <input type="text" id="input-realizada-crianca" placeholder="Criança" maxlength="80" value="${escapeHtml(c.criancas[0] || "")}">
+        <select id="input-realizada-tipo"><option value="">Tipo</option><option value="urgencia">Urgência</option><option value="puericultura">Puericultura</option><option value="tnd">Neurodesenvolvimento</option></select>
+        <button id="btn-registrar-realizada" type="button">Registrar consulta</button>
+      </div>
+      <span class="msg-manual-aviso" id="aviso-realizada"></span>
+    </div>`;
+
+    const retornos = `<div class="ficha-secao"><h3>Retornos de 3 e 6 meses <span>${c.ultimaConsulta ? `da consulta de ${dataCurta(c.ultimaConsulta.data)}` : "contam da última consulta realizada"}</span></h3>
+      ${!c.retornos || !c.retornos.length ? "<div class='vazio'>Sem consulta realizada ainda: os marcos aparecem depois da primeira.</div>" : `<div class="retornos">${c.retornos.map((r) => {
+        const estado = r.avisadoEm ? `<span class="chip bom">avisado em ${escapeHtml(quandoCurto(r.avisadoEm))}</span>`
+          : r.pendente ? `<span class="chip atencao">avisar agora</span>`
+          : r.diasFaltando < 0 ? `<span class="chip neutro">passou</span>` : `<span class="chip neutro">em ${r.diasFaltando} dias</span>`;
+        return `<div class="retorno ${r.pendente ? "pendente" : ""}">
+          <div><b>${r.meses} meses</b> · ${formatarDataBR(r.data)}${r.crianca ? ` · ${escapeHtml(r.crianca)}` : ""}<div class="acao-motivo">${escapeHtml(textoDoRetorno(r))}</div></div>
+          <div class="retorno-acoes">${estado}
+            ${r.avisadoEm ? `<button class="btn-mini" data-retorno-desfazer="${escapeHtml(r.chave)}">Desfazer</button>`
+              : `<button class="btn-mensagem-contato" data-retorno-recado="${r.meses}">Preencher recado</button><button class="btn-mini" data-retorno-avisado="${escapeHtml(r.chave)}" title="Some da lista de avisos, sem mandar nada">Marcar como avisado</button>`}
+          </div>
+        </div>`;
+      }).join("")}</div>`}
+      ${registrar}
     </div>`;
 
     const pos = c.posConsulta
@@ -1276,7 +1317,7 @@
       <button class="btn-mensagem-contato" data-telefone="${escapeHtml(c.telefone)}">Mensagem</button>
       ${podeMostrarReaquecer(c, silenciado) ? `<button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}">Reaquecer</button>` : ""}
       ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
-      <button class="btn-mini btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${c.ehPaciente ? "É paciente · desmarcar" : "Marcar como paciente"}</button>
+      <button class="btn-mini btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}" title="${c.ehPaciente ? "Tira a marcação de paciente (e a conversão que ela contou, se foi você que marcou)" : "Fechou com você? Marca aqui: conta como conversão no funil, no anel e nesta ficha"}">${c.ehPaciente ? "É paciente · desmarcar" : "Marcar como paciente (fechou com você)"}</button>
       <button class="btn-mini perigo btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado · reativar" : "Silenciar"}</button>
       ${c.ultimaAtividade ? `<button class="btn-mini perigo btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
     </div></div>`;
@@ -1320,7 +1361,7 @@
         <button class="btn-fechar-ficha" title="Fechar ficha">✕</button>
       </div>
       <div class="ficha-chips"><span class="chip estagio">${escapeHtml(c.estagio.rotulo)}</span>${chipsDe(c)}</div>
-      ${dados}${criancas}${consultas}${modelos}${acoes}${caixa}${historico}${notas}${etiquetas}${linha}`;
+      ${dados}${criancas}${consultas}${retornos}${modelos}${acoes}${caixa}${historico}${notas}${etiquetas}${linha}`;
 
     alvo.querySelector(".btn-fechar-ficha").addEventListener("click", fecharFicha);
     ligarBotoesDeConsulta(alvo);
@@ -1342,6 +1383,11 @@
       });
     });
     alvo.querySelectorAll(".modelos button[data-modelo]").forEach((btn) => btn.addEventListener("click", () => usarModelo(btn.dataset.modelo)));
+    alvo.querySelectorAll("[data-retorno-recado]").forEach((btn) => btn.addEventListener("click", () => usarModelo("retorno", Number(btn.dataset.retornoRecado))));
+    alvo.querySelectorAll("[data-retorno-avisado]").forEach((btn) => btn.addEventListener("click", () => marcarRetornoAvisado(c.telefone, btn.dataset.retornoAvisado, true)));
+    alvo.querySelectorAll("[data-retorno-desfazer]").forEach((btn) => btn.addEventListener("click", () => marcarRetornoAvisado(c.telefone, btn.dataset.retornoDesfazer, false)));
+    alvo.querySelectorAll("[data-remover-realizada]").forEach((btn) => btn.addEventListener("click", (ev) => { ev.stopPropagation(); removerConsultaRealizada(c.telefone, btn.dataset.removerRealizada); }));
+    alvo.querySelector("#btn-registrar-realizada").addEventListener("click", () => registrarConsultaRealizada(c.telefone));
     alvo.querySelectorAll("[data-remover-nota]").forEach((btn) => btn.addEventListener("click", () => removerNota(c.telefone, btn.dataset.removerNota)));
     const inputNota = alvo.querySelector("#input-nota");
     alvo.querySelector("#btn-nota").addEventListener("click", () => adicionarNota(c.telefone, inputNota));
@@ -1360,10 +1406,13 @@
 
   // O botão do modelo só preenche a caixa. Ele não manda nada: o Dr. Bruno lê, ajusta e
   // aperta Enviar, como em qualquer mensagem manual.
-  function usarModelo(id) {
+  function usarModelo(id, meses = null) {
     if (!fichaAtual) return;
     const m = fichaAtual.modelos.find((x) => x.id === id);
     if (!m || !m.disponivel) return;
+    // O recado de retorno vem preenchido com o marco pendente; o botão de cada marco pode
+    // trocar (o de 6 meses, quando o de 3 já passou).
+    if (meses && m.texto) m.texto = m.texto.replace(/há (3|6|alguns) meses/, `há ${meses} meses`);
     const caixa = document.querySelector(`#ficha-contato .msg-manual[data-caixa="${CSS.escape(fichaAtual.contato.telefone)}"]`);
     if (!caixa) return;
     caixa.hidden = false;
@@ -1444,6 +1493,34 @@
   async function removerNota(telefone, id) {
     if (!confirm("Apagar esta nota?")) return;
     try { await postJSON("/api/crm/nota-remover", { telefone, id }); } catch (e) { /* tenta de novo depois */ }
+    await atualizarFicha(true);
+    atualizarCrm();
+  }
+
+  async function marcarRetornoAvisado(telefone, chave, avisado) {
+    try { await postJSON("/api/crm/retorno-avisado", { telefone, chave, avisado }); } catch (e) { /* idem */ }
+    await atualizarFicha(true);
+    atualizarCrm();
+  }
+
+  async function registrarConsultaRealizada(telefone) {
+    const data = document.getElementById("input-realizada-data").value;
+    const crianca = document.getElementById("input-realizada-crianca").value.trim();
+    const tipoConsulta = document.getElementById("input-realizada-tipo").value || null;
+    const aviso = document.getElementById("aviso-realizada");
+    if (!data) { aviso.textContent = "Escolha a data da consulta."; return; }
+    try {
+      const resp = await postJSON("/api/crm/consulta-realizada", { telefone, data, crianca, tipoConsulta });
+      const r = await resp.json();
+      if (!r.ok) { aviso.textContent = r.motivo || "Não registrei."; return; }
+    } catch (e) { aviso.textContent = "Sem conexão com o painel."; return; }
+    await atualizarFicha(true);
+    atualizarCrm();
+  }
+
+  async function removerConsultaRealizada(telefone, id) {
+    if (!confirm("Apagar este registro de consulta realizada? Os retornos contados a partir dela somem junto.")) return;
+    try { await postJSON("/api/crm/consulta-realizada-remover", { telefone, id }); } catch (e) { /* idem */ }
     await atualizarFicha(true);
     atualizarCrm();
   }
@@ -1630,17 +1707,25 @@
     document.getElementById("kpi-voce").textContent = r.aguardandoVoce;
     document.getElementById("kpi-leads").textContent = r.leadsQuentes;
     document.getElementById("kpi-pos").textContent = r.posConsulta;
+    document.getElementById("kpi-retornos").textContent = r.retornosAAvisar;
   }
 
   const MOTIVO_ACAO = {
     aguardando_humano: "A Carla está quieta esperando você",
     aguardando_pagamento: "Reservou e ainda não pagou",
+    retorno_proximo: "Retorno",
     parou_no_preco: "Soube o valor e sumiu",
   };
+  function textoDoRetorno(r) {
+    const quem = r.crianca ? ` de ${r.crianca}` : "";
+    if (r.diasFaltando > 0) return `Retorno de ${r.meses} meses${quem} em ${r.diasFaltando} dia${r.diasFaltando === 1 ? "" : "s"} (${dataCurta(r.data)})`;
+    if (r.diasFaltando === 0) return `Retorno de ${r.meses} meses${quem} é hoje`;
+    return `Retorno de ${r.meses} meses${quem} venceu há ${-r.diasFaltando} dia${r.diasFaltando === -1 ? "" : "s"} (${dataCurta(r.data)})`;
+  }
   function renderizarAcoes(crm) {
     const alvo = document.getElementById("lista-acoes");
     const itens = [];
-    for (const chave of ["aguardando_humano", "aguardando_pagamento", "parou_no_preco"]) {
+    for (const chave of ["aguardando_humano", "aguardando_pagamento", "retorno_proximo", "parou_no_preco"]) {
       for (const c of crm.contatos) {
         if (!c.situacoes.includes(chave) || itens.some((i) => i.c === c)) continue;
         itens.push({ c, chave });
@@ -1649,12 +1734,13 @@
       if (itens.length >= 10) break;
     }
     if (!itens.length) {
-      alvo.innerHTML = "<div class='vazio'>Nada pendente: ninguém esperando você, nenhuma reserva sem pagamento, ninguém parado depois do valor.</div>";
+      alvo.innerHTML = "<div class='vazio'>Nada pendente: ninguém esperando você, nenhuma reserva sem pagamento, nenhum retorno chegando, ninguém parado depois do valor.</div>";
       return;
     }
     alvo.innerHTML = itens.map(({ c, chave }) => {
       let motivo = MOTIVO_ACAO[chave];
       if (chave === "aguardando_pagamento" && c.proximaConsulta) motivo += ` · consulta ${dataCurta(c.proximaConsulta.data)} ${c.proximaConsulta.horario}`;
+      if (chave === "retorno_proximo" && c.retornoPendente) motivo = textoDoRetorno(c.retornoPendente);
       if (chave === "parou_no_preco" && c.ultimaAtividade) motivo += ` ${tempoRelativo(c.ultimaAtividade)}`;
       return `<div class="acao-item"><div><div class="acao-nome">${escapeHtml(c.nome || c.telefone)}</div><div class="acao-motivo">${escapeHtml(motivo)}</div></div><button class="btn-ficha" data-telefone="${escapeHtml(c.telefone)}">Abrir ficha</button></div>`;
     }).join("");

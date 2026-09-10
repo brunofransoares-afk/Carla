@@ -189,7 +189,7 @@ function funil({ desde = null, ate = null } = {}) {
       porTelefone.set(tel, {
         telefone: tel, primeiraPergunta: null, primeiroContatoEm: null, ultimoEm: null,
         perguntouPreco: false, recebeuPreco: false, recebeuHorario: false,
-        agendou: false, pagou: false, escalou: false,
+        agendou: false, pagou: false, escalou: false, fechouComDoutor: false,
       });
     }
     return porTelefone.get(tel);
@@ -226,6 +226,13 @@ function funil({ desde = null, ate = null } = {}) {
       c.agendou = true;
     }
     if (e.tipo === "escalou") c.escalou = true;
+    // O SELETOR DE PACIENTE DO PAINEL É CONVERSÃO. Nem toda venda é a Carla que fecha: o
+    // Dr. Bruno assume a conversa, combina a consulta por fora, e marca a família como
+    // paciente no painel. Sem isto o funil dizia que essa família "parou no valor", e a
+    // taxa de conversão saía menor do que a real. Desmarcar é o evento compensatório,
+    // aplicado na ordem, como o pagamento.
+    if (e.tipo === "virou_paciente") c.fechouComDoutor = true;
+    if (e.tipo === "paciente_desmarcado") c.fechouComDoutor = false;
   }
 
   const contatos = [...porTelefone.values()];
@@ -240,6 +247,7 @@ function funil({ desde = null, ate = null } = {}) {
   // NUNCA CONFIRME SEM TER INFORMADO O VALOR garante isso). Sem essa normalização um evento
   // perdido faz o funil "alargar" no meio, o que confunde mais do que informa.
   for (const c of contatos) {
+    if (c.fechouComDoutor) c.agendou = true;
     if (c.pagou) c.agendou = true;
     if (c.agendou) c.recebeuHorario = true;
     if (c.recebeuHorario) c.recebeuPreco = true;
@@ -312,13 +320,13 @@ function periodoPara(nome, agora = new Date()) {
 function csv({ desde = null, ate = null } = {}) {
   const { contatos } = funil({ desde, ate });
   const cab = ["telefone", "primeira_pergunta", "primeiro_contato", "ultimo_evento",
-    "soube_valor", "recebeu_horario", "agendou", "pagou", "escalou"];
+    "soube_valor", "recebeu_horario", "agendou", "fechou_com_doutor", "pagou", "escalou"];
   const linhas = [cab.join(",")];
   const sn = (v) => (v ? "sim" : "nao");
   for (const c of contatos.sort((a, b) => String(a.primeiroContatoEm).localeCompare(b.primeiroContatoEm))) {
     linhas.push([
       c.telefone, c.primeiraPergunta || "outro", c.primeiroContatoEm || "", c.ultimoEm || "",
-      sn(c.recebeuPreco), sn(c.recebeuHorario), sn(c.agendou), sn(c.pagou), sn(c.escalou),
+      sn(c.recebeuPreco), sn(c.recebeuHorario), sn(c.agendou), sn(c.fechouComDoutor), sn(c.pagou), sn(c.escalou),
     ].join(","));
   }
   return linhas.join("\n");

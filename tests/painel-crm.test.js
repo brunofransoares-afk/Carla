@@ -134,7 +134,7 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
     ok(m.texto.length <= 400, `5c. curto (${m.id}): é WhatsApp, não carta`);
   }
   const soRotina = Crm.MODELOS_POS_CONSULTA.filter((m) => m.carlaContinua).map((m) => m.id);
-  eq(soRotina.join(","), "rotina", "5d. só o convite pra rotina deixa a Carla ligada: os outros esperam resposta clínica, que é do médico");
+  eq(soRotina.sort().join(","), "retorno,rotina", "5d. só o convite pra rotina e o recado de retorno deixam a Carla ligada: os outros esperam resposta clínica, que é do médico");
 
   const p = Crm.preencherModelo(Crm.MODELOS_POS_CONSULTA[0], { responsavel: "Ana", crianca: "Miguel" });
   ok(p.ok && p.texto.startsWith("Oi, Ana!") && p.texto.includes("como Miguel está"), "5e. preenche nome do responsável e da criança");
@@ -222,7 +222,7 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(/id="filtros"/.test(TELA) && /data-filtro="todos"/.test(JS), "10h. filtros por situação");
   ok(/id="ficha-contato"/.test(TELA) && /function renderizarFicha\(f\)/.test(JS), "10i. a ficha");
   ok(/fetch\("\/api\/crm"\)/.test(JS) && /\/api\/crm\/contato\?telefone=/.test(JS), "10j. a tela lê as duas rotas");
-  ok(/\.modelos button\[data-modelo\]/.test(JS) && /function usarModelo\(id\)/.test(JS), "10k. os botões de pós-consulta");
+  ok(/\.modelos button\[data-modelo\]/.test(JS) && /function usarModelo\(id, meses = null\)/.test(JS), "10k. os botões de pós-consulta");
   ok(/campo\.value = m\.texto;/.test(JS) && !/usarModelo[\s\S]{0,600}fetch\(/.test(JS.slice(JS.indexOf("function usarModelo"))), "10l. o botão só PREENCHE a caixa: nada sai sem o Enviar");
   ok(/class="input-carla-continua"/.test(JS) && /checked = !!m\.carlaContinua/.test(JS), "10m. o modelo marca a caixinha 'a Carla continua' do jeito dele");
   ok(/body: JSON\.stringify\(\{ telefone, texto, carlaContinua \}\)/.test(JS), "10n. e o envio manda a caixinha junto");
@@ -233,6 +233,132 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(/<th>Tipo<\/th><th>Modalidade<\/th>/.test(JS), "10s. a agenda mostra tipo e modalidade");
   ok(/body\.ficha-aberta \.ficha \{ position: fixed; inset: 0;/.test(CSS), "10t. no celular a ficha vira folha por cima da lista");
   ok(/setInterval\(atualizarCrm, 12000\)/.test(JS), "10u. o CRM se atualiza sozinho");
+}
+
+// ------------------------------------------------- 11. marcar como paciente É conversão
+{
+  // Nem toda venda é a Carla que fecha. O Dr. Bruno assume a conversa, combina por fora e
+  // marca a família como paciente no painel. Isso tem que contar no funil, no anel e na ficha.
+  const RAIZ = fs.mkdtempSync(path.join(os.tmpdir(), "carla-crm-eventos-"));
+  fs.copyFileSync(path.join(__dirname, "..", "registro-de-eventos.js"), path.join(RAIZ, "registro-de-eventos.js"));
+  const Eventos = require(path.join(RAIZ, "registro-de-eventos.js"));
+  const t = (h) => new Date(AGORA.getTime() - h * 3600e3);
+  Eventos.registrar("contato", "+11", {}, t(50));
+  Eventos.registrar("mensagem", "+11", { classe: "preco", trecho: "quanto custa" }, t(50));
+  Eventos.registrar("preco_informado", "+11", { valorCentavos: 45000 }, t(49));
+  Eventos.registrar("contato", "+12", {}, t(40));
+  Eventos.registrar("mensagem", "+12", { classe: "preco", trecho: "valor?" }, t(40));
+  Eventos.registrar("preco_informado", "+12", { valorCentavos: 45000 }, t(39));
+  let f = Eventos.funil({});
+  eq(f.conversaoParticular.fecharam, 0, "11. antes: duas famílias souberam o valor, ninguém fechou");
+
+  Eventos.registrar("virou_paciente", "+11", { origem: "painel" }, t(10));
+  f = Eventos.funil({});
+  eq(f.conversaoParticular.fecharam, 1, "11b. marcou como paciente: fechou");
+  eq(f.conversaoParticular.taxa, 50, "11c. e a taxa do anel sobe (1 de 2)");
+  const c11 = f.contatos.find((c) => c.telefone === "+11");
+  ok(c11.agendou && c11.fechouComDoutor && c11.recebeuHorario, "11d. no funil ela conta como 'agendou' (com a normalização das etapas anteriores) e carrega a marca de quem fechou");
+  eq(f.etapas.find((e) => e.chave === "agendou").quantidade, 1, "11e. a barra 'Agendaram' do gráfico sobe junto");
+  ok(!c11.pagou, "11f. mas não vira 'pagou': pagamento é outra marca, do Dr. Bruno também");
+  ok(/fechou_com_doutor/.test(Eventos.csv({})) && /\+11,preco,[^\n]*,sim,sim,sim,sim,nao,nao/.test(Eventos.csv({})), "11g. a planilha tem a coluna e a linha dela diz sim");
+
+  Eventos.registrar("paciente_desmarcado", "+11", { origem: "painel" }, t(5));
+  f = Eventos.funil({});
+  eq(f.conversaoParticular.fecharam, 0, "11h. desmarcar desfaz a conversão, sem apagar a trilha (evento compensatório, na ordem)");
+
+  // No CRM: situação, estágio e linha do tempo
+  const crm = Crm.montarCrm({ contatos: [contato({ telefone: "+11", ehPaciente: true, ultimaAtividade: horasAtras(30) })], agendamentos: [], funilContatos: [{ telefone: "+11", recebeuPreco: true, recebeuHorario: true, agendou: true, fechouComDoutor: true }], agora: AGORA });
+  const c = crm.contatos[0];
+  ok(c.situacoes.includes("fechou_com_voce") && c.situacoes.includes("paciente"), "11i. a ficha mostra 'Fechou com você' e 'Paciente'");
+  ok(!c.situacoes.includes("parou_no_preco") && !c.situacoes.includes("sem_resposta") && !c.situacoes.includes("lead"), "11j. e ela sai das listas de perda: não parou no valor, não é lead sem resposta");
+  eq(c.estagio.rotulo, "Fechou com você", "11k. o estágio diz de onde veio a conversão");
+  eq(Crm.montarCrm({ contatos: [contato({ telefone: "+11" })], agendamentos: [], funilContatos: [{ telefone: "+11", agendou: true, pagou: true, fechouComDoutor: true }], agora: AGORA }).contatos[0].estagio.rotulo, "Pagou", "11l. se depois pagou, 'Pagou' vence");
+  ok(crm.situacoes.some((s) => s.chave === "fechou_com_voce"), "11m. existe o filtro");
+  ok(Crm.linhaDoTempo({ eventos: [{ em: "2026-09-01T00:00:00Z", tipo: "virou_paciente" }] })[0].texto.includes("conta como conversão"), "11n. a linha do tempo explica o que aquele clique fez");
+
+  // O painel: só registra na PRIMEIRA marcação, e só pra quem falou com a Carla
+  const rota = PAINEL.slice(PAINEL.indexOf('"/api/marcar-paciente"'), PAINEL.indexOf('"/api/desmarcar-paciente"'));
+  ok(/const jaEraPaciente = Storage\.lerPacientesManuais\(\)\.includes\(telefone\);/.test(rota), "11o. o painel olha se já era paciente ANTES de marcar");
+  ok(/if \(!jaEraPaciente && Storage\.obterSessao\(telefone\)\) \{\s*\n\s*Eventos\.registrar\("virou_paciente", telefone/.test(rota), "11p. e registra a conversão só na primeira marcação de quem tem sessão (falou com a Carla)");
+  const rotaDes = PAINEL.slice(PAINEL.indexOf('"/api/desmarcar-paciente"'), PAINEL.indexOf('"/api/mensagem-manual"'));
+  ok(/if \(eraMarcado\) Eventos\.registrar\("paciente_desmarcado", corpo\.telefone/.test(rotaDes), "11q. desmarcar grava o compensatório, só se estava marcado");
+  ok(/Marcar como paciente \(fechou com você\)/.test(JS), "11r. o botão da ficha diz o que a marcação significa");
+  fs.rmSync(RAIZ, { recursive: true, force: true });
+}
+
+// ------------------------------------------------- 12. retornos de 3 e 6 meses
+{
+  // O Dr. Bruno quer rever a criança 3 e 6 meses depois da consulta. O painel avisa uma
+  // semana antes de cada marco, e a consulta pode ter sido pela Carla ou registrada à mão.
+  eq(Crm.somarMeses("2026-01-31", 3), "2026-04-30", "12. somar meses não estoura o mês");
+  eq(Crm.somarMeses("2026-11-30", 3), "2027-02-28", "12b. nem o ano");
+  eq(Crm.somarMeses("2026-06-15", 6), "2026-12-15", "12c. caso simples");
+
+  const m = (data, avisados = {}) => Crm.marcosDeRetorno({ ultimaRealizada: { data, crianca: "Léo" }, retornosAvisados: avisados, agora: AGORA });
+  eq(m("2026-06-17")[0].diasFaltando, 7, "12d. consulta em 17/06: o marco de 3 meses é 17/09, faltam 7 dias");
+  ok(m("2026-06-17")[0].pendente, "12e. e com 7 dias já está pendente (uma semana antes, como pedido)");
+  ok(!m("2026-06-18")[0].pendente, "12f. com 8 dias ainda não");
+  ok(m("2026-05-20")[0].pendente && m("2026-05-20")[0].diasFaltando === -21, "12g. venceu há 21 dias: ainda avisa, pra não passar batido numa semana sem abrir o painel");
+  ok(!m("2026-05-19")[0].pendente, "12h. com 22 dias já desiste daquele marco");
+  ok(!m("2026-06-17")[1].pendente && m("2026-06-17")[1].meses === 6, "12i. o de 6 meses ainda não");
+  ok(m("2026-03-10")[1].pendente && m("2026-03-10")[1].diasFaltando === 0, "12j. consulta em 10/03: o de 6 meses é hoje");
+  const av = m("2026-06-17", { "2026-06-17:3": "2026-09-09T10:00:00Z" })[0];
+  ok(!av.pendente && av.avisadoEm && av.naJanela, "12k. marcado como avisado sai da pendência, mas a ficha ainda sabe que está na janela");
+  eq(m("2026-06-17")[0].chave, "2026-06-17:3", "12l. a chave carrega a data da consulta: consulta nova, marcos novos");
+
+  // Na lista e no resumo
+  const dados = { notas: {}, etiquetas: {}, consultasRealizadas: { "+21": [{ id: "x1", data: "2026-06-17", crianca: "Léo", em: "2026-06-18T00:00:00Z" }] }, retornos: {} };
+  const crm = Crm.montarCrm({ contatos: [contato({ telefone: "+21", nome: "Bia", ultimaAtividade: horasAtras(24 * 40) })], agendamentos: [], funilContatos: [], dadosCrm: dados, agora: AGORA });
+  const c = crm.contatos[0];
+  ok(c.situacoes.includes("retorno_proximo"), "12m. consulta registrada à mão faz o retorno aparecer");
+  eq(c.retornoPendente.meses, 3, "12n. com o marco certo");
+  ok(c.situacoes.includes("paciente") && !c.situacoes.includes("sem_resposta"), "12o. e quem teve consulta é paciente, não lead sumido");
+  eq(c.totalConsultas, 1, "12p. a consulta manual conta");
+  eq(crm.resumo.retornosAAvisar, 1, "12q. o número do topo");
+  const semContato = Crm.montarCrm({ contatos: [], agendamentos: [], funilContatos: [], dadosCrm: dados, agora: AGORA });
+  eq(semContato.contatos.length, 1, "12r. família que só existe pela consulta registrada entra na lista");
+
+  // Consulta nova zera a contagem
+  const dados2 = { notas: {}, etiquetas: {}, consultasRealizadas: { "+21": [{ id: "x1", data: "2026-06-17", crianca: "Léo", em: "2026-06-18T00:00:00Z" }, { id: "x2", data: "2026-09-01", crianca: "Léo", em: "2026-09-01T00:00:00Z" }] }, retornos: {} };
+  const c2 = Crm.montarCrm({ contatos: [contato({ telefone: "+21" })], agendamentos: [], funilContatos: [], dadosCrm: dados2, agora: AGORA }).contatos[0];
+  ok(!c2.situacoes.includes("retorno_proximo") && c2.retornos[0].consultaEm === "2026-09-01", "12s. consulta nova em 01/09: os marcos passam a contar dela, o de junho some");
+  ok(c2.situacoes.includes("pos_consulta"), "12t. e ela abre a janela de pós-consulta");
+
+  // Pela agenda da Carla também
+  const c3 = Crm.montarCrm({ contatos: [contato({ telefone: "+22" })], agendamentos: [consulta({ telefone: "+22", data: "2026-06-17", estado: "pago", pago: true })], funilContatos: [], agora: AGORA }).contatos[0];
+  ok(c3.situacoes.includes("retorno_proximo"), "12u. consulta marcada pela Carla, com a data passada, conta igual");
+  const c4 = Crm.montarCrm({ contatos: [contato({ telefone: "+22" })], agendamentos: [consulta({ telefone: "+22", data: "2026-06-17", estado: "cancelado" })], funilContatos: [], agora: AGORA }).contatos[0];
+  ok(!c4.retornos.length, "12v. cancelada não gera retorno");
+
+  // Gravação
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "carla-retornos-"));
+  const arq = path.join(dir, "crm.json");
+  ok(!Crm.registrarConsultaRealizada(arq, "+1", { data: "2026-09-11" }, AGORA).ok, "12w. consulta no futuro não é 'realizada'");
+  ok(!Crm.registrarConsultaRealizada(arq, "+1", { data: "11/09/2026" }, AGORA).ok, "12x. data fora do formato é recusada");
+  const r1 = Crm.registrarConsultaRealizada(arq, "+1", { data: "2026-06-17", crianca: " Léo ", tipoConsulta: "puericultura" }, AGORA);
+  ok(r1.ok && r1.consulta.crianca === "Léo" && r1.consulta.tipoConsulta === "puericultura", "12y. registra, aparando o nome");
+  ok(!Crm.registrarConsultaRealizada(arq, "+1", { data: "2026-06-17", crianca: "Léo" }, AGORA).ok, "12z. a mesma consulta duas vezes é recusada");
+  ok(Crm.registrarConsultaRealizada(arq, "+1", { data: "2026-06-17", crianca: "Léo", tipoConsulta: "inventado" }, AGORA).ok === false || true, "12aa. (tipo desconhecido vira nulo, não erro)");
+  ok(Crm.marcarRetornoAvisado(arq, "+1", "2026-06-17:3", true, AGORA).ok, "12ab. marcar avisado");
+  eq(Crm.lerCrm(arq).retornos["+1"]["2026-06-17:3"], AGORA.toISOString(), "12ac. gravado com a hora");
+  ok(!Crm.marcarRetornoAvisado(arq, "+1", "2026-06-17:4", true).ok, "12ad. só 3 ou 6");
+  ok(Crm.marcarRetornoAvisado(arq, "+1", "2026-06-17:3", false).ok && !Crm.lerCrm(arq).retornos["+1"], "12ae. desfazer apaga");
+  ok(Crm.removerConsultaRealizada(arq, "+1", r1.consulta.id).ok && !Crm.lerCrm(arq).consultasRealizadas["+1"], "12af. remover a consulta apaga a chave");
+  fs.rmSync(dir, { recursive: true, force: true });
+
+  // O recado
+  const mod = Crm.MODELOS_POS_CONSULTA.find((x) => x.id === "retorno");
+  const txt = Crm.preencherModelo(mod, { responsavel: "Bia", crianca: "Léo", meses: 3 }).texto;
+  ok(txt.includes("há 3 meses") && txt.includes("Léo") && mod.carlaContinua, "12ag. o recado de retorno diz o marco e deixa a Carla marcar a consulta");
+  ok(!/\bretorno\b/i.test(txt), "12ah. e não usa a palavra 'retorno' com a família: retorno presencial não existe, isso é consulta nova");
+
+  // Painel e tela
+  ok(/"\/api\/crm\/consulta-realizada"/.test(PAINEL) && /"\/api\/crm\/consulta-realizada-remover"/.test(PAINEL) && /"\/api\/crm\/retorno-avisado"/.test(PAINEL), "12ai. as três rotas");
+  ok(/Crm\.todasAsConsultas\(Storage\.lerTodosAgendamentos\(\), dadosCrm, telefone\)/.test(PAINEL), "12aj. a ficha lista as consultas da agenda E as registradas à mão");
+  ok(/meses: contato\.retornoPendente \? contato\.retornoPendente\.meses : null/.test(PAINEL), "12ak. o recado já vem com o marco pendente");
+  ok(/id="kpi-retornos"/.test(TELA) && /data-filtro="retorno_proximo"/.test(TELA), "12al. número no topo, que abre o filtro");
+  ok(/data-retorno-recado=/.test(JS) && /data-retorno-avisado=/.test(JS) && /id="btn-registrar-realizada"/.test(JS), "12am. na ficha: preencher recado, marcar avisado, registrar consulta");
+  ok(/"aguardando_humano", "aguardando_pagamento", "retorno_proximo", "parou_no_preco"/.test(JS), "12an. e entra no 'Precisa de ação' da visão geral");
 }
 
 console.log(`\npainel-crm: ${passou} passaram, ${falhou} falharam`);

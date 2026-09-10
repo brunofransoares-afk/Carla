@@ -495,7 +495,7 @@ async function atenderRequisicao(req, res) {
       res.end(JSON.stringify({ ok: false, erro: "Contato não encontrado." }));
       return;
     }
-    const consultas = Crm.consultasDoTelefone(Storage.lerTodosAgendamentos(), telefone);
+    const consultas = Crm.todasAsConsultas(Storage.lerTodosAgendamentos(), dadosCrm, telefone);
     const notas = dadosCrm.notas[telefone] || [];
     const eventos = Eventos.lerEventos({}).filter((e) => e.telefone === telefone);
     const sessao = Storage.obterSessao(telefone);
@@ -507,7 +507,7 @@ async function atenderRequisicao(req, res) {
       consultas,
       notas,
       etiquetas: dadosCrm.etiquetas[telefone] || [],
-      linhaDoTempo: Crm.linhaDoTempo({ eventos, notas }),
+      linhaDoTempo: Crm.linhaDoTempo({ eventos, notas, consultasManuais: dadosCrm.consultasRealizadas[telefone] || [], retornosAvisados: dadosCrm.retornos[telefone] || {} }),
       // As últimas falas da conversa, do jeito que a Carla as guarda. É o que responde
       // "onde essa conversa parou?" sem abrir o WhatsApp.
       historico: ((sessao && sessao.historico) || []).slice(-12),
@@ -515,6 +515,7 @@ async function atenderRequisicao(req, res) {
         responsavel: contato.responsavel || contato.nome || null,
         crianca: (ultimaConsulta && ultimaConsulta.crianca) || (contato.criancas && contato.criancas[0]) || null,
         linkAvaliacao: LINK_AVALIACAO,
+        meses: contato.retornoPendente ? contato.retornoPendente.meses : null,
       }),
     }));
     return;
@@ -532,6 +533,33 @@ async function atenderRequisicao(req, res) {
     const corpo = await lerCorpoJSON(req);
     const r = Crm.removerNota(ARQ_CRM, corpo.telefone, corpo.id);
     res.writeHead(r.ok ? 200 : 404, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
+  // Consulta feita fora da Carla: registrada aqui, conta como realizada (pós-consulta e os
+  // retornos de 3 e 6 meses passam a contar dela).
+  if (caminhoPedido === "/api/crm/consulta-realizada" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.registrarConsultaRealizada(ARQ_CRM, corpo.telefone, { data: corpo.data, crianca: corpo.crianca, tipoConsulta: corpo.tipoConsulta });
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
+  if (caminhoPedido === "/api/crm/consulta-realizada-remover" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.removerConsultaRealizada(ARQ_CRM, corpo.telefone, corpo.id);
+    res.writeHead(r.ok ? 200 : 404, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
+  // O recado de retorno foi mandado (ou dispensado): o aviso daquele marco sai da tela.
+  if (caminhoPedido === "/api/crm/retorno-avisado" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.marcarRetornoAvisado(ARQ_CRM, corpo.telefone, corpo.chave, corpo.avisado !== false);
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(r));
     return;
   }
@@ -743,15 +771,29 @@ async function atenderRequisicao(req, res) {
       res.end(JSON.stringify({ ok: false, erro: "Telefone inválido." }));
       return;
     }
+    // Marcar como paciente CONTA COMO CONVERSÃO no funil, no anel e no CRM: é o jeito de o
+    // Dr. Bruno dizer "essa eu fechei", quando foi ele que assumiu a conversa. Só conta pra
+    // quem chegou a falar com a Carla (tem sessão): um número velho cadastrado à mão é
+    // classificação, não venda. E só na primeira marcação, pra clique repetido não somar.
+    const jaEraPaciente = Storage.lerPacientesManuais().includes(telefone);
     const pacientes = Storage.marcarPacienteManual(telefone);
+    let contouComoConversao = false;
+    if (!jaEraPaciente && Storage.obterSessao(telefone)) {
+      Eventos.registrar("virou_paciente", telefone, { origem: "painel" });
+      contouComoConversao = true;
+    }
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok: true, telefone, pacientesManuais: pacientes }));
+    res.end(JSON.stringify({ ok: true, telefone, pacientesManuais: pacientes, contouComoConversao }));
     return;
   }
 
   if (req.url === "/api/desmarcar-paciente" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
+    // Desmarcar grava o evento compensatório: o arquivo continua append-only e o funil
+    // aplica os dois na ordem, então a conversão some sem apagar a trilha.
+    const eraMarcado = !!corpo.telefone && Storage.lerPacientesManuais().includes(corpo.telefone);
     const pacientes = corpo.telefone ? Storage.desmarcarPacienteManual(corpo.telefone) : Storage.lerPacientesManuais();
+    if (eraMarcado) Eventos.registrar("paciente_desmarcado", corpo.telefone, { origem: "painel" });
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ ok: true, pacientesManuais: pacientes }));
     return;

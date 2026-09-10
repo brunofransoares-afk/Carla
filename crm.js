@@ -32,6 +32,13 @@ const PAROU_NO_PRECO_HORAS = 6;
 // "Lead quente" pro resumo do topo: falou nas últimas 48 horas e ainda não fechou.
 const LEAD_QUENTE_HORAS = 48;
 
+// Os marcos de acompanhamento: o Dr. Bruno gosta de rever a criança 3 e 6 meses depois
+// da consulta. O painel avisa uma semana antes de cada marco e segura o aviso por três
+// semanas depois, pra ele não perder o marco só por não ter aberto o painel naquela semana.
+const MESES_RETORNO = [3, 6];
+const AVISO_ANTES_DIAS = 7;
+const AVISO_DEPOIS_DIAS = 21;
+
 const LIMITE_NOTA = 1000;
 const LIMITE_NOTAS_POR_CONTATO = 200;
 const LIMITE_ETIQUETAS = 8;
@@ -58,6 +65,8 @@ const SITUACOES = [
   { chave: "aguardando_humano", rotulo: "Aguardando você", tom: "atencao" },
   { chave: "aguardando_pagamento", rotulo: "Aguardando pagamento", tom: "atencao" },
   { chave: "consulta_marcada", rotulo: "Consulta marcada", tom: "bom" },
+  { chave: "fechou_com_voce", rotulo: "Fechou com você", tom: "bom" },
+  { chave: "retorno_proximo", rotulo: "Retorno de 3 ou 6 meses", tom: "atencao" },
   { chave: "pos_consulta", rotulo: "Pós-consulta (30 dias)", tom: "info" },
   { chave: "parou_no_preco", rotulo: "Parou depois do valor", tom: "perda" },
   { chave: "sem_resposta", rotulo: "Sem resposta há 3+ dias", tom: "perda" },
@@ -111,6 +120,13 @@ const MODELOS_POS_CONSULTA = [
     texto: "Oi, {responsavel}! Foi um prazer receber {crianca} no consultório. Se puder, deixa uma avaliação do Dr. Bruno no Google: ajuda muito outras famílias a nos encontrar. {linkAvaliacao}",
   },
   {
+    id: "retorno",
+    nome: "Recado de retorno",
+    quando: "no marco de 3 ou 6 meses",
+    carlaContinua: true,
+    texto: "Oi, {responsavel}! Aqui é a Carla, do consultório do Dr. Bruno. A consulta de {crianca} foi há {meses} meses, e o Dr. Bruno gosta de rever as crianças nessa época pra acompanhar de perto o crescimento e o desenvolvimento. Se quiser marcar, me conta se prefere de manhã ou à tarde que eu vejo um horário.",
+  },
+  {
     id: "rotina",
     nome: "Chamar pra rotina",
     quando: "meses depois, pra puericultura",
@@ -140,6 +156,30 @@ function diasEntreDatas(dataStr, agora) {
   const alvo = new Date(y, m - 1, d);
   const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
   return Math.round((hoje - alvo) / DIA_MS);
+}
+
+// Soma meses a uma data AAAA-MM-DD sem estourar o mês: 31/01 + 3 meses é 30/04, não 01/05.
+function somarMeses(dataStr, meses) {
+  const [y, m, d] = String(dataStr).split("-").map(Number);
+  const alvo = new Date(y, m - 1 + meses, 1);
+  const ultimoDia = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate();
+  alvo.setDate(Math.min(d, ultimoDia));
+  return dataLocal(alvo);
+}
+
+// Os marcos de retorno da última consulta realizada. Cada um diz quantos dias faltam (negativo
+// se já passou), se o Dr. Bruno já marcou como avisado, e se está pendente: dentro da janela
+// (uma semana antes até três semanas depois) e ainda não avisado.
+function marcosDeRetorno({ ultimaRealizada = null, retornosAvisados = {}, agora = new Date() } = {}) {
+  if (!ultimaRealizada || !ultimaRealizada.data) return [];
+  return MESES_RETORNO.map((meses) => {
+    const data = somarMeses(ultimaRealizada.data, meses);
+    const diasFaltando = -diasEntreDatas(data, agora);
+    const chave = `${ultimaRealizada.data}:${meses}`;
+    const avisadoEm = retornosAvisados[chave] || null;
+    const naJanela = diasFaltando <= AVISO_ANTES_DIAS && diasFaltando >= -AVISO_DEPOIS_DIAS;
+    return { meses, data, chave, diasFaltando, avisadoEm, naJanela, pendente: naJanela && !avisadoEm, crianca: ultimaRealizada.crianca || null, consultaEm: ultimaRealizada.data };
+  });
 }
 
 function nomeDoTipo(tipo) {
@@ -174,14 +214,41 @@ function consultasDoTelefone(agendamentos, telefone) {
     .sort((a, b) => (b.data + b.horario).localeCompare(a.data + a.horario));
 }
 
+// Consulta feita fora da Carla, registrada à mão na ficha. Entra na lista com o mesmo
+// formato das outras, com estado "realizada", pra tela e contagens não precisarem de dois
+// caminhos.
+function consultasManuaisDoTelefone(dadosCrm, telefone) {
+  const lista = (dadosCrm && dadosCrm.consultasRealizadas && dadosCrm.consultasRealizadas[telefone]) || [];
+  return lista.map((c) => ({
+    slotId: `manual-${c.id}`, id: c.id, data: c.data, horario: "", diaLabel: null,
+    crianca: c.crianca || null, responsavel: null, responsavelEmail: null,
+    estado: "realizada", pago: true, pagamento: null, modalidade: "presencial",
+    tipoConsulta: c.tipoConsulta || null, tipoNome: c.tipoConsulta ? nomeDoTipo(c.tipoConsulta) : "Consulta",
+    portalAvisadoEm: null, guiaAvisadoEm: null, registradoEm: c.em || null, origem: "manual",
+  }));
+}
+
+function todasAsConsultas(agendamentos, dadosCrm, telefone) {
+  return [...consultasDoTelefone(agendamentos, telefone), ...consultasManuaisDoTelefone(dadosCrm, telefone)]
+    .sort((a, b) => (b.data + b.horario).localeCompare(a.data + a.horario));
+}
+
 function ativa(c) {
   return c.estado === "reservado" || c.estado === "pago";
+}
+
+// Aconteceu de verdade: passou a data sem cancelar, ou foi registrada à mão como realizada.
+function realizada(c, hoje) {
+  return c.estado === "realizada" || (ativa(c) && c.data < hoje);
 }
 
 // ---------------------------------------------------------------- estágio e situações
 
 function estagioDe(flags) {
   if (!flags) return { chave: "sem_registro", rotulo: "Sem registro" };
+  // Marcado como paciente no painel: é conversão (o funil já contou como "agendou"), mas a
+  // ficha diz de onde veio, porque não existe reserva da Carla pra essa família.
+  if (flags.fechouComDoutor && !flags.pagou) return { chave: "agendou", rotulo: "Fechou com você" };
   for (const e of ESTAGIOS) {
     if (e.chave === "contatos" || flags[e.chave]) return { chave: e.chave, rotulo: e.rotulo };
   }
@@ -189,11 +256,12 @@ function estagioDe(flags) {
 }
 
 // Lê a situação de UM contato. Recebe tudo já separado pra ser fácil de testar.
-function situacoesDe({ contato, consultas, flags, agora }) {
+function situacoesDe({ contato, consultas, flags, agora, retornosAvisados = {} }) {
   const hoje = dataLocal(agora);
   const futuras = consultas.filter((c) => ativa(c) && c.data >= hoje);
-  // Consulta que já aconteceu: passou a data e não foi cancelada nem venceu sem pagar.
-  const realizadas = consultas.filter((c) => ativa(c) && c.data < hoje);
+  // Consulta que já aconteceu: passou a data e não foi cancelada nem venceu sem pagar, ou
+  // foi registrada à mão na ficha.
+  const realizadas = consultas.filter((c) => realizada(c, hoje));
   const ultimaRealizada = realizadas[0] || null;
   const proxima = futuras.slice().sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario))[0] || null;
 
@@ -203,6 +271,7 @@ function situacoesDe({ contato, consultas, flags, agora }) {
   if (contato.aguardandoHumano) lista.push("aguardando_humano");
   if (futuras.some((c) => !c.pago)) lista.push("aguardando_pagamento");
   if (futuras.length) lista.push("consulta_marcada");
+  if (flags && flags.fechouComDoutor) lista.push("fechou_com_voce");
 
   if (ultimaRealizada) {
     const diasDesde = diasEntreDatas(ultimaRealizada.data, agora);
@@ -215,6 +284,15 @@ function situacoesDe({ contato, consultas, flags, agora }) {
         data: ultimaRealizada.data,
       };
     }
+  }
+
+  // Os marcos de 3 e 6 meses contam da ÚLTIMA consulta realizada: uma consulta nova zera a
+  // contagem, porque a criança acabou de ser vista.
+  const retornos = marcosDeRetorno({ ultimaRealizada, retornosAvisados, agora });
+  const retornoPendente = retornos.find((r) => r.pendente) || null;
+  if (retornoPendente) {
+    lista.push("retorno_proximo");
+    detalhes.retornoPendente = retornoPendente;
   }
 
   const ehPaciente = !!contato.ehPaciente || realizadas.length > 0;
@@ -234,7 +312,7 @@ function situacoesDe({ contato, consultas, flags, agora }) {
   else if (contato.ultimaAtividade && futuras.length === 0) lista.push("lead");
   if (contato.silenciado) lista.push("silenciado");
 
-  return { situacoes: lista, detalhes, proxima, ultimaRealizada, futuras, realizadas, ehPaciente };
+  return { situacoes: lista, detalhes, proxima, ultimaRealizada, futuras, realizadas, ehPaciente, retornos };
 }
 
 // ---------------------------------------------------------------- a lista inteira
@@ -245,7 +323,7 @@ function situacoesDe({ contato, consultas, flags, agora }) {
 // dadosCrm: lerCrm() (notas e etiquetas)
 function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dadosCrm = null, agora = new Date() } = {}) {
   const flagsPorTelefone = new Map((funilContatos || []).map((f) => [f.telefone, f]));
-  const crm = dadosCrm || { notas: {}, etiquetas: {} };
+  const crm = dadosCrm || { notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {} };
   const hoje = dataLocal(agora);
 
   // Quem marcou consulta mas nunca apareceu na lista de contatos (reserva antiga, número
@@ -258,11 +336,17 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
       extras.push({ telefone: a.telefone, nome: a.responsavel || null, ehPaciente: false, ultimaAtividade: null, ultimaMensagem: "", fechou: false, aguardandoHumano: false, silenciado: false });
     }
   }
+  for (const telefone of Object.keys(crm.consultasRealizadas || {})) {
+    if (!telefonesConhecidos.has(telefone) && (crm.consultasRealizadas[telefone] || []).length) {
+      telefonesConhecidos.add(telefone);
+      extras.push({ telefone, nome: null, ehPaciente: false, ultimaAtividade: null, ultimaMensagem: "", fechou: false, aguardandoHumano: false, silenciado: false });
+    }
+  }
 
   const lista = [...contatos, ...extras].map((contato) => {
-    const consultas = consultasDoTelefone(agendamentos, contato.telefone);
+    const consultas = todasAsConsultas(agendamentos, crm, contato.telefone);
     const flags = flagsPorTelefone.get(contato.telefone) || null;
-    const s = situacoesDe({ contato, consultas, flags, agora });
+    const s = situacoesDe({ contato, consultas, flags, agora, retornosAvisados: (crm.retornos && crm.retornos[contato.telefone]) || {} });
     const notas = (crm.notas && crm.notas[contato.telefone]) || [];
     const etiquetas = (crm.etiquetas && crm.etiquetas[contato.telefone]) || [];
     const criancas = [...new Set(consultas.map((c) => c.crianca).filter(Boolean))];
@@ -277,6 +361,8 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
       primeiroContatoEm: (flags && flags.primeiroContatoEm) || null,
       situacoes: s.situacoes,
       posConsulta: s.detalhes.posConsulta || null,
+      retornos: s.retornos,
+      retornoPendente: s.detalhes.retornoPendente || null,
       ehPaciente: s.ehPaciente,
       proximaConsulta: s.proxima,
       ultimaConsulta: s.ultimaRealizada,
@@ -289,7 +375,7 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
   });
 
   // Ordem: quem precisa do Dr. Bruno primeiro, depois por atividade.
-  const peso = (c) => (c.situacoes.includes("aguardando_humano") ? 0 : c.situacoes.includes("aguardando_pagamento") ? 1 : 2);
+  const peso = (c) => (c.situacoes.includes("aguardando_humano") ? 0 : c.situacoes.includes("aguardando_pagamento") ? 1 : c.situacoes.includes("retorno_proximo") ? 2 : 3);
   lista.sort((a, b) => {
     const p = peso(a) - peso(b);
     if (p !== 0) return p;
@@ -314,6 +400,7 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
       return h !== null && h <= LEAD_QUENTE_HORAS && !c.ehPaciente && !c.proximaConsulta && !c.silenciado;
     }).length,
     posConsulta: contagem.pos_consulta,
+    retornosAAvisar: contagem.retorno_proximo,
     pacientes: contagem.paciente,
     leads: contagem.lead,
     totalContatos: lista.length,
@@ -335,11 +422,21 @@ const ROTULO_EVENTO = {
   pagamento_desmarcado: () => "Pagamento desmarcado",
   escalou: (e) => `Escalou pro Dr. Bruno${e.motivo ? `: ${e.motivo}` : ""}`,
   reaquecido: () => "Mensagem de retomada enviada",
+  virou_paciente: () => "Marcado como paciente no painel (conta como conversão)",
+  paciente_desmarcado: () => "Marcação de paciente removida",
   mensagem_manual: (e) => `Consultório: "${e.trecho || ""}"`,
 };
 
-function linhaDoTempo({ eventos = [], notas = [], limite = 60 } = {}) {
+function linhaDoTempo({ eventos = [], notas = [], consultasManuais = [], retornosAvisados = {}, limite = 60 } = {}) {
   const itens = [];
+  for (const c of consultasManuais) {
+    if (!c || !c.em) continue;
+    itens.push({ em: c.em, tipo: "consulta_manual", texto: `Consulta de ${c.data.split("-").reverse().join("/")}${c.crianca ? ` (${c.crianca})` : ""} registrada como realizada no painel` });
+  }
+  for (const [chave, em] of Object.entries(retornosAvisados || {})) {
+    const meses = chave.split(":")[1];
+    itens.push({ em, tipo: "retorno_avisado", texto: `Retorno de ${meses} meses marcado como avisado` });
+  }
   for (const e of eventos) {
     if (!e || !e.em || !e.tipo) continue;
     const rotulo = ROTULO_EVENTO[e.tipo];
@@ -357,7 +454,7 @@ function linhaDoTempo({ eventos = [], notas = [], limite = 60 } = {}) {
 
 // Preenche um modelo pra uma família. Sem nome do responsável o "Oi, {responsavel}!" vira
 // "Oi!"; sem nome da criança entra "seu filho(a)", que lê bem em todas as frases acima.
-function preencherModelo(modelo, { responsavel = null, crianca = null, linkAvaliacao = null } = {}) {
+function preencherModelo(modelo, { responsavel = null, crianca = null, linkAvaliacao = null, meses = null } = {}) {
   if (!modelo) return { ok: false, motivo: "Modelo desconhecido." };
   if (modelo.precisaDe === "linkAvaliacao" && !linkAvaliacao) {
     return { ok: false, motivo: "Configure LINK_AVALIACAO_GOOGLE no .env pra usar este modelo." };
@@ -366,12 +463,13 @@ function preencherModelo(modelo, { responsavel = null, crianca = null, linkAvali
   texto = responsavel ? texto.replace("{responsavel}", responsavel) : texto.replace(", {responsavel}!", "!");
   texto = texto.replace(/\{crianca\}/g, crianca || "seu filho(a)");
   texto = texto.replace("{linkAvaliacao}", linkAvaliacao || "").trim();
+  texto = texto.replace("{meses}", meses ? String(meses) : "alguns");
   return { ok: true, texto, carlaContinua: !!modelo.carlaContinua };
 }
 
-function modelosPara({ responsavel = null, crianca = null, linkAvaliacao = null } = {}) {
+function modelosPara({ responsavel = null, crianca = null, linkAvaliacao = null, meses = null } = {}) {
   return MODELOS_POS_CONSULTA.map((m) => {
-    const p = preencherModelo(m, { responsavel, crianca, linkAvaliacao });
+    const p = preencherModelo(m, { responsavel, crianca, linkAvaliacao, meses });
     return { id: m.id, nome: m.nome, quando: m.quando, carlaContinua: !!m.carlaContinua, disponivel: p.ok, motivo: p.ok ? null : p.motivo, texto: p.ok ? p.texto : null };
   });
 }
@@ -380,8 +478,54 @@ function modelosPara({ responsavel = null, crianca = null, linkAvaliacao = null 
 
 function lerCrm(arquivo) {
   const dados = Atomico.lerJSONSeguro(arquivo, null);
-  if (!dados || typeof dados !== "object") return { notas: {}, etiquetas: {} };
-  return { notas: dados.notas || {}, etiquetas: dados.etiquetas || {} };
+  if (!dados || typeof dados !== "object") return { notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {} };
+  return { notas: dados.notas || {}, etiquetas: dados.etiquetas || {}, consultasRealizadas: dados.consultasRealizadas || {}, retornos: dados.retornos || {} };
+}
+
+// Consulta feita fora da Carla (o Dr. Bruno assumiu a conversa e marcou por fora, ou é
+// paciente antigo). Registrada aqui, ela conta como realizada: abre a janela de pós-consulta
+// e a contagem dos retornos de 3 e 6 meses.
+function registrarConsultaRealizada(arquivo, telefone, { data, crianca = null, tipoConsulta = null } = {}, agora = new Date()) {
+  if (!telefone) return { ok: false, motivo: "Sem telefone." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ""))) return { ok: false, motivo: "Data inválida." };
+  if (data > dataLocal(agora)) return { ok: false, motivo: "A consulta ainda não aconteceu: registre só depois." };
+  const dados = lerCrm(arquivo);
+  const lista = dados.consultasRealizadas[telefone] || [];
+  const nomeCrianca = limparTexto(crianca, 80) || null;
+  if (lista.some((c) => c.data === data && (c.crianca || null) === nomeCrianca)) return { ok: false, motivo: "Essa consulta já está registrada." };
+  const consulta = { id: crypto.randomBytes(6).toString("hex"), data, crianca: nomeCrianca, tipoConsulta: tipoValidoOuNulo(tipoConsulta), em: agora.toISOString() };
+  dados.consultasRealizadas[telefone] = [...lista, consulta].slice(-100);
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true, consulta };
+}
+
+function tipoValidoOuNulo(tipo) {
+  return TIPO_NOME[tipo] ? tipo : null;
+}
+
+function removerConsultaRealizada(arquivo, telefone, id) {
+  const dados = lerCrm(arquivo);
+  const lista = dados.consultasRealizadas[telefone] || [];
+  const restante = lista.filter((c) => c.id !== id);
+  if (restante.length === lista.length) return { ok: false, motivo: "Consulta não encontrada." };
+  if (restante.length) dados.consultasRealizadas[telefone] = restante;
+  else delete dados.consultasRealizadas[telefone];
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true };
+}
+
+// O Dr. Bruno mandou o recado (ou decidiu não mandar): o aviso daquele marco some. A chave
+// é "data da consulta:meses", então uma consulta nova gera marcos novos, sem confusão.
+function marcarRetornoAvisado(arquivo, telefone, chave, avisado = true, agora = new Date()) {
+  if (!telefone || !/^\d{4}-\d{2}-\d{2}:(3|6)$/.test(String(chave || ""))) return { ok: false, motivo: "Marco inválido." };
+  const dados = lerCrm(arquivo);
+  const doTelefone = dados.retornos[telefone] || {};
+  if (avisado) doTelefone[chave] = agora.toISOString();
+  else delete doTelefone[chave];
+  if (Object.keys(doTelefone).length) dados.retornos[telefone] = doTelefone;
+  else delete dados.retornos[telefone];
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true, retornos: doTelefone };
 }
 
 function limparTexto(texto, limite) {
@@ -424,9 +568,12 @@ function definirEtiquetas(arquivo, telefone, etiquetas) {
 
 module.exports = {
   JANELA_POS_CONSULTA_DIAS, SEM_RESPOSTA_DIAS, PAROU_NO_PRECO_HORAS, LEAD_QUENTE_HORAS,
+  MESES_RETORNO, AVISO_ANTES_DIAS, AVISO_DEPOIS_DIAS,
   SITUACOES, ESTAGIOS, MODELOS_POS_CONSULTA, TIPO_NOME,
-  consultasDoTelefone, estagioDe, situacoesDe, montarCrm, linhaDoTempo,
+  consultasDoTelefone, consultasManuaisDoTelefone, todasAsConsultas, estagioDe, situacoesDe, montarCrm, linhaDoTempo,
+  somarMeses, marcosDeRetorno,
   preencherModelo, modelosPara,
   lerCrm, adicionarNota, removerNota, definirEtiquetas,
+  registrarConsultaRealizada, removerConsultaRealizada, marcarRetornoAvisado,
   _dataLocal: dataLocal,
 };
