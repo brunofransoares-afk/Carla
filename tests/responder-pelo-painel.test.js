@@ -146,7 +146,14 @@ const DASH = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8
 
 // ------------------------------------------------- 5. tira do silêncio e volta a conversa
 {
-  const bloco = SERVER.slice(SERVER.indexOf("async function responderEscalada"), SERVER.indexOf("async function processarMensagem"));
+  // O recorte vai do responderEscalada até o processarMensagem, cobrindo o que vem no
+  // meio de propósito (a 5f vigia uma função que mora ali). Quando a mensagem manual nasceu
+  // logo antes do processarMensagem, ela caiu dentro, e ela legitimamente recusa sem
+  // WhatsApp (mensagem escrita ao vivo não pode sair horas depois). Então o recorte termina
+  // onde a mensagem manual começa: tudo que cobria antes, menos o que entrou depois.
+  const fimDoRecorte = SERVER.indexOf("const LIMITE_MENSAGEM_MANUAL");
+  const bloco = SERVER.slice(SERVER.indexOf("async function responderEscalada"),
+    fimDoRecorte > 0 ? fimDoRecorte : SERVER.indexOf("async function processarMensagem"));
   ok(/sessao\.aguardandoHumano = false;/.test(bloco), "5. sai do silêncio: foi a escalada que parou a conversa");
   ok(/await enviarResposta\(sockAtivo, jid, telefone, resultado\.resposta, true, \{ registrarPreco: true \}\);/.test(bloco),
     "5b. e a Carla responde a família sozinha");

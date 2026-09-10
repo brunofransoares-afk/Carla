@@ -227,6 +227,18 @@
   .btn-marcar-contato:disabled { opacity: 0.5; cursor: default; }
   .btn-retomar-contato { border: none; background: rgba(232,200,135,0.16); color: #e8c887; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
   .btn-retomar-contato:hover { background: rgba(232,200,135,0.28); }
+  /* Mensagem manual: sai crua pelo numero do consultorio, entao usa o dourado (acao de peso). */
+  .btn-mensagem-contato { border: none; background: rgba(203,160,90,0.16); color: var(--ouro-claro); border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
+  .btn-mensagem-contato:hover { background: rgba(203,160,90,0.3); }
+  .msg-manual { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .msg-manual textarea { width: 100%; resize: vertical; min-height: 64px; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--texto); font-family: inherit; line-height: 1.45; }
+  .msg-manual textarea:focus { outline: none; border-color: var(--acento); }
+  .msg-manual textarea::placeholder { color: var(--texto-fraco); }
+  .msg-manual-acoes { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .msg-manual-aviso { flex: 1; font-size: 11px; color: #e8a5a5; }
+  .btn-cancelar-msg { border: none; background: rgba(255,255,255,0.07); color: var(--texto-fraco); border-radius: 8px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
+  .btn-enviar-msg { border: none; background: linear-gradient(135deg, var(--acento), var(--acento-escuro)); color: #06231a; border-radius: 8px; padding: 4px 12px; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .btn-enviar-msg:disabled { opacity: .55; cursor: default; }
   .btn-limpar-contato { border: none; background: rgba(255,90,90,0.1); color: #ffb3b3; border-radius: 8px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
   .btn-limpar-contato:hover { background: rgba(255,90,90,0.22); }
 
@@ -876,9 +888,17 @@
   let silenciadosAtuais = new Set();
   let contatosAtuais = [];
 
+  // Verdadeiro se algum campo dentro do seletor está em foco ou com texto. É o que segura o
+  // redesenho automático das listas enquanto o Dr. Bruno digita nelas.
+  function alguemDigitandoEm(seletor) {
+    return [...document.querySelectorAll(seletor)].some((c) => c === document.activeElement || (c.value || "").trim());
+  }
+
   function renderizarContatos(contatos) {
     contatosAtuais = contatos || [];
     document.getElementById("contagem-contatos").textContent = contatosAtuais.length;
+    // A caixa de mensagem mora dentro da lista: redesenhar com ela aberta apagaria o texto.
+    if (alguemDigitandoEm("#lista-contatos textarea")) return;
     aplicarBuscaContatos();
   }
 
@@ -922,6 +942,15 @@
           ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
           ${c.ultimaAtividade ? `<button class="btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
           ${podeMostrarReaquecer(c, silenciado) ? `<button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}">Reaquecer</button>` : ""}
+          <button class="btn-mensagem-contato" data-telefone="${escapeHtml(c.telefone)}">Mensagem</button>
+        </div>
+        <div class="msg-manual" data-caixa="${escapeHtml(c.telefone)}" hidden>
+          <textarea rows="3" placeholder="Escreva pra ${escapeHtml(c.nome || c.telefone)}. Sai pelo número do consultório, do jeito que você digitar. A Carla fica quieta nessa conversa até você retomar."></textarea>
+          <div class="msg-manual-acoes">
+            <span class="msg-manual-aviso"></span>
+            <button class="btn-cancelar-msg" type="button">Cancelar</button>
+            <button class="btn-enviar-msg" type="button" data-telefone="${escapeHtml(c.telefone)}">Enviar</button>
+          </div>
         </div>
       </li>`;
     }).join("");
@@ -941,6 +970,70 @@
     lista.querySelectorAll(".btn-reaquecer-contato").forEach((btn) => {
       btn.addEventListener("click", () => reaquecerContato(btn, btn.dataset.telefone));
     });
+    lista.querySelectorAll(".btn-mensagem-contato").forEach((btn) => {
+      btn.addEventListener("click", () => abrirCaixaDeMensagem(btn.dataset.telefone));
+    });
+    lista.querySelectorAll(".btn-cancelar-msg").forEach((btn) => {
+      btn.addEventListener("click", () => fecharCaixaDeMensagem(btn.closest(".msg-manual")));
+    });
+    lista.querySelectorAll(".btn-enviar-msg").forEach((btn) => {
+      btn.addEventListener("click", () => enviarMensagemManual(btn.dataset.telefone, btn.closest(".msg-manual")));
+    });
+    lista.querySelectorAll(".msg-manual textarea").forEach((campo) => {
+      // Ctrl+Enter envia; Enter sozinho é quebra de linha, porque mensagem de WhatsApp tem parágrafo.
+      campo.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          enviarMensagemManual(campo.closest(".msg-manual").querySelector(".btn-enviar-msg").dataset.telefone, campo.closest(".msg-manual"));
+        }
+      });
+    });
+  }
+
+  function abrirCaixaDeMensagem(telefone) {
+    const caixa = document.querySelector(`.msg-manual[data-caixa="${CSS.escape(telefone)}"]`);
+    if (!caixa) return;
+    caixa.hidden = false;
+    caixa.querySelector("textarea").focus();
+  }
+
+  function fecharCaixaDeMensagem(caixa) {
+    if (!caixa) return;
+    caixa.querySelector("textarea").value = "";
+    caixa.querySelector(".msg-manual-aviso").textContent = "";
+    caixa.hidden = true;
+    atualizar();
+  }
+
+  // Sai pelo número do consultório, sem a IA no meio, e cala a Carla naquela conversa.
+  async function enviarMensagemManual(telefone, caixa) {
+    const campo = caixa.querySelector("textarea");
+    const aviso = caixa.querySelector(".msg-manual-aviso");
+    const botao = caixa.querySelector(".btn-enviar-msg");
+    const texto = campo.value.trim();
+    if (!texto) return;
+    botao.disabled = true;
+    botao.textContent = "Enviando...";
+    aviso.textContent = "";
+    try {
+      const resp = await fetch("/api/mensagem-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone, texto }),
+      });
+      const r = await resp.json();
+      if (!r.ok) {
+        aviso.textContent = "Não enviou: " + (r.motivo || "motivo desconhecido");
+        botao.disabled = false;
+        botao.textContent = "Enviar";
+        return;
+      }
+      fecharCaixaDeMensagem(caixa);
+    } catch (e) {
+      aviso.textContent = "Não enviou: sem conexão com o painel.";
+      botao.disabled = false;
+      botao.textContent = "Enviar";
+    }
   }
 
   // O botão só aparece pra quem faz sentido. As travas de VERDADE estão no servidor
@@ -1289,7 +1382,12 @@
       const alertas = dados.alertas.slice().reverse();
       document.getElementById("contagem-alertas").textContent = alertas.length;
       const lista = document.getElementById("lista-alertas");
-      if (alertas.length === 0) {
+      // O CAMPO QUE SUMIA. Esta lista é redesenhada a cada 8 segundos com innerHTML, e o
+      // campo de resposta era recriado no meio da digitação: o texto ia embora. Enquanto
+      // alguém estiver com um campo daqui em foco ou com texto, a lista fica como está.
+      if (alguemDigitandoEm("#lista-alertas input[data-alerta-texto]")) {
+        // nada: o próximo ciclo redesenha quando o campo esvaziar ou perder o foco
+      } else if (alertas.length === 0) {
         lista.innerHTML = "<div class='vazio'>Nenhum alerta registrado.</div>";
       } else {
         lista.innerHTML = alertas.map((al) => {
@@ -1318,7 +1416,7 @@
         }).join("");
       }
 
-      ligarBotoesDeEscalada();
+      if (!alguemDigitandoEm("#lista-alertas input[data-alerta-texto]")) ligarBotoesDeEscalada();
 
       renderizarSilenciados(dados.silenciados || []);
       renderizarContatos(dados.contatos || []);

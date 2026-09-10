@@ -665,6 +665,16 @@ async function atenderRequisicao(req, res) {
     return;
   }
 
+  // Mensagem escrita pelo Dr. Bruno pra uma família. Quem manda é o bot (a conexão do
+  // WhatsApp vive lá); isto só encaminha. A Carla cala naquela conversa até ele retomar.
+  if (req.url === "/api/mensagem-manual" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = await encaminharAoBot("/interno/mensagem-manual", JSON.stringify({ telefone: corpo.telefone, texto: corpo.texto }));
+    res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(r.texto);
+    return;
+  }
+
   if (req.url === "/api/retomar-atendimento" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const ok = corpo.telefone ? Storage.retomarAtendimento(corpo.telefone) : false;

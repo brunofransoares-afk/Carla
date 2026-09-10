@@ -299,6 +299,21 @@ function iniciarTravaInstancia() {
       });
       return;
     }
+    if (req.method === "POST" && req.url === "/interno/mensagem-manual") {
+      lerCorpoJsonInterno(req, res, async (dados) => {
+        try {
+          const r = await mensagemManual(dados.telefone, dados.texto);
+          res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(r));
+        } catch (erro) {
+          console.error("[MENSAGEM MANUAL] Erro:", erro.message);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, motivo: erro.message }));
+        }
+      });
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/interno/reaquecer") {
       lerCorpoJsonInterno(req, res, async (dados) => {
         try {
@@ -1111,6 +1126,47 @@ async function reaquecerLeadNaFila(telefone) {
     return { ok: true, mensagem: resultado.resposta };
   } catch (erro) {
     console.error("[REAQUECIDO] Erro:", erro.message);
+    return { ok: false, motivo: erro.message };
+  }
+}
+
+// MENSAGEM DO DR. BRUNO PRA FAMÍLIA, escrita por ele no painel e enviada pelo número do
+// consultório, crua, do jeito que ele digitou. Não passa pela IA.
+//
+// AO MANDAR, A CARLA CALA. A conversa entra em atendimento humano (o mesmo estado da escalada)
+// até ele apertar "Retomar atendimento automático" no painel. Sem isso a Carla responderia em
+// cima da mensagem dele, e a família receberia duas vozes do mesmo número.
+//
+// O texto entra no histórico como fala do consultório (turno "assistant"), pra quando ele
+// retomar o automático a Carla saber o que já foi dito. Nunca como turno da família.
+const LIMITE_MENSAGEM_MANUAL = 1500;
+
+async function mensagemManual(telefone, texto) {
+  const limpo = String(texto || "").trim();
+  if (!telefone) return { ok: false, motivo: "Sem telefone." };
+  if (!limpo) return { ok: false, motivo: "Mensagem vazia." };
+  if (limpo.length > LIMITE_MENSAGEM_MANUAL) return { ok: false, motivo: `Mensagem longa demais (máximo ${LIMITE_MENSAGEM_MANUAL} caracteres).` };
+  if (!sockAtivo) return { ok: false, motivo: "WhatsApp desconectado." };
+
+  const jid = telefone.replace("+", "") + "@s.whatsapp.net";
+  const agora = new Date();
+  const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
+  // Cala ANTES de enviar: se a família responder no segundo seguinte, a Carla já está quieta.
+  sessao.aguardandoHumano = true;
+  sessao.aguardandoHumanoDesde = agora.toISOString();
+  sessao.historico = [...sessao.historico, { role: "assistant", content: limpo }].slice(-24);
+  sessao.ultimaAtividade = agora.toISOString();
+  Storage.salvarSessao(telefone, sessao);
+
+  try {
+    await enviarResposta(sockAtivo, jid, telefone, limpo, true, {
+      chaveIdempotencia: `manual:${telefone}:${agora.getTime()}`,
+      aposPersistir: () => Eventos.registrar("mensagem_manual", telefone, { trecho: Eventos.trecho(limpo) }, agora),
+    });
+    console.log(`[MENSAGEM MANUAL] ${telefone}: "${limpo.slice(0, 80)}"`);
+    return { ok: true };
+  } catch (erro) {
+    console.error("[MENSAGEM MANUAL] Erro:", erro.message);
     return { ok: false, motivo: erro.message };
   }
 }
