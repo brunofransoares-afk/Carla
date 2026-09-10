@@ -114,8 +114,10 @@ const lerPreco = extrairLeitorDePreco();
 // ------------------------------------------------- 7. a ordem da conversa
 {
   ok(/COMO CONDUZIR: a ordem é TIPO, depois VALOR, depois PERÍODO, depois HORÁRIO/.test(SEM_COMENTARIO), "7. a ordem está escrita numa frase");
-  ok(/é uma consulta de urgência, pra algum sintoma agudo de agora; uma consulta de rotina, a puericultura; ou uma consulta pra investigação ou acompanhamento de transtornos do neurodesenvolvimento, como autismo, TDAH, TOD, ou outras questões de saúde mental\?/.test(SEM_COMENTARIO),
-    "7b. a pergunta do tipo, em linguagem de gente, com as três opções");
+  // A pergunta virou menu numerado a pedido do Dr. Bruno (10/09); o detalhe do menu mora em
+  // tests/jornada-da-familia.test.js. Aqui só importa que as três opções continuam lá.
+  ok(/1\. Urgência:/.test(SEM_COMENTARIO) && /2\. Puericultura:/.test(SEM_COMENTARIO) && /3\. Neurodesenvolvimento e saúde mental:/.test(SEM_COMENTARIO),
+    "7b. a pergunta do tipo, com as três opções");
   ok(/SEM os preços nessa mensagem: preço vem depois do tipo/.test(SEM_COMENTARIO), "7c. sem preço na pergunta do tipo");
   ok(/Na dúvida entre dois tipos \(ela diz "rotina" mas fala de atraso na fala\), pergunte em vez de escolher/.test(SEM_COMENTARIO), "7d. na dúvida, pergunta");
   ok(/O VALOR VEM DEPOIS DO TIPO E ANTES DO PERÍODO, SEMPRE/.test(SEM_COMENTARIO), "7e. valor entre tipo e período");
