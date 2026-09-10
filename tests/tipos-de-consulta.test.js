@@ -116,10 +116,10 @@ const lerPreco = extrairLeitorDePreco();
   ok(/COMO CONDUZIR: a ordem é TIPO, depois VALOR, depois PERÍODO, depois HORÁRIO/.test(SEM_COMENTARIO), "7. a ordem está escrita numa frase");
   // A pergunta virou menu numerado a pedido do Dr. Bruno (10/09); o detalhe do menu mora em
   // tests/jornada-da-familia.test.js. Aqui só importa que as três opções continuam lá.
-  ok(/1\. Urgência:/.test(SEM_COMENTARIO) && /2\. Puericultura:/.test(SEM_COMENTARIO) && /3\. Neurodesenvolvimento e saúde mental:/.test(SEM_COMENTARIO),
+  ok(/1\. Consulta de urgência\n/.test(SEM_COMENTARIO) && /2\. Consulta de puericultura\n/.test(SEM_COMENTARIO) && /3\. Consulta de neurodesenvolvimento e saúde mental\n/.test(SEM_COMENTARIO),
     "7b. a pergunta do tipo, com as três opções");
-  ok(/SEM os preços nessa mensagem: preço vem depois do tipo/.test(SEM_COMENTARIO), "7c. sem preço na pergunta do tipo");
-  ok(/Na dúvida entre dois tipos \(ela diz "rotina" mas fala de atraso na fala\), pergunte em vez de escolher/.test(SEM_COMENTARIO), "7d. na dúvida, pergunta");
+  ok(/SEM NENHUM valor nessa mensagem: primeiro a família escolhe, depois você direciona/.test(SEM_COMENTARIO), "7c. sem preço na pergunta do tipo");
+  ok(/O TIPO NÃO MUDA DEPOIS DE ESCOLHIDO\./.test(SEM_COMENTARIO), "7d. na dúvida entre tipos, não escolhe: escala (ver caso-liso)");
   ok(/O VALOR VEM DEPOIS DO TIPO E ANTES DO PERÍODO, SEMPRE/.test(SEM_COMENTARIO), "7e. valor entre tipo e período");
   ok(/"Você prefere de manhã ou à tarde\?"/.test(SEM_COMENTARIO), "7f. a mensagem do valor termina em manhã ou tarde");
   ok(!/Posso já ver um horário pra você\?/.test(SEM_COMENTARIO), "7g. o 'posso ver um horário?' sumiu");

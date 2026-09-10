@@ -31,19 +31,26 @@ const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREB
 const CONTEXTO = CEREBRO.slice(CEREBRO.indexOf("function montarContextoDoAtendimento("), CEREBRO.indexOf("function montarSystemPrompt("));
 
 // ------------------------------------------------- 1. o menu numerado do tipo
+// Alinhado com o Dr. Bruno em 10/09: sem valor no menu, menu pra todo mundo (mesmo quem já
+// disse o que procura), e o tipo não muda depois de escolhido. O detalhe dessa trava está em
+// tests/caso-liso.test.js.
 {
-  ok(/1\. Urgência: pra um sintoma de agora \(febre, tosse, dor, vômito\)\. O Dr\. Bruno examina e já orienta o que fazer\./.test(ESTAVEL), "1. opção 1, com explicação curta");
-  ok(/2\. Puericultura: a consulta de rotina, pra acompanhar crescimento, vacinas, alimentação e desenvolvimento\./.test(ESTAVEL), "1b. opção 2");
-  ok(/3\. Neurodesenvolvimento e saúde mental: investigação ou acompanhamento de autismo, TDAH, TOD, atraso de fala, comportamento, ansiedade\./.test(ESTAVEL), "1c. opção 3");
-  ok(/Pode responder só com o número\./.test(ESTAVEL), "1d. e diz que pode responder só o número");
-  ok(/SEM os preços nessa mensagem: preço vem depois do tipo/.test(ESTAVEL), "1e. sem preço no menu: preço vem depois do tipo");
-  ok(/"1" é urgência, "2" é puericultura, "3" é neurodesenvolvimento, e "ele tá com febre" também é urgência, sem você pedir o número/.test(ESTAVEL), "1f. número OU palavra valem igual: ninguém é obrigado a digitar 1");
-  ok(/NÃO mande o menu: nomeie o tipo ao informar o valor/.test(ESTAVEL) && /Nunca repita o menu pra quem já contou o caso/.test(ESTAVEL), "1g. quem já contou o caso não recebe menu, nem repetido");
-  ok(/Depois que ela respondeu, o número some da conversa: você fala do tipo pelo nome/.test(ESTAVEL), "1h. depois da escolha, fala pelo nome, nunca 'a opção 1'");
-  ok(/É a única lista numerada que existe na conversa inteira\./.test(ESTAVEL), "1i. é a única lista numerada");
-  ok(/Menu numerado existe num lugar só: a pergunta do tipo de consulta/.test(ESTAVEL), "1j. o TOM abre a exceção, uma só");
-  ok(/NUNCA: usar menu numerado fora da pergunta do tipo de consulta,/.test(ESTAVEL), "1k. e a lista NUNCA continua proibindo o resto");
-  ok(!/Sem lista numerada, sem parecer formulário/.test(ESTAVEL), "1l. a proibição antiga da pergunta do tipo saiu, senão o prompt se contradiz");
+  ok(/O Dr\. Bruno trabalha com 3 tipos de consulta 😊/.test(ESTAVEL), "1. o menu abre dizendo que são três tipos");
+  ok(/1\. Consulta de urgência\nPra um sintoma agudo de agora: febre, tosse, dor, vômito, machucado\./.test(ESTAVEL), "1b. opção 1, com o que ela trata");
+  ok(/Ela é direcionada só à queixa do momento, não entra rotina nem avaliação de desenvolvimento\./.test(ESTAVEL), "1c. e deixa claro o que NÃO entra na urgência");
+  ok(/2\. Consulta de puericultura\nA consulta de rotina, com duração média de 1 hora e uma avaliação completa e individualizada/.test(ESTAVEL), "1d. opção 2, detalhada");
+  ok(/3\. Consulta de neurodesenvolvimento e saúde mental\nInvestigação ou acompanhamento de autismo, TDAH, TOD, atraso de fala, comportamento e ansiedade\./.test(ESTAVEL), "1e. opção 3, detalhada");
+  ok(/Qual delas você está procurando\? Pode responder só com o número\./.test(ESTAVEL), "1f. fecha pedindo o número");
+  const inicioMenu = ESTAVEL.indexOf("O Dr. Bruno trabalha com 3 tipos de consulta");
+  const menu = ESTAVEL.slice(inicioMenu, ESTAVEL.indexOf('"\n', inicioMenu));
+  ok(!/R\$/.test(menu), "1g. NENHUM valor dentro do menu: primeiro escolhe, depois direciona");
+  ok(/o menu vai pra TODO MUNDO que pergunta valor ou pede pra marcar, mesmo quem já disse o que procura/.test(ESTAVEL), "1h. menu pra todo mundo, inclusive quem já contou o caso");
+  ok(/Você é uma automação e se apresentou como uma: não precisa parecer humana adivinhando o tipo, precisa ser certa\./.test(ESTAVEL), "1i. com o motivo: ela é automação, não precisa adivinhar");
+  ok(/Depois que ela respondeu, o número some da conversa: você fala do tipo pelo nome/.test(ESTAVEL), "1j. depois da escolha, fala pelo nome, nunca 'a opção 1'");
+  ok(/É a única lista numerada que existe na conversa inteira/.test(ESTAVEL), "1k. é a única lista numerada");
+  ok(/Menu numerado existe num lugar só: a pergunta do tipo de consulta/.test(ESTAVEL), "1l. o TOM abre a exceção, uma só");
+  ok(/NUNCA: usar menu numerado fora da pergunta do tipo de consulta,/.test(ESTAVEL), "1m. e a lista NUNCA continua proibindo o resto");
+  ok(!/Sem lista numerada, sem parecer formulário/.test(ESTAVEL) && !/NÃO mande o menu: nomeie o tipo/.test(ESTAVEL), "1n. as regras antigas (sem lista; pular o menu pra quem já disse) saíram, senão o prompt se contradiz");
 }
 
 // ------------------------------------------------- 2. os 30 dias de acompanhamento
