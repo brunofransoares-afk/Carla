@@ -302,7 +302,7 @@ function iniciarTravaInstancia() {
     if (req.method === "POST" && req.url === "/interno/mensagem-manual") {
       lerCorpoJsonInterno(req, res, async (dados) => {
         try {
-          const r = await mensagemManual(dados.telefone, dados.texto);
+          const r = await mensagemManual(dados.telefone, dados.texto, { carlaContinua: dados.carlaContinua === true });
           res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
           res.end(JSON.stringify(r));
         } catch (erro) {
@@ -1133,7 +1133,9 @@ async function reaquecerLeadNaFila(telefone) {
 // retomar o automático a Carla saber o que já foi dito. Nunca como turno da família.
 const LIMITE_MENSAGEM_MANUAL = 1500;
 
-async function mensagemManual(telefone, texto) {
+// carlaContinua: só os modelos do CRM que esperam uma resposta que a Carla sabe atender
+// (o convite pra rotina) deixam ela ligada. O padrão continua sendo calar.
+async function mensagemManual(telefone, texto, { carlaContinua = false } = {}) {
   const limpo = String(texto || "").trim();
   if (!telefone) return { ok: false, motivo: "Sem telefone." };
   if (!limpo) return { ok: false, motivo: "Mensagem vazia." };
@@ -1144,8 +1146,10 @@ async function mensagemManual(telefone, texto) {
   const agora = new Date();
   const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
   // Cala ANTES de enviar: se a família responder no segundo seguinte, a Carla já está quieta.
-  sessao.aguardandoHumano = true;
-  sessao.aguardandoHumanoDesde = agora.toISOString();
+  if (!carlaContinua) {
+    sessao.aguardandoHumano = true;
+    sessao.aguardandoHumanoDesde = agora.toISOString();
+  }
   sessao.historico = [...sessao.historico, { role: "assistant", content: limpo }].slice(-24);
   sessao.ultimaAtividade = agora.toISOString();
   Storage.salvarSessao(telefone, sessao);

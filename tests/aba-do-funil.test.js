@@ -60,12 +60,12 @@ const TELA = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8
   Eventos.registrar("mensagem", "+55190002", { classe: "convenio" }, t(3));
 
   const linhas = Eventos.csv().split("\n");
-  eq(linhas[0], "telefone,primeira_pergunta,primeiro_contato,ultimo_evento,soube_valor,recebeu_horario,agendou,pagou,escalou",
+  eq(linhas[0], "telefone,primeira_pergunta,primeiro_contato,ultimo_evento,soube_valor,recebeu_horario,agendou,fechou_com_doutor,pagou,escalou",
     "2. o cabeçalho tem as colunas que a planilha manual teria");
   eq(linhas.length, 3, "2b. uma linha por contato, não por evento");
   ok(/^\+55190001,preco,/.test(linhas[1]), "2c. com a primeira pergunta já classificada");
   ok(/^\+55190002,convenio,/.test(linhas[2]), "2d. inclusive separando o lead de convênio");
-  ok(/,sim,nao,nao,nao,nao$/.test(linhas[1]), "2e. e as etapas como sim/nao, legível em qualquer planilha");
+  ok(/,sim,nao,nao,nao,nao,nao$/.test(linhas[1]), "2e. e as etapas como sim/nao, legível em qualquer planilha");
 }
 
 // ------------------------------------------------- 3. a rota do CSV não pode ser engolida
