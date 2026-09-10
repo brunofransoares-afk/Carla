@@ -23,6 +23,9 @@ function normalizar(estado) {
     etapa: Object.values(ETAPAS).includes(e.etapa) ? e.etapa : ETAPAS.INICIO,
     precoInformadoValor: Number.isFinite(e.precoInformadoValor) ? e.precoInformadoValor : null,
     precoInformadoEm: typeof e.precoInformadoEm === "string" ? e.precoInformadoEm : null,
+    // O PRIMEIRO valor informado na conversa: é ele que trava o tipo. O valor "atual" pode
+    // mudar se a IA repetir o bloco de preço com outro tipo; este não muda nunca.
+    primeiroPrecoInformado: Number.isFinite(e.primeiroPrecoInformado) ? e.primeiroPrecoInformado : null,
     cancelamentoPendente: normalizarCancelamento(e.cancelamentoPendente),
   };
 }
@@ -53,7 +56,13 @@ function registrarPreco(estado, valor, agora = new Date()) {
   e.etapa = ETAPAS.PRECO_INFORMADO;
   e.precoInformadoValor = numero;
   e.precoInformadoEm = instante.toISOString();
+  if (!e.primeiroPrecoInformado) e.primeiroPrecoInformado = numero;
   return e;
+}
+
+// O tipo desta conversa está travado no primeiro valor informado. Devolve o valor, ou null.
+function primeiroPrecoInformado(estado) {
+  return normalizar(estado).primeiroPrecoInformado;
 }
 
 function precoFoiInformado(estado, valorEsperado) {
@@ -123,6 +132,7 @@ module.exports = {
   normalizar,
   registrarOferta,
   registrarPreco,
+  primeiroPrecoInformado,
   precoFoiInformado,
   registrarReserva,
   registrarPagamento,

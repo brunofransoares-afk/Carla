@@ -1039,6 +1039,21 @@ async function responderEscaladaNaFila(alertaId, resposta) {
   sessao.aguardandoHumanoDesde = null;
   sessao.recadoDoDoutor = { pergunta: alerta.pergunta, resposta: respostaNormalizada };
 
+  // O DR. BRUNO ESCOLHEU UMA OPÇÃO. Se o alerta tinha botões e a resposta é um deles, o
+  // recado vai com o rótulo (é o que a Carla lê) e, quando a opção é um tipo de consulta,
+  // o tipo da conversa é destravado pra ele: o primeiro valor passa a ser o daquele tipo,
+  // e a Carla informa esse valor e segue (a ferramenta aceita a reserva nesse tipo).
+  const opcaoEscolhida = Array.isArray(alerta.opcoes)
+    ? alerta.opcoes.find((o) => o && o.valor === respostaNormalizada) : null;
+  if (opcaoEscolhida) {
+    sessao.recadoDoDoutor.resposta = opcaoEscolhida.rotulo;
+    if (Preco.TIPOS[opcaoEscolhida.valor]) {
+      const estado = EstadoAtendimento.normalizar(sessao.estadoAtendimento);
+      estado.primeiroPrecoInformado = Preco.TIPOS[opcaoEscolhida.valor].centavos;
+      sessao.estadoAtendimento = estado;
+    }
+  }
+
   // "SIM" NUMA PERGUNTA DE PAGAMENTO É O BOTÃO "PAGO". Antes, o Dr. Bruno respondia Sim,
   // a Carla dizia à família que estava confirmado, e a reserva continuava "não paga" no
   // painel (em 10/09 uma venceu assim, 8 minutos depois de ele dizer Sim). Agora o Sim
@@ -1497,6 +1512,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
       pergunta: resultado.escalarPergunta,
       dataPedida: resultado.escalarData,
       horaPedida: resultado.escalarHora,
+      opcoes: resultado.escalarOpcoes,
     });
     console.log(`[ALERTA: ESCALADO PELA IA] ${telefone}: "${resultado.escalar}"`);
     notificarAtencao(sock, {

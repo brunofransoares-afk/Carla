@@ -49,7 +49,7 @@ const queElaLe = fonte
 // A versão antiga vivia só dentro da regra do motivo da consulta, e por isso não pegou.
 {
   const dentroDaRegraGeral = fonte.indexOf('VOCÊ NUNCA "ADIANTA" NADA');
-  const dentroDaRegraDoMotivo = fonte.indexOf("QUEM PEDE PRA AGENDAR SEM DIZER O MOTIVO");
+  const dentroDaRegraDoMotivo = fonte.indexOf("QUEM PEDE PRA AGENDAR, COM OU SEM MOTIVO");
   ok(dentroDaRegraGeral >= 0 && dentroDaRegraGeral < dentroDaRegraDoMotivo,
     "2. a regra geral vem ANTES da específica, então vale pra conversa inteira");
 }

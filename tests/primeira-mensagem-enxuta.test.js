@@ -77,8 +77,10 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
 {
   ok(/O PREÇO NA PRIMEIRA MENSAGEM DA CONVERSA:/.test(SEM_COMENTARIO),
     "4. a regra do preço agora sabe que existe um caso em que ela é curta");
-  ok(/O espaço da criança no sistema NÃO entra aqui/.test(SEM_COMENTARIO),
-    "4b. e o que sai é o portal, que é o quarto assunto de uma mensagem que já tem três");
+  ok(/por isso a primeira mensagem não tem faixa etária, currículo nem o espaço da criança no sistema/.test(SEM_COMENTARIO),
+    "4b. e o que sai é o portal, que seria o quarto assunto de uma mensagem que já tem três");
+  ok(/e o MENU dos três tipos \(ver COMO CONDUZIR\), e NENHUM valor/.test(SEM_COMENTARIO),
+    "4e. a primeira mensagem com pergunta de preço termina no menu, sem valor: a família escolhe antes (10/09)");
   ok(/[Qq]uem perguntou "quanto custa" não veio fazer tour do consultório/.test(SEM_COMENTARIO),
     "4c. com o motivo escrito");
   ok(/seguido de "O atendimento é particular\. A consulta de puericultura é R\$ 450, em Pix ou cartão via link de pagamento\."/.test(SEM_COMENTARIO),
@@ -89,11 +91,11 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
 {
   // O portal é bom e foi construído pra ser mostrado. Ele não podia sumir da conversa, só
   // sair da mensagem mais cheia dela.
-  ok(/Isso vale só na primeira mensagem: perguntou o preço no meio da conversa, use a descrição inteira/.test(SEM_COMENTARIO),
-    "5. o escopo está escrito, senão ela corta o portal pra sempre");
+  ok(/o valor daquele tipo vem na mensagem seguinte, com a descrição inteira daquele tipo \(REGRA SOBRE PREÇO\)/.test(SEM_COMENTARIO),
+    "5. depois da escolha, a mensagem do valor traz a descrição inteira do tipo, não a cortada");
   ok(/além de um espaço só da criança no sistema, onde guarda os exames e a carteira de vacinação/.test(SEM_COMENTARIO),
     "5b. a descrição completa continua existindo pro caso normal");
-  ok(/Ele entra depois, se a conversa seguir e o assunto encaixar \(rotina, vacina, recém-nascido\)/.test(SEM_COMENTARIO),
+  ok(/O espaço da criança entra depois, se a conversa seguir e o assunto encaixar \(rotina, vacina, recém-nascido\)/.test(SEM_COMENTARIO),
     "5c. e diz quando ele volta, em vez de só mandar tirar");
 }
 

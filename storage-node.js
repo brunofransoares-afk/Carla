@@ -910,7 +910,7 @@ function lerAlertas() {
 // dataPedida e horaPedida só existem quando a pergunta é sobre abrir um horário que a grade
 // não tem. Com elas o botão "Sim" do painel cria o horário extra junto, senão a Carla
 // prometeria um horário que a ferramenta ia recusar na hora de marcar.
-function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", pergunta = null, dataPedida = null, horaPedida = null }) {
+function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", pergunta = null, dataPedida = null, horaPedida = null, opcoes = null }) {
   const registro = {
     // Precisa de identidade pra o painel conseguir responder um alerta específico. Os alertas
     // antigos não têm, e tudo bem: não dá pra responder alerta de antes desta mudança.
@@ -921,6 +921,10 @@ function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", perg
     registro.pergunta = String(pergunta).slice(0, 300);
     if (dataPedida) registro.dataPedida = dataPedida;
     if (horaPedida) registro.horaPedida = horaPedida;
+    // Alternativas viram botões no painel, uma por opção (ex: os três tipos de consulta).
+    if (Array.isArray(opcoes) && opcoes.length >= 2) {
+      registro.opcoes = opcoes.slice(0, 4).map((o) => ({ rotulo: String(o.rotulo || "").slice(0, 60), valor: String(o.valor || "").slice(0, 40) }));
+    }
   }
   atualizarJSON(ARQ_ALERTAS, [], (lista) => { lista.push(registro); });
   return registro;

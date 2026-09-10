@@ -52,6 +52,16 @@ function tipoValido(tipo) {
   return Object.prototype.hasOwnProperty.call(TIPOS, String(tipo || ""));
 }
 
+// De que tipo é um valor. R$ 350 e R$ 600 são os dois preços da urgência; os outros são
+// um por tipo. Serve pra saber qual tipo a conversa travou pelo primeiro valor dito.
+function tipoDoValor(centavos) {
+  const c = Number(centavos);
+  for (const [tipo, def] of Object.entries(TIPOS)) {
+    if (def.centavos === c || def.fimDeSemanaCentavos === c) return tipo;
+  }
+  return null;
+}
+
 function permiteTeleconsulta(tipo) {
   return tipoValido(tipo) && TIPOS[tipo].teleconsulta === true;
 }
@@ -87,4 +97,4 @@ function valoresConhecidos() {
   return [...lista].sort((a, b) => a - b);
 }
 
-module.exports = { TIPOS, precoDaConsulta, valoresConhecidos, tipoValido, permiteTeleconsulta, ehFimDeSemana, reais };
+module.exports = { TIPOS, precoDaConsulta, valoresConhecidos, tipoValido, tipoDoValor, permiteTeleconsulta, ehFimDeSemana, reais };
