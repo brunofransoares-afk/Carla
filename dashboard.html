@@ -498,7 +498,7 @@
     <button class="kpi" data-ir="familias" data-filtro="lead"><div class="kpi-rotulo">Leads quentes</div><div class="kpi-valor" id="kpi-leads">0</div><div class="kpi-detalhe">falaram nas últimas 48 h</div></button>
     <button class="kpi" data-ir="familias" data-filtro="pos_consulta"><div class="kpi-rotulo">Pós-consulta</div><div class="kpi-valor" id="kpi-pos">0</div><div class="kpi-detalhe">dentro dos 30 dias</div></button>
     <button class="kpi atencao" data-ir="familias" data-filtro="retorno_proximo"><div class="kpi-rotulo">Retornos a avisar</div><div class="kpi-valor" id="kpi-retornos">0</div><div class="kpi-detalhe">3 ou 6 meses chegando</div></button>
-    <button class="kpi" data-ir="funil"><div class="kpi-rotulo">Conversão</div><div class="kpi-valor" id="kpi-conversao">0%</div><div class="kpi-detalhe" id="kpi-conversao-detalhe">leads particulares</div></button>
+    <button class="kpi" data-ir="funil"><div class="kpi-rotulo">Conversão</div><div class="kpi-valor" id="kpi-conversao">0%</div><div class="kpi-detalhe" id="kpi-conversao-detalhe">leads particulares, desde o começo</div></button>
   </div>
 
   <nav class="abas" id="abas" role="tablist">
@@ -1815,8 +1815,20 @@
     document.getElementById("conversao-detalhe").textContent = c.base === 0
       ? "Sem dados ainda."
       : `${c.fecharam} de ${c.base} leads particulares fecharam consulta`;
-    document.getElementById("kpi-conversao").textContent = `${c.taxa}%`;
-    document.getElementById("kpi-conversao-detalhe").textContent = c.base === 0 ? "sem dados ainda" : `${c.fecharam} de ${c.base} leads particulares`;
+  }
+
+  // O número do topo é DESDE O COMEÇO, não o período da aba Funil: quem fechou há dois
+  // meses continua sendo conversão. O anel da aba segue o período escolhido lá.
+  async function atualizarConversaoGeral() {
+    try {
+      const resp = await fetch("/api/funil?periodo=tudo");
+      const f = await resp.json();
+      const c = (f && f.conversaoParticular) || { base: 0, fecharam: 0, taxa: 0 };
+      document.getElementById("kpi-conversao").textContent = `${c.taxa}%`;
+      document.getElementById("kpi-conversao-detalhe").textContent = c.base === 0 ? "sem dados ainda" : `${c.fecharam} de ${c.base} leads particulares, desde o começo`;
+    } catch (e) {
+      // silencioso, como o funil
+    }
   }
 
   // ---- Funil ---------------------------------------------------------------
@@ -2011,6 +2023,7 @@
   atualizar();
   atualizarStatusBot();
   atualizarFunil();
+  atualizarConversaoGeral();
   atualizarCrm();
   setInterval(atualizar, 8000);
   setInterval(atualizarStatusBot, 5000);
@@ -2019,6 +2032,7 @@
   // Mais devagar que o resto: o funil lê um arquivo que só cresce, e ninguém precisa dele
   // atualizado de 8 em 8 segundos.
   setInterval(atualizarFunil, 60000);
+  setInterval(atualizarConversaoGeral, 60000);
 
   // Registra o service worker — é o que faz o navegador oferecer "Instalar" o painel
   // como app no PC (e no celular). Não muda nada no funcionamento normal da página.

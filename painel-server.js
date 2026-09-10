@@ -268,9 +268,15 @@ async function recuperarCancelamentosNaoEnfileirados() {
 // porque só entra quem ainda não tem virou_paciente vigente.
 function reconciliarConversoesDePacientes() {
   try {
+    // "Paciente" aqui é o que o painel MOSTRA como paciente: marcado no botão OU salvo com
+    // nome no celular do Dr. Bruno (menos quem ele forçou como não-paciente). A primeira
+    // versão contava só o botão, e o painel subiu com 18 pacientes e "1 de 15" na conversão.
+    // Só entra quem tem sessão (falou com a Carla); a função abaixo já filtra isso.
+    const sessoes = Storage.lerSessoes();
+    const pacientes = Object.keys(sessoes).filter((telefone) => Storage.ehPacienteNoPainel(telefone));
     const pendentes = Crm.pacientesSemConversao({
-      pacientesManuais: Storage.lerPacientesManuais(),
-      sessoes: Storage.lerSessoes(),
+      pacientesManuais: pacientes,
+      sessoes,
       eventos: Eventos.lerEventos({}),
     });
     for (const p of pendentes) Eventos.registrar("virou_paciente", p.telefone, { origem: "retroativo" }, p.em);

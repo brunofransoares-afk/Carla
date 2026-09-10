@@ -382,6 +382,16 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   eq(lista.find((p) => p.telefone === "+31").em.toISOString(), "2026-08-01T10:00:00.000Z", "13f. datado na última conversa, pra cair no período certo do funil");
   ok(/function reconciliarConversoesDePacientes\(\)/.test(PAINEL) && /reconciliarConversoesDePacientes\(\);\s*\n\s*const timerReconciliarConversoes = setInterval\(reconciliarConversoesDePacientes, 10 \* 60_000\)/.test(PAINEL), "13g. o painel roda isso ao subir e a cada 10 minutos");
   ok(/Eventos\.registrar\("virou_paciente", p\.telefone, \{ origem: "retroativo" \}, p\.em\)/.test(PAINEL), "13h. gravando com a data certa e a origem marcada");
+  // 10/09, segunda rodada: o painel subiu com 18 pacientes e "1 de 15". A retroativa só
+  // olhava o botão; os pacientes dele vêm do contato salvo no celular. Agora vale o que o
+  // painel mostra como paciente, pela mesma função que pinta a etiqueta.
+  const reconcilia = PAINEL.slice(PAINEL.indexOf("function reconciliarConversoesDePacientes()"), PAINEL.indexOf("async function atenderRequisicao("));
+  ok(/const pacientes = Object\.keys\(sessoes\)\.filter\(\(telefone\) => Storage\.ehPacienteNoPainel\(telefone\)\);/.test(reconcilia), "13i. a retroativa conta quem o PAINEL mostra como paciente (botão ou nome salvo no celular), não só o botão");
+  ok(/pacientesManuais: pacientes,/.test(reconcilia) && !/pacientesManuais: Storage\.lerPacientesManuais\(\)/.test(reconcilia), "13j. e passa essa lista, não a do botão");
+  ok(/fetch\("\/api\/funil\?periodo=tudo"\)/.test(JS) && /async function atualizarConversaoGeral\(\)/.test(JS), "13k. o número do topo é desde o começo: quem fechou há dois meses continua sendo conversão");
+  ok(/leads particulares, desde o começo/.test(JS), "13l. e diz isso na tela");
+  ok(/setInterval\(atualizarConversaoGeral, 60000\)/.test(JS), "13m. atualizado sozinho");
+  ok(!/document\.getElementById\("kpi-conversao"\)\.textContent = `\$\{c\.taxa\}%`;\s*\n\s*document\.getElementById\("kpi-conversao-detalhe"\)\.textContent = c\.base === 0 \? "sem dados ainda" : `\$\{c\.fecharam\} de \$\{c\.base\} leads particulares`;/.test(JS), "13n. o anel da aba Funil não sobrescreve mais o número do topo com o período dele");
 }
 
 console.log(`\npainel-crm: ${passou} passaram, ${falhou} falharam`);
