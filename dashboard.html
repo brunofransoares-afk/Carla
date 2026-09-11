@@ -1485,6 +1485,16 @@
         botao.textContent = "Enviar";
         return;
       }
+      // Marcou "a Carla continua" num número silenciado? A mensagem foi, mas a Carla não
+      // vai responder: o silêncio do painel é mais forte. Melhor dizer do que deixar você
+      // esperando uma resposta que não vem.
+      if (carlaContinua && r.silenciado) {
+        aviso.textContent = "Mensagem enviada. A Carla NÃO vai responder: este número está silenciado no painel.";
+        botao.disabled = false;
+        botao.textContent = "Enviar";
+        campo.value = "";
+        return;
+      }
       fecharCaixaDeMensagem(caixa);
     } catch (e) {
       aviso.textContent = "Não enviou: sem conexão com o painel.";

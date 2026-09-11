@@ -481,6 +481,10 @@ function sessaoPadrao(telefone) {
     historico: [],
     aguardandoHumano: false,
     aguardandoHumanoDesde: null,
+    // Pausa que o Dr. Bruno pediu ao mandar uma mensagem pelo painel. É diferente da espera
+    // da escalada: aquela expira em 2h sozinha, esta só termina no botão "Retomar". A tela
+    // promete "a Carla fica quieta nessa conversa até você retomar", e agora é verdade.
+    pausadaPeloDoutor: false,
     recadoDoDoutor: null,
     estadoAtendimento: EstadoAtendimento.reiniciarConversa(),
     triagemPendente: null,
@@ -1056,8 +1060,10 @@ async function responderEscaladaNaFila(alertaId, resposta) {
 
   const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
   // Tira do silêncio: foi a escalada que parou a conversa, e ela acabou de ser resolvida.
+  // Vale também pra pausa manual: responder a escalada é devolver a conversa pra Carla.
   sessao.aguardandoHumano = false;
   sessao.aguardandoHumanoDesde = null;
+  sessao.pausadaPeloDoutor = false;
   sessao.recadoDoDoutor = { pergunta: alerta.pergunta, resposta: respostaNormalizada };
 
   // O DR. BRUNO ESCOLHEU UMA OPÇÃO. Se o alerta tinha botões e a resposta é um deles, o
@@ -1278,18 +1284,39 @@ async function mensagemManual(telefone, texto, { carlaContinua = false } = {}) {
   if (!limpo) return { ok: false, motivo: "Mensagem vazia." };
   if (limpo.length > LIMITE_MENSAGEM_MANUAL) return { ok: false, motivo: `Mensagem longa demais (máximo ${LIMITE_MENSAGEM_MANUAL} caracteres).` };
   if (!sockAtivo) return { ok: false, motivo: "WhatsApp desconectado." };
+  // NA FILA DESTE TELEFONE. Fora dela, a Carla podia estar montando uma resposta com a
+  // sessão lida antes: ela terminava depois, gravava o estado velho por cima e a mensagem
+  // do Dr. Bruno sumia do histórico, junto com a pausa que ela devia ter criado.
+  return filaMensagens.enfileirar(telefone, () => mensagemManualNaFila(telefone, limpo, carlaContinua));
+}
 
+async function mensagemManualNaFila(telefone, limpo, carlaContinua) {
+  if (!sockAtivo) return { ok: false, motivo: "WhatsApp desconectado." };
   const jid = telefone.replace("+", "") + "@s.whatsapp.net";
   const agora = new Date();
+  // Lida DENTRO da fila: é aqui que o estado atual existe de verdade.
   const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
   // Cala ANTES de enviar: se a família responder no segundo seguinte, a Carla já está quieta.
-  if (!carlaContinua) {
+  if (carlaContinua) {
+    // "A Carla continua a conversa" tem que valer mesmo quando a conversa JÁ estava pausada
+    // (escalada anterior, ou outra mensagem manual). Sem isto, o convite saía, a família
+    // respondia, e a resposta dela morria no silêncio com a Carla marcada como pausada.
+    sessao.aguardandoHumano = false;
+    sessao.aguardandoHumanoDesde = null;
+    sessao.pausadaPeloDoutor = false;
+  } else {
     sessao.aguardandoHumano = true;
     sessao.aguardandoHumanoDesde = agora.toISOString();
+    sessao.pausadaPeloDoutor = true;
   }
   sessao.historico = [...sessao.historico, { role: "assistant", content: limpo }].slice(-24);
   sessao.ultimaAtividade = agora.toISOString();
   Storage.salvarSessao(telefone, sessao);
+
+  // Contato silenciado no painel nunca recebe resposta da Carla, nem com a caixa marcada:
+  // o silêncio é uma decisão explícita e mais forte. Quem chamou precisa saber disso, senão
+  // a tela promete uma coisa e o bot faz outra.
+  const carlaVaiResponder = carlaContinua && !Storage.contatoSilenciado(telefone);
 
   try {
     await enviarResposta(sockAtivo, jid, telefone, limpo, true, {
@@ -1297,7 +1324,7 @@ async function mensagemManual(telefone, texto, { carlaContinua = false } = {}) {
       aposPersistir: () => Eventos.registrar("mensagem_manual", telefone, { trecho: Eventos.trecho(limpo) }, agora),
     });
     console.log(`[MENSAGEM MANUAL] ${telefone}: "${limpo.slice(0, 80)}"`);
-    return { ok: true };
+    return { ok: true, carlaVaiResponder, silenciado: Storage.contatoSilenciado(telefone) };
   } catch (erro) {
     console.error("[MENSAGEM MANUAL] Erro:", erro.message);
     return { ok: false, motivo: erro.message };
@@ -1411,7 +1438,10 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
   // passado tempo suficiente (2h) sem ninguém dar seguimento, aí retoma sozinha.
   if (sessao.aguardandoHumano) {
     const desde = sessao.aguardandoHumanoDesde ? new Date(sessao.aguardandoHumanoDesde) : null;
-    const expirou = desde && (now - desde > AGUARDANDO_HUMANO_EXPIRA_MS);
+    // A pausa que o Dr. Bruno pediu no painel NÃO expira: a tela promete que a Carla fica
+    // quieta até ele retomar, e antes ela voltava sozinha depois de 2h. As 2h continuam
+    // valendo pra espera da escalada, que é onde elas existem pra não travar a conversa.
+    const expirou = !sessao.pausadaPeloDoutor && desde && (now - desde > AGUARDANDO_HUMANO_EXPIRA_MS);
     if (!expirou) {
       console.log(`[SILÊNCIO PROPOSITAL] ${telefone} — aguardando atendimento humano.`);
       return;
