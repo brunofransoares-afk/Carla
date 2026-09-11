@@ -462,13 +462,37 @@ function listarSlotsExtras(now = new Date()) {
 // A grade padrão MAIS os horários extras — é o que o resto do sistema deve usar como
 // "todos os horários que existem", pra um extra poder ser oferecido e confirmado igual
 // a qualquer outro.
+// Os horários que só aceitam vídeo, pela chave do HORÁRIO (data + hora), não pelo id. A
+// restrição é do horário: tanto faz se ela chegou por um extra ou por um slot da grade.
+function horariosSoTeleconsulta(now = new Date()) {
+  return new Set(listarSlotsExtras(now)
+    .filter((s) => s.soTeleconsulta)
+    .map((s) => chaveHorarioReal(s.date, s.time)));
+}
+
+// Tira de uma lista de horários os que são só de vídeo, quando a consulta não é por vídeo.
+// Vale pra grade também: sem isto, um "só teleconsulta" aberto em cima de um horário normal
+// continuava sendo oferecido pra quem vai ao consultório.
+function semHorarioDeVideo(slots, modalidade, now = new Date()) {
+  if (modalidade === "teleconsulta") return slots;
+  const restritos = horariosSoTeleconsulta(now);
+  return (slots || []).filter((s) => s && !restritos.has(chaveHorarioReal(s.date, s.time)));
+}
+
 function slotsPossiveisComExtras(now = new Date()) {
   const unicos = new Map();
+  const restritos = horariosSoTeleconsulta(now);
   // A grade vem primeiro: se alguém abriu um extra exatamente em cima dela, preservamos o
-  // slot canônico da grade e descartamos só a representação duplicada do extra.
+  // slot canônico da grade (o id não muda) e descartamos a representação duplicada do extra.
+  // A RESTRIÇÃO, essa, não se descarta. Antes ela ia embora junto: o painel mostrava o
+  // horário como normal e a reserva presencial passava, apesar de a marca estar gravada
+  // (auditoria de 10/09, problema 7). Agora ela é transferida pro slot que fica.
   for (const slot of [...Agenda.gerarSlotsPossiveis(now), ...listarSlotsExtras(now)]) {
     const chave = chaveHorarioReal(slot.date, slot.time);
-    if (!unicos.has(chave)) unicos.set(chave, slot);
+    if (unicos.has(chave)) continue;
+    unicos.set(chave, restritos.has(chave) && !slot.soTeleconsulta
+      ? { ...slot, soTeleconsulta: true, label: `${slot.label} (só teleconsulta)` }
+      : slot);
   }
   return [...unicos.values()];
 }
@@ -1352,7 +1376,7 @@ module.exports = {
   lerBloqueios, alternarBloqueioDia,
   lerBloqueiosHorarios, alternarBloqueioHorario, listarHorariosDoDia,
   lerHorariosExtras, adicionarHorarioExtra, removerHorarioExtra,
-  listarSlotsExtras, slotsPossiveisComExtras, extrasDisponiveis,
+  listarSlotsExtras, slotsPossiveisComExtras, extrasDisponiveis, horariosSoTeleconsulta, semHorarioDeVideo,
   listarContatosRecentes, metricasConversao,
   lerContatosSilenciados, contatoSilenciado, silenciarContato, dessilenciarContato,
   registrarContatoWhatsapp, listarTodosContatos, ehPacienteConhecido,
