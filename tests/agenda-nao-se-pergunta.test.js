@@ -89,5 +89,44 @@ const DO_PRINT = "O Dr. Bruno tem um formato de acompanhamento que ele apresenta
   ok(posTrava > 0 && posSilencio > posTrava, "4e. antes do comando de silêncio, que é a última coisa que mexe no texto");
 }
 
+// ------------------------------------------------- 5. operação na consulta que já existe PASSA
+{
+  // Auditoria de 10/09, problema 8: a trava trocava "Posso cancelar a consulta marcada?" por
+  // "A consulta de X já está marcada pra sexta às 14h.". A pergunta que CONCLUI o cancelamento
+  // desaparecia, e o fluxo de dois turnos (preparar, confirmar, cancelar) ficava sem o turno
+  // do meio. Perguntar se a consulta existe é o defeito; perguntar o que fazer com ela não é.
+  const consulta = { crianca: "Miguel", diaLabel: "sexta (12/09) às 14:00" };
+  const intacta = (texto, motivo) => {
+    const r = A.corrigirPerguntaDeAgenda(texto, consulta);
+    ok(r.corrigiu === false && r.texto === texto, motivo);
+  };
+  intacta("Posso cancelar a consulta marcada?", "5. a pergunta do cancelamento sobrevive inteira");
+  intacta("Confirma que quer cancelar a consulta de Miguel em sexta (12/09) às 14:00?", "5b. e a frase exata que o prompt manda escrever no cancelamento (essa nem chega a parecer pergunta de agenda, mas fica fixada)");
+  intacta("Quer remarcar a consulta marcada, ou fica assim?", "5c. remarcar também");
+  intacta("Posso desmarcar a consulta agendada?", "5d. desmarcar também");
+  intacta("Posso transferir a consulta agendada?", "5e. transferir também");
+  intacta("Prefere manter a consulta marcada, ou vemos outro dia?", "5e2. manter também");
+  intacta("Quer adiar a consulta agendada?", "5f. adiar também");
+
+  // E a trava continua pegando o que ela existe pra pegar.
+  for (const frase of [
+    "Você já tem uma consulta agendada, ou gostaria de marcar?",
+    "Você já tem consulta marcada comigo?",
+    "Já possui horário agendado?",
+  ]) {
+    const r = A.corrigirPerguntaDeAgenda(frase, consulta);
+    ok(r.corrigiu === true && /já está marcada pra sexta \(12\/09\) às 14:00/.test(r.texto), `5g. "${frase}" continua sendo trocada pela resposta da agenda`);
+  }
+
+  // A veto é por FRASE: uma pergunta indevida no mesmo texto de uma frase sobre cancelamento
+  // continua caindo, senão bastaria a IA citar "cancelar" em qualquer lugar pra escapar.
+  const misto = A.corrigirPerguntaDeAgenda("Você já tem consulta marcada?\n\nSe quiser, posso cancelar a consulta marcada de sexta.", consulta);
+  ok(misto.corrigiu === true, "5h. a veto vale frase a frase: a pergunta indevida ao lado de uma frase de cancelamento continua caindo");
+  ok(/posso cancelar a consulta marcada de sexta/.test(misto.texto), "5i. e a frase legítima do mesmo texto fica");
+  ok(!/Você já tem consulta marcada\?/.test(misto.texto), "5j. enquanto a indevida sai");
+
+  ok(/OPERACAO_NA_CONSULTA\.test\(frase\)\) return false;/.test(fs.readFileSync(path.join(__dirname, "..", "agenda-nao-se-pergunta.js"), "utf8")), "5k. a veto roda ANTES do teste da pergunta, não depois");
+}
+
 console.log(`\nagenda-nao-se-pergunta: ${passou} passaram, ${falhou} falharam`);
 if (falhou) { erros.forEach((e) => console.log("  FALHOU: " + e)); process.exit(1); }
