@@ -212,11 +212,20 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
 
 // ------------------------------------------------- 10. a tela
 {
-  ok(/linear-gradient\(180deg, var\(--azul-topo\) 0%, var\(--azul-meio\) 42%, var\(--azul-fundo\) 100%\)/.test(CSS), "10. fundo azul-marinho escurecendo do topo pro fundo");
-  ok(/--azul-topo: #102a5c;/.test(CSS) && /--azul-fundo: #040a1c;/.test(CSS), "10b. os dois azuis");
-  ok(/--ouro: #d4b060;/.test(CSS) && /h1, h2, h3 \{[^}]*color: var\(--ouro\)/.test(CSS), "10c. títulos em dourado");
-  ok(/--texto: #efe3c2;/.test(CSS), "10d. texto corrido em dourado pálido, pra continuar legível");
-  ok(!/#1e3324|#274733|#0b1610/.test(CSS), "10e. o verde antigo saiu inteiro");
+  // Paleta medida no print da Oculoplastic Mentoring, pixel por pixel: nada entra, nada sai.
+  ok(/linear-gradient\(180deg, var\(--fundo-topo\) 0%, var\(--fundo-meio\) 45%, var\(--fundo-base\) 100%\)/.test(CSS), "10. fundo verde-petroleo escurecendo do topo pro pe");
+  ok(/--fundo-topo: #0a2129;/.test(CSS) && /--fundo-meio: #071921;/.test(CSS) && /--fundo-base: #020a0e;/.test(CSS), "10b. os tres tons do fundo");
+  ok(/--cartao: #0a2129;/.test(CSS) && /--cartao-borda: #414a4c;/.test(CSS) && /\.cartao \{[^}]*background: var\(--cartao\);[^}]*border: 1px solid var\(--cartao-borda\);/s.test(CSS), "10c. cartao solido, com a borda do print");
+  ok(/--titulo: #fcf4e8;/.test(CSS) && /h1, h2, h3 \{[^}]*font-weight: 700;[^}]*color: var\(--titulo\)/.test(CSS), "10d. titulos em branco quente, negrito");
+  ok(/--texto-fraco: #a9bcc2;/.test(CSS) && /--rotulo: #8fbacb;/.test(CSS) && /\.kpi-rotulo \{[^}]*text-transform: uppercase;[^}]*color: var\(--rotulo\)/.test(CSS), "10e. texto corrido cinza-azulado e rotulos em caixa alta no azul-claro");
+  ok(/--ouro: #fadd7d;/.test(CSS) && /--ouro-claro: #fbde7e;/.test(CSS) && /--ouro-escuro: #dbb85f;/.test(CSS) && /\.kpi-valor \{[^}]*color: var\(--ouro\)/.test(CSS), "10e2. dourado do print nos numeros");
+  ok(!/#102a5c|#0a1a3d|#040a1c|#d4b060|#edd28a|#a8843a|#efe3c2|#b8a77a|#7d7256|#0b1a3f|--azul-|rgba\(212,176,96|rgba\(95,199,143|rgba\(240,194,102|rgba\(143,182,255|#5fc78f|#6ad39a/.test(TELA), "10e3. o azul-marinho, o dourado antigo e o verde sairam inteiros");
+  ok(/@font-face \{[^}]*font-family: "Montserrat";[^}]*font-weight: 100 900;[^}]*src: url\(\/fontes\/montserrat\.woff2\) format\("woff2"\)/s.test(CSS) && !/Poppins|"Inter"/.test(TELA), "10e4. fonte Montserrat servida pelo painel, sem Poppins nem Inter");
+  ok(/body \{[^}]*font-family: "Montserrat"/s.test(CSS) && /h1, h2, h3 \{[^}]*font-family: "Montserrat"/.test(CSS), "10e5. Montserrat no corpo e nos titulos");
+  ok(fs.existsSync(path.join(__dirname, "..", "fontes", "montserrat.woff2")) && fs.readFileSync(path.join(__dirname, "..", "fontes", "montserrat.woff2")).slice(0, 4).toString("latin1") === "wOF2", "10e6. o arquivo da fonte esta no repositorio e e woff2");
+  ok(/caminhoPedido === "\/fontes\/montserrat\.woff2" && req\.method === "GET"/.test(PAINEL) && /"Content-Type": "font\/woff2"/.test(PAINEL) && PAINEL.indexOf('caminhoPedido === "/fontes/montserrat.woff2"') < PAINEL.indexOf('caminhoPedido.startsWith("/webhook/")'), "10e7. o painel serve a fonte antes da senha, pra tela de entrar tambem");
+  ok(/src: url\(\/fontes\/montserrat\.woff2\)/.test(PAINEL) && /#0a2129 0%, #071921 45%, #020a0e 100%/.test(PAINEL) && /h1 \{[^}]*color: #fcf4e8/.test(PAINEL) && /label \{[^}]*color: #8fbacb/.test(PAINEL) && /content="#0a2129"/.test(PAINEL) && !/#102a5c|#d4b060|#efe3c2|#0b1a3f/.test(PAINEL), "10e8. a tela de entrar usa a mesma paleta e a mesma fonte");
+  ok(/"theme_color": "#0a2129"/.test(fs.readFileSync(path.join(__dirname, "..", "manifest.json"), "utf8")) && /content="#0a2129"/.test(TELA), "10e9. a cor do app instalado acompanha");
   for (const aba of ["visao", "familias", "agenda", "funil"]) ok(new RegExp(`data-aba="${aba}"`).test(TELA), `10f. aba ${aba}`);
   ok(/id="kpi-hoje"/.test(TELA) && /id="kpi-pagamento"/.test(TELA) && /id="kpi-pos"/.test(TELA) && /id="kpi-conversao"/.test(TELA), "10g. os números do topo");
   ok(/id="filtros"/.test(TELA) && /data-filtro="todos"/.test(JS), "10h. filtros por situação");
