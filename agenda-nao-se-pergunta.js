@@ -16,7 +16,16 @@
 // ("...ou gostaria de marcar?"), por isso o teste é na FRASE, não no trecho.
 const PERGUNTA_DE_AGENDA = /(já|ja)\s+(tem|possui|está com|esta com|marcou|agendou|fez)\s+(uma\s+|alguma\s+|a\s+)?(consulta|horário|horario|agendamento)|(tem|possui)\s+(uma\s+|alguma\s+)?(consulta|horário|horario)\s+(agendad[ao]|marcad[ao])|(consulta|horário|horario)\s+(agendad[ao]|marcad[ao])\s*(comigo|com o dr|aqui)?\s*(,|\?|ou)/i;
 
+// PERGUNTAR SE EXISTE NÃO É PERGUNTAR O QUE FAZER COM ELA. "Você já tem consulta marcada?"
+// é a Carla pedindo pra família fazer o trabalho dela. "Confirma que quer cancelar a consulta
+// marcada de quinta?" é a confirmação que o próprio fluxo de cancelamento exige, em dois
+// turnos, e arrancar essa frase deixava o cancelamento sem a pergunta que o conclui
+// (auditoria de 10/09, problema 8). A frase que fala em cancelar, remarcar, desmarcar,
+// adiar, transferir ou confirmar é sobre a consulta que JÁ existe: essa passa.
+const OPERACAO_NA_CONSULTA = /\b(cancelar|cancelo|cancela|cancelamento|desmarcar|desmarco|desmarca|remarcar|remarco|remarca|remarcação|remarcacao|transferir|transfiro|transfere|adiar|adio|adia|antecipar|antecipo|confirmar|confirmo|confirma|manter|mantenho|mantém|mantem|mudar|mudo|muda|trocar|troco|troca)\b/i;
+
 function ehPerguntaDeAgenda(frase) {
+  if (OPERACAO_NA_CONSULTA.test(frase)) return false;
   return /\?/.test(frase) && PERGUNTA_DE_AGENDA.test(frase);
 }
 
@@ -41,4 +50,4 @@ function corrigirPerguntaDeAgenda(texto, consultaProxima = null) {
   return { texto: corpo ? `${corpo}\n\n${fecho}` : fecho, corrigiu: true };
 }
 
-module.exports = { corrigirPerguntaDeAgenda, ehPerguntaDeAgenda, PERGUNTA_DE_AGENDA };
+module.exports = { corrigirPerguntaDeAgenda, ehPerguntaDeAgenda, PERGUNTA_DE_AGENDA, OPERACAO_NA_CONSULTA };
