@@ -144,23 +144,26 @@ function paginaLogin(mensagem = "") {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b1a3f">
+  <meta name="theme-color" content="#0a2129">
   <title>Entrar · Carla CRM</title>
   <style>
+    @font-face { font-family: "Montserrat"; font-style: normal; font-weight: 100 900; font-display: swap;
+      src: url(/fontes/montserrat.woff2) format("woff2"); }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
-      background: linear-gradient(180deg, #102a5c 0%, #0a1a3d 45%, #040a1c 100%); background-color: #040a1c; color: #efe3c2; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    main { width: min(100%, 390px); padding: 30px 24px; border: 1px solid rgba(212,176,96,0.3);
-      border-radius: 22px; background: rgba(255,255,255,0.045); backdrop-filter: blur(20px); box-shadow: 0 20px 60px #0008; }
-    h1 { margin: 0 0 8px; font-size: 27px; color: #d4b060; }
-    p { margin: 0 0 22px; color: #b8a77a; line-height: 1.45; }
+      background: linear-gradient(180deg, #0a2129 0%, #071921 45%, #020a0e 100%); background-color: #020a0e; color: #a9bcc2;
+      font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width: min(100%, 390px); padding: 30px 24px; border: 1px solid #414a4c;
+      border-radius: 22px; background: #0a2129; box-shadow: 0 20px 60px #0008; }
+    h1 { margin: 0 0 8px; font-size: 27px; font-weight: 700; color: #fcf4e8; }
+    p { margin: 0 0 22px; color: #a9bcc2; line-height: 1.45; }
     .aviso { color: #ffb4ab; }
-    label { display: block; margin-bottom: 8px; font-weight: 650; color: #edd28a; }
-    input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid rgba(212,176,96,0.35);
-      border-radius: 13px; background: #050c22; color: #fff; font-size: 18px; outline: none; }
-    input:focus { border-color: #d4b060; box-shadow: 0 0 0 3px #d4b06033; }
-    button { width: 100%; min-height: 50px; margin-top: 16px; border: 0; border-radius: 13px;
-      background: linear-gradient(135deg, #d4b060, #a8843a); color: #10203f; font-size: 17px; font-weight: 750; }
+    label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #8fbacb; }
+    input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid rgba(250,221,124,0.35);
+      border-radius: 13px; background: #06161c; color: #fcf4e8; font-size: 18px; font-family: inherit; outline: none; }
+    input:focus { border-color: #fadd7d; box-shadow: 0 0 0 3px #fadd7d33; }
+    button { width: 100%; min-height: 50px; margin-top: 16px; border: 0; border-radius: 13px; font-family: inherit;
+      background: linear-gradient(135deg, #fbde7e, #dbb85f); color: #0a2129; font-size: 17px; font-weight: 700; letter-spacing: 0.06em; }
   </style>
 </head>
 <body>
@@ -195,6 +198,7 @@ function redirecionar(res, destino) {
 
 const html = fs.readFileSync(path.join(__dirname, "dashboard.html"));
 const PASTA_ICONES = path.join(__dirname, "icons");
+const ARQUIVO_FONTE = path.join(__dirname, "fontes", "montserrat.woff2");
 
 // Repassa pro bot o aviso de que o Dr. Bruno liberou o portal de uma criança no
 // prontuário. Vem antes da checagem de senha de propósito: quem chama é máquina, não
@@ -297,6 +301,15 @@ async function atenderRequisicao(req, res) {
 
   const cliente = Seguranca.identificarCliente(req);
   const caminhoPedido = new URL(req.url, "http://painel.local").pathname;
+
+  // A fonte do painel (Montserrat) mora no repositorio e sai daqui mesmo: o CSP so
+  // aceita origem propria, e a tela de entrar tambem a usa, por isso fica antes da senha.
+  if (caminhoPedido === "/fontes/montserrat.woff2" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "font/woff2", "Cache-Control": "public, max-age=31536000, immutable" });
+    res.end(fs.readFileSync(ARQUIVO_FONTE));
+    return;
+  }
+
   if (caminhoPedido.startsWith("/webhook/")) {
     const limite = limiteWebhook.verificar(cliente);
     if (!limite.permitido) {
