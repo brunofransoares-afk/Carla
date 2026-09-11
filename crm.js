@@ -170,16 +170,44 @@ function somarMeses(dataStr, meses) {
 // Os marcos de retorno da última consulta realizada. Cada um diz quantos dias faltam (negativo
 // se já passou), se o Dr. Bruno já marcou como avisado, e se está pendente: dentro da janela
 // (uma semana antes até três semanas depois) e ainda não avisado.
-function marcosDeRetorno({ ultimaRealizada = null, retornosAvisados = {}, agora = new Date() } = {}) {
-  if (!ultimaRealizada || !ultimaRealizada.data) return [];
-  return MESES_RETORNO.map((meses) => {
-    const data = somarMeses(ultimaRealizada.data, meses);
-    const diasFaltando = -diasEntreDatas(data, agora);
-    const chave = `${ultimaRealizada.data}:${meses}`;
-    const avisadoEm = retornosAvisados[chave] || null;
-    const naJanela = diasFaltando <= AVISO_ANTES_DIAS && diasFaltando >= -AVISO_DEPOIS_DIAS;
-    return { meses, data, chave, diasFaltando, avisadoEm, naJanela, pendente: naJanela && !avisadoEm, crianca: ultimaRealizada.crianca || null, consultaEm: ultimaRealizada.data };
-  });
+// O marco é DA CRIANÇA, não do telefone. Um telefone com dois filhos tinha um retorno só,
+// o da última consulta da casa: a consulta do irmão mais novo zerava a contagem da irmã e o
+// aviso dela sumia da tela sem nunca ter sido dado (auditoria de 10/09, problema 10).
+// Agora conta por criança, a partir da última consulta DELA.
+function chaveDaCrianca(nome) {
+  return String(nome || "").trim().toLocaleLowerCase("pt-BR");
+}
+
+// A última consulta realizada de cada criança daquela família.
+function ultimaPorCrianca(realizadas = []) {
+  const porCrianca = new Map();
+  for (const c of realizadas) {
+    if (!c || !c.data) continue;
+    const k = chaveDaCrianca(c.crianca);
+    const atual = porCrianca.get(k);
+    if (!atual || c.data > atual.data) porCrianca.set(k, c);
+  }
+  return [...porCrianca.values()];
+}
+
+function marcosDeRetorno({ realizadas = null, ultimaRealizada = null, retornosAvisados = {}, agora = new Date() } = {}) {
+  const base = ultimaPorCrianca(Array.isArray(realizadas) && realizadas.length ? realizadas : (ultimaRealizada ? [ultimaRealizada] : []));
+  const marcos = [];
+  for (const consulta of base) {
+    for (const meses of MESES_RETORNO) {
+      const data = somarMeses(consulta.data, meses);
+      const diasFaltando = -diasEntreDatas(data, agora);
+      // A chave nova identifica a criança. A antiga (só data e meses) continua sendo lida:
+      // o que já foi marcado como avisado antes desta mudança não pode voltar a aparecer.
+      const chave = `${chaveDaCrianca(consulta.crianca)}|${consulta.data}:${meses}`;
+      const chaveAntiga = `${consulta.data}:${meses}`;
+      const avisadoEm = retornosAvisados[chave] || retornosAvisados[chaveAntiga] || null;
+      const naJanela = diasFaltando <= AVISO_ANTES_DIAS && diasFaltando >= -AVISO_DEPOIS_DIAS;
+      marcos.push({ meses, data, chave, diasFaltando, avisadoEm, naJanela, pendente: naJanela && !avisadoEm, crianca: consulta.crianca || null, consultaEm: consulta.data });
+    }
+  }
+  // Quem vence antes vem antes; entre duas crianças no mesmo dia, a ordem é do nome.
+  return marcos.sort((a, b) => (a.data + chaveDaCrianca(a.crianca) + a.meses).localeCompare(b.data + chaveDaCrianca(b.crianca) + b.meses));
 }
 
 function nomeDoTipo(tipo) {
@@ -288,7 +316,7 @@ function situacoesDe({ contato, consultas, flags, agora, retornosAvisados = {} }
 
   // Os marcos de 3 e 6 meses contam da ÚLTIMA consulta realizada: uma consulta nova zera a
   // contagem, porque a criança acabou de ser vista.
-  const retornos = marcosDeRetorno({ ultimaRealizada, retornosAvisados, agora });
+  const retornos = marcosDeRetorno({ realizadas, ultimaRealizada, retornosAvisados, agora });
   const retornoPendente = retornos.find((r) => r.pendente) || null;
   if (retornoPendente) {
     lista.push("retorno_proximo");
@@ -576,7 +604,9 @@ function removerConsultaRealizada(arquivo, telefone, id) {
 // O Dr. Bruno mandou o recado (ou decidiu não mandar): o aviso daquele marco some. A chave
 // é "data da consulta:meses", então uma consulta nova gera marcos novos, sem confusão.
 function marcarRetornoAvisado(arquivo, telefone, chave, avisado = true, agora = new Date()) {
-  if (!telefone || !/^\d{4}-\d{2}-\d{2}:(3|6)$/.test(String(chave || ""))) return { ok: false, motivo: "Marco inválido." };
+  // Aceita a chave nova ("criança|data:meses") e a antiga ("data:meses"), que ainda está
+  // gravada nas famílias avisadas antes desta mudança.
+  if (!telefone || !/^(.{0,80}\|)?\d{4}-\d{2}-\d{2}:(3|6)$/.test(String(chave || ""))) return { ok: false, motivo: "Marco inválido." };
   const dados = lerCrm(arquivo);
   const doTelefone = dados.retornos[telefone] || {};
   if (avisado) doTelefone[chave] = agora.toISOString();
@@ -630,7 +660,7 @@ module.exports = {
   MESES_RETORNO, AVISO_ANTES_DIAS, AVISO_DEPOIS_DIAS,
   SITUACOES, ESTAGIOS, MODELOS_POS_CONSULTA, TIPO_NOME,
   consultasDoTelefone, consultasManuaisDoTelefone, todasAsConsultas, estagioDe, situacoesDe, montarCrm, linhaDoTempo,
-  somarMeses, marcosDeRetorno,
+  somarMeses, marcosDeRetorno, ultimaPorCrianca,
   preencherModelo, modelosPara,
   lerCrm, recortarCrmDoTelefone, adicionarNota, removerNota, definirEtiquetas,
   registrarConsultaRealizada, removerConsultaRealizada, marcarRetornoAvisado,

@@ -314,7 +314,8 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(m("2026-03-10")[1].pendente && m("2026-03-10")[1].diasFaltando === 0, "12j. consulta em 10/03: o de 6 meses é hoje");
   const av = m("2026-06-17", { "2026-06-17:3": "2026-09-09T10:00:00Z" })[0];
   ok(!av.pendente && av.avisadoEm && av.naJanela, "12k. marcado como avisado sai da pendência, mas a ficha ainda sabe que está na janela");
-  eq(m("2026-06-17")[0].chave, "2026-06-17:3", "12l. a chave carrega a data da consulta: consulta nova, marcos novos");
+  eq(m("2026-06-17")[0].chave, "léo|2026-06-17:3", "12l. a chave carrega a criança E a data da consulta: consulta nova, marcos novos, e um irmão não apaga o marco do outro");
+  ok(!m("2026-06-17", { "2026-06-17:3": "2026-09-09T10:00:00Z" })[0].pendente, "12l2. e a chave antiga, sem criança, continua sendo lida: quem já foi avisado antes desta mudança não volta pra fila");
 
   // Na lista e no resumo
   const dados = { notas: {}, etiquetas: {}, consultasRealizadas: { "+21": [{ id: "x1", data: "2026-06-17", crianca: "Léo", em: "2026-06-18T00:00:00Z" }] }, retornos: {} };
@@ -468,6 +469,47 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   }
   eq([...new Set(faltando)].join(","), "", "14l. tudo que o painel chama em Storage, Crm e Eventos existe e é função");
   fs.rmSync(path.dirname(RAIZ), { recursive: true, force: true });
+}
+
+// ------------------------------------------------- 15. o retorno é da criança, não do telefone
+{
+  // Auditoria de 10/09, problema 10: os marcos vinham só da última consulta do telefone. Uma
+  // consulta nova de um irmão zerava a contagem da irmã, e o aviso dela sumia da tela sem
+  // nunca ter sido dado. Ana consultou em 17/06 (o marco de 3 meses vence em 7 dias); Bruno
+  // consultou ontem.
+  const realizadas = [
+    { data: "2026-06-17", crianca: "Ana" },
+    { data: "2026-09-09", crianca: "Bruno" },
+  ];
+  const marcos = Crm.marcosDeRetorno({ realizadas, retornosAvisados: {}, agora: AGORA });
+  eq(marcos.length, 4, "15. dois filhos, dois marcos cada: quatro");
+  const daAna = marcos.filter((m) => m.crianca === "Ana");
+  eq(daAna.length, 2, "15b. a Ana tem os dela");
+  ok(daAna.find((m) => m.meses === 3).pendente, "15c. e o de 3 meses dela continua pendente, apesar da consulta do irmão (era isto que sumia)");
+  eq(daAna.find((m) => m.meses === 3).diasFaltando, 7, "15d. com a contagem da consulta DELA, não da mais recente da casa");
+  ok(!marcos.filter((m) => m.crianca === "Bruno").some((m) => m.pendente), "15e. e os do Bruno ainda não vencem, como esperado");
+  eq(marcos[0].data <= marcos[1].data ? "ordenado" : "fora de ordem", "ordenado", "15f. quem vence antes aparece antes");
+
+  // Cada criança tem chave própria: marcar a da Ana não apaga a do Bruno.
+  const chaveAna = daAna.find((m) => m.meses === 3).chave;
+  ok(/^ana\|2026-06-17:3$/.test(chaveAna), "15g. a chave identifica a criança e a consulta dela");
+  const depois = Crm.marcosDeRetorno({ realizadas, retornosAvisados: { [chaveAna]: "2026-09-10T10:00:00Z" }, agora: AGORA });
+  ok(!depois.find((m) => m.crianca === "Ana" && m.meses === 3).pendente, "15h. marcada como avisada, sai da fila");
+  eq(depois.filter((m) => m.crianca === "Bruno" && m.avisadoEm).length, 0, "15i. e os do irmão continuam intocados");
+
+  // Duas consultas da MESMA criança: vale a mais recente dela.
+  const daMesma = Crm.marcosDeRetorno({ realizadas: [{ data: "2026-03-10", crianca: "Ana" }, { data: "2026-06-17", crianca: "Ana" }], agora: AGORA });
+  eq(daMesma.length, 2, "15j. a mesma criança não vira duas");
+  eq(daMesma[0].consultaEm, "2026-06-17", "15k. e conta da consulta mais recente dela");
+  eq(Crm.ultimaPorCrianca(realizadas).length, 2, "15l. a função que agrupa por criança é a mesma, e dá pra testar sozinha");
+  eq(Crm.ultimaPorCrianca([{ data: "2026-01-01", crianca: "Ana" }, { data: "2026-02-02", crianca: "ana " }]).length, 1, "15m. 'Ana' e 'ana ' são a mesma criança: nome é comparado sem caixa nem espaço");
+
+  // A validação da rota aceita a chave nova e a antiga.
+  const arq = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-retorno-")), "crm.json");
+  ok(Crm.marcarRetornoAvisado(arq, "+1", "ana|2026-06-17:3").ok, "15n. a rota aceita a chave nova");
+  ok(Crm.marcarRetornoAvisado(arq, "+1", "2026-06-17:3").ok, "15o. e a antiga, que ainda está gravada nas famílias já avisadas");
+  ok(!Crm.marcarRetornoAvisado(arq, "+1", "qualquer coisa").ok, "15p. e recusa lixo");
+  ok(!Crm.marcarRetornoAvisado(arq, "+1", "ana|2026-06-17:4").ok, "15q. e mês que não existe");
 }
 
 console.log(`\npainel-crm: ${passou} passaram, ${falhou} falharam`);

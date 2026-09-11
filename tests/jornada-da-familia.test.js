@@ -67,7 +67,12 @@ const CONTEXTO = CEREBRO.slice(CEREBRO.indexOf("function montarContextoDoAtendim
   const fonte = SERVER.slice(SERVER.indexOf("const JANELA_ACOMPANHAMENTO_DIAS"), SERVER.indexOf("function sincronizarUltimoAgendamento("));
   const agora = new Date(2026, 8, 10, 12, 0, 0);
   const Agenda = { toDateStr: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` };
-  const mk = (lista) => new Function("Storage", "Agenda", fonte + "\nreturn consultaRecenteDe;")({ lerTodosAgendamentos: () => lista }, Agenda);
+  const Crm = require(path.join(__dirname, "..", "crm.js"));
+  const mk = (lista, manuais = {}) => new Function("Storage", "Agenda", "Crm", "path", "__dirname", fonte + "\nreturn consultaRecenteDe;")(
+    { lerTodosAgendamentos: () => lista, formatarDataBR: (iso) => iso.split("-").reverse().join("/") },
+    Agenda,
+    { lerCrm: () => ({ notas: {}, etiquetas: {}, consultasRealizadas: manuais, retornos: {} }), consultasManuaisDoTelefone: Crm.consultasManuaisDoTelefone },
+    path, __dirname);
   const base = { telefone: "+1", crianca: "Levi", diaLabel: "quinta (10/09) às 14h" };
   eq(mk([{ ...base, data: "2026-09-02", horario: "14:00", estado: "pago" }])("+1", agora).diasDesde, 8, "2h. consulta paga há 8 dias: está na janela");
   eq(mk([{ ...base, data: "2026-09-02", horario: "14:00", estado: "reservado" }])("+1", agora).crianca, "Levi", "2i. reservada e não marcada paga também conta: o Dr. Bruno clica 'pago' no ritmo dele");
@@ -77,6 +82,18 @@ const CONTEXTO = CEREBRO.slice(CEREBRO.indexOf("function montarContextoDoAtendim
   eq(mk([{ ...base, data: "2026-09-02", horario: "14:00", estado: "pago", telefone: "+2" }])("+1", agora), null, "2m. de outro telefone não conta");
   eq(mk([{ ...base, data: "2026-08-20", horario: "09:00", estado: "pago" }, { ...base, data: "2026-09-05", horario: "14:00", estado: "pago", crianca: "Ana" }])("+1", agora).crianca, "Ana", "2n. com duas, vale a mais recente");
   eq(mk([{ ...base, data: "2026-09-02", horario: "14:00", estado: "pago" }, { ...base, data: "2026-09-12", horario: "14:00", estado: "reservado", crianca: "Futuro" }])("+1", agora).crianca, "Levi", "2p. uma consulta futura marcada não esconde a recente: quem passou há 8 dias continua no acompanhamento");
+  // Auditoria de 10/09, problema 9: a consulta que o Dr. Bruno registra na ficha (paciente
+  // antigo, ou consulta combinada por fora) abria o pós-consulta no painel e NÃO chegava à
+  // Carla. A família saía do acompanhamento e voltava a ser tratada como atendimento novo.
+  const manual = { "+1": [{ id: "m1", data: "2026-09-03", crianca: "Théo", tipoConsulta: "puericultura", em: "2026-09-03T12:00:00Z" }] };
+  const soManual = mk([], manual)("+1", agora);
+  ok(soManual && soManual.diasDesde === 7, "2q. consulta registrada à mão há 7 dias entra no acompanhamento da Carla, igual à da agenda");
+  eq(soManual && soManual.crianca, "Théo", "2r. com a criança certa");
+  eq(soManual && soManual.diaLabel, "03/09/2026", "2s. e uma data legível, já que a consulta manual não tem label de agenda");
+  eq(mk([], { "+1": [{ id: "m2", data: "2026-07-01", crianca: "Théo", em: "2026-07-01T12:00:00Z" }] })("+1", agora), null, "2t. e a manual antiga demais fica de fora, pelo mesmo critério");
+  eq(mk([], manual)("+2", agora), null, "2u. a manual de outro telefone não vaza");
+  eq(mk([{ ...base, data: "2026-09-05", horario: "14:00", estado: "pago", crianca: "Ana" }], manual)("+1", agora).crianca, "Ana", "2v. com uma de cada, vale a mais recente, venha de onde vier");
+  ok(/const manuais = Crm\.consultasManuaisDoTelefone\(Crm\.lerCrm\(ARQ_CRM\), telefone\);/.test(SERVER), "2w. e a fonte é a MESMA do painel, não uma cópia da regra");
   ok(/consultaRecente: consultaRecenteDe\(telefone, now\),/.test(SERVER) && /consultaRecente: consultaRecenteDe\(telefone\),/.test(SERVER), "2o. o bot passa nas duas chamadas (mensagem da família e resposta do doutor)");
 }
 
