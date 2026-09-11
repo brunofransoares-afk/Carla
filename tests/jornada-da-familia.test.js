@@ -100,7 +100,7 @@ const CONTEXTO = CEREBRO.slice(CEREBRO.indexOf("function montarContextoDoAtendim
   ok(/agradeça e diga que vai avisar o Dr\. Bruno e que a confirmação chega por aqui/.test(ESTAVEL), "4. quando a família diz que pagou, ela avisa, não 'confere'");
   ok(/sem a palavra "conferir", que soa como desconfiança do comprovante/.test(ESTAVEL), "4b. com o motivo escrito");
   ok(!/diga que o Dr\. Bruno vai conferir/.test(ESTAVEL), "4c. a frase antiga saiu");
-  ok(/com a pergunta "Pagamento da consulta de \[criança\] \(\[horário\]\) recebido\?": o Sim dele confirma a consulta/.test(ESTAVEL), "4d. e a escalada vem com a pergunta certa, que o Sim do painel entende");
+  ok(/Chame escalar_humano com assunto "pagamento", [^\n]*com a pergunta "Pagamento da consulta de \[criança\] \(\[horário\]\) recebido\?"\. O sistema anexa a reserva certa ao alerta, e o Sim dele confirma a consulta/.test(ESTAVEL), "4d. e a escalada vem com assunto \"pagamento\" e a pergunta certa; quem anexa a reserva é a máquina");
   ok(/Nada de "ainda não monitoro desistências": isso é linguagem de sistema, não de consultório\./.test(ESTAVEL), "4e. 'monitorar desistências' virou frase de gente");
   ok(!/a Carla ainda não monitora desistências/.test(ESTAVEL), "4f. a antiga saiu");
   ok(/direta e leve: "Você prefere de manhã ou à tarde\?" \(ver A PERGUNTA DEPOIS DO VALOR\)/.test(ESTAVEL), "4g. o 'ok' depois do valor puxa pro período, igual ao resto do prompt");

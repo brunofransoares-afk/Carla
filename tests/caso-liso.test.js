@@ -120,8 +120,8 @@ const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREB
   eq(filtra({ opcoes: [{ rotulo: "", valor: "x" }, ...tres] }, "Qual?").length, 3, "5g. opção sem rótulo é descartada");
 
   ok(/escalarOpcoes: ctx\.escalarOpcoes \|\| null,/.test(CEREBRO), "5h. sai no resultado da IA");
-  ok(/opcoes: resultado\.escalarOpcoes,/.test(SERVER), "5i. o bot grava no alerta");
-  ok(/opcoes = null \}\) \{/.test(STORAGE) && /registro\.opcoes = opcoes\.slice\(0, 4\)/.test(STORAGE), "5j. o storage persiste, com teto");
+  ok(/opcoes: pagamento \? \(pagamento\.opcoes \|\| null\) : resultado\.escalarOpcoes,/.test(SERVER), "5i. o bot grava no alerta (fora do assunto pagamento, que tem as opções da máquina)");
+  ok(/opcoes = null, pagamentoSlotId = null \}\) \{/.test(STORAGE) && /registro\.opcoes = opcoes\.slice\(0, 4\)/.test(STORAGE), "5j. o storage persiste, com teto");
   ok(/al\.opcoes\.map\(\(o\) => `<button class="btn-opcao" data-alerta="\$\{escapeHtml\(al\.id\)\}" data-resposta="\$\{escapeHtml\(o\.valor\)\}">\$\{escapeHtml\(o\.rotulo\)\}<\/button>`\)/.test(TELA), "5k. o painel desenha um botão por opção, escapado");
   ok(/Array\.isArray\(al\.opcoes\) && al\.opcoes\.length >= 2\s*\n\s*\? al\.opcoes\.map/.test(TELA) && /: `<button class="btn-sim"/.test(TELA), "5l. com opções, os botões são elas; sem, continua Sim e Não");
 

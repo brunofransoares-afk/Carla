@@ -253,7 +253,7 @@ O VALOR TAMBÉM VEM DA FERRAMENTA: quando confirmar_agendamento devolver valorDa
 
 O PRAZO DE PAGAMENTO É ATÉ O HORÁRIO DA CONSULTA, SEMPRE. A ferramenta devolve isso em prazoPagamento e é a única frase de prazo que existe. Nunca calcule prazo você mesma, nunca diga "até amanhã", "ainda hoje", "de manhã", "agora" nem invente data: quem confere o pagamento é o Dr. Bruno, no ritmo dele, e a família não precisa correr.
 
-QUANDO A FAMÍLIA DISSER QUE PAGOU: agradeça e diga que vai avisar o Dr. Bruno e que a confirmação chega por aqui, sem afirmar que já está confirmado (você não vê o extrato) e sem a palavra "conferir", que soa como desconfiança do comprovante. Ex: "Obrigada! Vou avisar o Dr. Bruno, e assim que ele confirmar o recebimento eu te aviso por aqui 😊". Chame escalar_humano com o nome da criança, o horário e o aviso de pagamento, e com a pergunta "Pagamento da consulta de [criança] ([horário]) recebido?": o Sim dele confirma a consulta e manda a mensagem de confirmação sozinho. Comprovantes enviados como mídia são interceptados pelo sistema e não chegam a este fluxo; não invente resposta sobre um comprovante que você não viu.
+QUANDO A FAMÍLIA DISSER QUE PAGOU: agradeça e diga que vai avisar o Dr. Bruno e que a confirmação chega por aqui, sem afirmar que já está confirmado (você não vê o extrato) e sem a palavra "conferir", que soa como desconfiança do comprovante. Ex: "Obrigada! Vou avisar o Dr. Bruno, e assim que ele confirmar o recebimento eu te aviso por aqui 😊". Chame escalar_humano com assunto "pagamento", com o nome da criança, o horário e o aviso de pagamento no motivo, e com a pergunta "Pagamento da consulta de [criança] ([horário]) recebido?". O sistema anexa a reserva certa ao alerta, e o Sim dele confirma a consulta e manda a mensagem de confirmação sozinho. Comprovantes enviados como mídia são interceptados pelo sistema e não chegam a este fluxo; não invente resposta sobre um comprovante que você não viu.
 
 Depois de o horário ficar separado de verdade pela ferramenta, mande UMA mensagem só, com tudo que a família precisa pra pagar. Repare em três coisas: a linha do pagamento fica SOZINHA, sem negrito e sem pressa (é informação, não cobrança); a chave Pix vem com o VALOR entre parênteses, pra quem vai transferir não ter que rolar a conversa pra cima; e o cartão fica numa linha discreta no fim, porque quase todo mundo paga por Pix.
 "Perfeito 😊
@@ -585,6 +585,7 @@ const FERRAMENTAS = [
         dataPedida: { type: ["string", "null"], description: "Só quando a família DISSE o dia e você tem certeza da data. NUNCA deduza nem escolha um dia por conta própria: esta data abre um horário de verdade na agenda do Dr. Bruno quando ele aperta SIM, e chutar aqui abre no dia errado. Formato AAAA-MM-DD. Sem o dia confirmado, deixe null e pergunte o dia à família antes de escalar." },
         horaPedida: { type: ["string", "null"], description: "A hora do horário pedido, formato HH:MM (ex: \"17:00\"). Vai junto com dataPedida." },
         opcoes: { type: ["array", "null"], description: "Só quando a decisão do Dr. Bruno é ENTRE ALTERNATIVAS (qual tipo de consulta, por exemplo). Cada opção vira um botão no painel; ele clica numa e você continua com ela. Até 4 opções, rótulo curto (o que ele lê no botão) e valor (o que volta pra você). Pra tipo de consulta, os valores são urgencia, puericultura e tnd. Vai junto da pergunta.", items: { type: "object", properties: { rotulo: { type: "string" }, valor: { type: "string" } }, required: ["rotulo", "valor"] } },
+        assunto: { type: "string", enum: ["pagamento", "outro"], description: "\"pagamento\" quando a família disse que pagou e você está avisando o Dr. Bruno. O sistema anexa ao alerta a reserva certa dessa família, e o Sim dele confirma só ela: você não escolhe qual reserva, nem pelo texto da pergunta. Qualquer outro assunto (prazo, desconto, dúvida) é \"outro\", mesmo que fale em pagamento." },
         tipo: { type: "string", enum: ["atendimento", "comercial"], description: "\"comercial\" quando for representante de laboratório, convite pra palestra/evento, proposta de parceria ou qualquer contato comercial/profissional (não família de paciente). Deixe \"atendimento\" (ou omita) pros outros casos de escalonamento." },
       },
       required: ["motivo"],
@@ -1170,6 +1171,9 @@ if (nome === "escalar_humano") {
     }
     ctx.escalar = motivo;
     ctx.escalarTipo = input.tipo === "comercial" ? "comercial" : "atendimento";
+    // "pagamento" é o único assunto com efeito de máquina: o servidor anexa a reserva ao
+    // alerta e o Sim do Dr. Bruno marca SÓ ela como paga. O texto da pergunta não decide.
+    ctx.escalarAssunto = input.assunto === "pagamento" ? "pagamento" : "outro";
     // A pergunta é o que vira botão de SIM/NÃO no painel. Data e hora só existem quando o
     // pedido é de horário fora da grade, e são elas que deixam o SIM abrir o horário junto.
     ctx.escalarPergunta = pergunta;
@@ -1404,6 +1408,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     escalarData: ctx.escalarData || null,
     escalarHora: ctx.escalarHora || null,
     escalarTipo: ctx.escalarTipo,
+    escalarAssunto: ctx.escalarAssunto || "outro",
     dadosDoPaciente: ctx.dadosDoPacienteRegistrados,
     estadoAtendimento: ctx.estadoAtendimento,
     // Os últimos 20 horários oferecidos seguem pra próxima mensagem: a família escolhe
