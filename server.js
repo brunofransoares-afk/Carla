@@ -37,6 +37,7 @@ const EstadoAtendimento = require(path.join(__dirname, "estado-atendimento.js"))
 const TriagemEmergencia = require(path.join(__dirname, "triagem-emergencia.js"));
 const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
 const { criarFilaPorChave } = require(path.join(__dirname, "fila-por-chave.js"));
+const Instrucoes = require(path.join(__dirname, "instrucoes-da-consulta.js"));
 const { criarCaixaDeSaida } = require(path.join(__dirname, "caixa-de-saida.js"));
 const { criarIntegracoesDuraveis } = require(path.join(__dirname, "integracoes-duraveis.js"));
 
@@ -164,7 +165,9 @@ async function avisarPagamentoConfirmadoNaFila(slotId) {
       : `É pra criar o portal de ${primeiroNome(a.crianca)}: um espaço só de vocês, onde você guarda os exames, a carteira de vacinação e o peso e altura, e compara os exames antigos com os novos. As receitas e os documentos que o Dr. Bruno passar também ficam lá, junto com o crescimento e as vacinas que ainda faltam.`
   }`;
 
-  const texto = `Pagamento recebido! 😊\n\nA consulta de ${primeiroNome(a.crianca)} está confirmada para ${a.diaLabel}.\n\nEndereço: Rua Ranulpho Alvarenga Ferreira, 61\n${LINK_MAPA}\n\n${O_QUE_LEVAR}${pedido}\n\nSe precisar remarcar ou for atrasar, é só me avisar por aqui.`;
+  // Endereço e "o que levar" só pra quem vem ao consultório; por vídeo, a mensagem diz que
+  // é por vídeo e como chega o link (auditoria de 10/09, problema 11).
+  const texto = `Pagamento recebido! 😊\n\nA ${Instrucoes.nomeDaConsulta(a)} de ${primeiroNome(a.crianca)} está confirmada para ${a.diaLabel}.\n\n${Instrucoes.blocoDoLocal(a, { endereco: ENDERECO_CONSULTORIO, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA })}\n\n${Instrucoes.blocoDoQueLevar(a)}${pedido}\n\n${Instrucoes.avisoDeAtraso(a, "confirmacao")}`;
 
   // O fato do pagamento vem do painel e vale mesmo se o WhatsApp estiver reconectando.
   // A mensagem fica na caixa de saída, mas a próxima conversa já não pode tratar a consulta
@@ -514,7 +517,10 @@ function agendamentoAtualReal(telefone, now = new Date()) {
 // confirmação do pagamento e nos lembretes, que são código, não IA.
 const LINK_MAPA = String(process.env.LINK_MAPA || "").trim()
   || "https://www.google.com/maps/search/?api=1&query=Rua+Ranulpho+Alvarenga+Ferreira,+61,+Limeira+-+SP";
-const O_QUE_LEVAR = "O que levar: carteira de vacinação, exames recentes se tiver, e os remédios que a criança usa.";
+// O link da sala de vídeo, se o Dr. Bruno usar sempre o mesmo (Meet, Zoom, WhatsApp). Sem
+// ele, a confirmação de teleconsulta diz que o link chega por aqui antes, e ele manda na mão.
+const LINK_TELECONSULTA = String(process.env.LINK_TELECONSULTA || "").trim() || null;
+const ENDERECO_CONSULTORIO = "Rua Ranulpho Alvarenga Ferreira, 61";
 
 // A consulta que aconteceu há menos de 30 dias nesse telefone: a família está no
 // acompanhamento pelo WhatsApp, e uma dúvida sobre a criança é do Dr. Bruno, não um
@@ -1579,7 +1585,7 @@ async function enviarLembretes(sock) {
 
   for (const a of Storage.agendamentosProntosParaLembrete(hojeStr, "semanaAntes")) {
     const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
-    const texto = `Olá! Passando pra lembrar que a consulta de ${a.crianca} com o Dr. Bruno está agendada para ${a.diaLabel}.\n\n${O_QUE_LEVAR}\n\nSe precisar remarcar, é só me avisar por aqui 😊`;
+    const texto = `Olá! Passando pra lembrar que a ${Instrucoes.nomeDaConsulta(a)} de ${a.crianca} com o Dr. Bruno está agendada para ${a.diaLabel}.\n\n${Instrucoes.blocoDoQueLevar(a)}\n\nSe precisar remarcar, é só me avisar por aqui 😊`;
     try {
       await filaMensagens.enfileirar(a.telefone, () =>
         enviarResposta(sock, jid, a.telefone, texto, true, {
@@ -1595,7 +1601,7 @@ async function enviarLembretes(sock) {
 
   for (const a of Storage.agendamentosProntosParaLembrete(hojeStr, "diaDaConsulta")) {
     const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
-    const texto = `Bom dia! Só confirmando: hoje é o dia da consulta de ${a.crianca} com o Dr. Bruno, às ${Agenda.formatHora(a.horario)}.\n\nEndereço: ${CARLA_CONFIG.endereco}\n${LINK_MAPA}\n\n${O_QUE_LEVAR}\n\nSe for atrasar, me avisa por aqui. Até já! 😊`;
+    const texto = `Bom dia! Só confirmando: hoje é o dia da ${Instrucoes.nomeDaConsulta(a)} de ${a.crianca} com o Dr. Bruno, às ${Agenda.formatHora(a.horario)}.\n\n${Instrucoes.blocoDoLocal(a, { endereco: CARLA_CONFIG.endereco, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA })}\n\n${Instrucoes.blocoDoQueLevar(a)}\n\n${Instrucoes.avisoDeAtraso(a, "dia")}`;
     try {
       await filaMensagens.enfileirar(a.telefone, () =>
         enviarResposta(sock, jid, a.telefone, texto, true, {

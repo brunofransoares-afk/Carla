@@ -110,6 +110,9 @@ em `main`. Um PR não deve ser mergeado enquanto essa verificação estiver verm
 - `CARLA_LOG_REDACT=0`: desliga a redação. Use apenas em teste local sem dados reais.
 - `CARLA_BACKUP_DIR`: pasta externa dos backups; padrão `../backups`.
 - `CARLA_BACKUP_RETER`: quantidade de cópias verificadas mantidas; padrão 30.
+- `LINK_TELECONSULTA`: link fixo da sala de vídeo (Meet, Zoom, o que você usar). Com
+  ele, a confirmação de uma teleconsulta já leva o link; sem ele, a mensagem diz que o
+  link chega por aqui antes da consulta, e você manda na mão.
 
 ## Como a Carla pensa (a Claude conduz a conversa)
 
