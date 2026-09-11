@@ -321,6 +321,21 @@ function situacoesDe({ contato, consultas, flags, agora, retornosAvisados = {} }
 // agendamentos: Storage.lerTodosAgendamentos() (com inativos: histórico importa aqui)
 // funilContatos: Eventos.funil().contatos (flags por telefone)
 // dadosCrm: lerCrm() (notas e etiquetas)
+// Recorta as notas, etiquetas, consultas manuais e retornos de UM telefone. A ficha usa
+// isto porque montarCrm cria família a partir de consulta manual: passando o arquivo
+// inteiro, a ficha de quem não tinha atividade vinha com outras famílias na lista, e a
+// rota pegava a primeira (auditoria de 10/09, problema 4).
+function recortarCrmDoTelefone(dadosCrm, telefone) {
+  const d = dadosCrm || {};
+  const so = (mapa, vazio) => (mapa && mapa[telefone] !== undefined ? { [telefone]: mapa[telefone] } : vazio);
+  return {
+    notas: so(d.notas, {}),
+    etiquetas: so(d.etiquetas, {}),
+    consultasRealizadas: so(d.consultasRealizadas, {}),
+    retornos: so(d.retornos, {}),
+  };
+}
+
 function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dadosCrm = null, agora = new Date() } = {}) {
   const flagsPorTelefone = new Map((funilContatos || []).map((f) => [f.telefone, f]));
   const crm = dadosCrm || { notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {} };
@@ -617,7 +632,7 @@ module.exports = {
   consultasDoTelefone, consultasManuaisDoTelefone, todasAsConsultas, estagioDe, situacoesDe, montarCrm, linhaDoTempo,
   somarMeses, marcosDeRetorno,
   preencherModelo, modelosPara,
-  lerCrm, adicionarNota, removerNota, definirEtiquetas,
+  lerCrm, recortarCrmDoTelefone, adicionarNota, removerNota, definirEtiquetas,
   registrarConsultaRealizada, removerConsultaRealizada, marcarRetornoAvisado,
   pacientesSemConversao, conversoesVigentes, temConversaoVigente,
   _dataLocal: dataLocal,

@@ -532,13 +532,17 @@ async function atenderRequisicao(req, res) {
       return;
     }
     const dadosCrm = Crm.lerCrm(ARQ_CRM);
+    // TUDO recortado no telefone pedido, inclusive o arquivo do CRM: montarCrm cria família
+    // a partir de consulta manual, então o arquivo inteiro trazia outras famílias pra lista.
     const crm = Crm.montarCrm({
       contatos: Storage.listarTodosContatos().filter((c) => c.telefone === telefone),
       agendamentos: Storage.lerTodosAgendamentos().filter((a) => a.telefone === telefone),
       funilContatos: Eventos.funil({}).contatos.filter((c) => c.telefone === telefone),
-      dadosCrm,
+      dadosCrm: Crm.recortarCrmDoTelefone(dadosCrm, telefone),
     });
-    const contato = crm.contatos[0] || null;
+    // E a escolha é por igualdade de telefone, nunca pela primeira posição: a lista é
+    // ordenada por urgência e atividade, então "a primeira" nunca foi garantia de nada.
+    const contato = crm.contatos.find((c) => c.telefone === telefone) || null;
     if (!contato) {
       res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ ok: false, erro: "Contato não encontrado." }));
@@ -552,6 +556,9 @@ async function atenderRequisicao(req, res) {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({
       ok: true,
+      // Volta pra tela: ela confere se esta ficha ainda é a da família aberta antes de
+      // desenhar (uma resposta lenta de A não pode aterrissar em cima da ficha de B).
+      telefone,
       contato,
       consultas,
       notas,

@@ -1251,12 +1251,22 @@
 
   // A ficha se redesenha junto com o resto, mas NUNCA enquanto o Dr. Bruno está escrevendo
   // nela: a caixa de mensagem, a nota e a etiqueta moram aqui, e redesenhar apagaria o texto.
+  // Cada carregamento tem número. Se você abre a família A, abre a B logo em seguida e a
+  // resposta de A demora mais, ela chega depois e não pode desenhar por cima de B: a ficha
+  // ficaria com o nome e os botões de A enquanto a lista mostra B selecionada, e o clique
+  // seguinte agiria sobre a família errada (auditoria de 10/09, problema 5). Duas conferências,
+  // porque uma só não basta: o número do pedido e o telefone que a resposta diz ser.
+  let pedidoDaFicha = 0;
   async function atualizarFicha(forcar = false) {
     if (!telefoneAberto) return;
     if (!forcar && alguemDigitandoEm("#ficha-contato textarea, #ficha-contato input")) return;
+    const meuPedido = ++pedidoDaFicha;
+    const telefonePedido = telefoneAberto;
     try {
-      const resp = await fetch(`/api/crm/contato?telefone=${encodeURIComponent(telefoneAberto)}`);
+      const resp = await fetch(`/api/crm/contato?telefone=${encodeURIComponent(telefonePedido)}`);
       const f = await resp.json();
+      if (meuPedido !== pedidoDaFicha || telefonePedido !== telefoneAberto) return;
+      if (f.ok && f.telefone !== telefonePedido) return;
       if (!f.ok) { document.getElementById("ficha-corpo").innerHTML = `<div class="vazio">${escapeHtml(f.erro || "Não achei essa família.")}</div>`; return; }
       fichaAtual = f;
       renderizarFicha(f);
