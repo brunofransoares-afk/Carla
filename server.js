@@ -38,6 +38,7 @@ const TriagemEmergencia = require(path.join(__dirname, "triagem-emergencia.js"))
 const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
 const { criarFilaPorChave } = require(path.join(__dirname, "fila-por-chave.js"));
 const Instrucoes = require(path.join(__dirname, "instrucoes-da-consulta.js"));
+const Crm = require(path.join(__dirname, "crm.js"));
 const { criarCaixaDeSaida } = require(path.join(__dirname, "caixa-de-saida.js"));
 const { criarIntegracoesDuraveis } = require(path.join(__dirname, "integracoes-duraveis.js"));
 
@@ -530,17 +531,26 @@ const ENDERECO_CONSULTORIO = "Rua Ranulpho Alvarenga Ferreira, 61";
 // acompanhamento pelo WhatsApp, e uma dúvida sobre a criança é do Dr. Bruno, não um
 // agendamento novo. Vai pro prompt como fato da agenda.
 const JANELA_ACOMPANHAMENTO_DIAS = 30;
+const ARQ_CRM = path.join(__dirname, "data", "crm.json");
 function consultaRecenteDe(telefone, now = new Date()) {
   const hoje = Agenda.toDateStr(now);
-  const realizadas = Storage.lerTodosAgendamentos(now)
-    .filter((a) => a.telefone === telefone && (a.estado === "pago" || a.estado === "reservado") && a.data < hoje)
-    .sort((a, b) => (b.data + b.horario).localeCompare(a.data + a.horario));
+  // A consulta que o Dr. Bruno registra na ficha (paciente antigo, ou consulta combinada
+  // por fora) conta igual: o painel já a tratava como realizada, e a Carla não sabia dela.
+  // A família saía do acompanhamento e voltava a ser tratada como atendimento novo
+  // (auditoria de 10/09, problema 9). A fonte passa a ser a mesma dos dois lados.
+  const manuais = Crm.consultasManuaisDoTelefone(Crm.lerCrm(ARQ_CRM), telefone);
+  const realizadas = [
+    ...Storage.lerTodosAgendamentos(now)
+      .filter((a) => a.telefone === telefone && (a.estado === "pago" || a.estado === "reservado")),
+    ...manuais,
+  ].filter((a) => a.data < hoje)
+    .sort((a, b) => (b.data + (b.horario || "")).localeCompare(a.data + (a.horario || "")));
   const ultima = realizadas[0];
   if (!ultima) return null;
   const [y, m, d] = ultima.data.split("-").map(Number);
   const diasDesde = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(y, m - 1, d)) / 86400000);
   if (diasDesde < 0 || diasDesde > JANELA_ACOMPANHAMENTO_DIAS) return null;
-  return { crianca: ultima.crianca, diaLabel: ultima.diaLabel, diasDesde };
+  return { crianca: ultima.crianca, diaLabel: ultima.diaLabel || Storage.formatarDataBR(ultima.data), diasDesde };
 }
 
 function sincronizarUltimoAgendamento(sessao, telefone, now = new Date()) {
