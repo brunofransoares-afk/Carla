@@ -83,15 +83,15 @@ const CONTEXTO = CEREBRO.slice(CEREBRO.indexOf("function montarContextoDoAtendim
 // ------------------------------------------------- 3. as mensagens fixas trazem o que uma confirmação precisa
 {
   ok(/const LINK_MAPA = String\(process\.env\.LINK_MAPA \|\| ""\)\.trim\(\)\s*\n\s*\|\| "https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=Rua\+Ranulpho\+Alvarenga\+Ferreira,\+61,\+Limeira\+-\+SP";/.test(SERVER), "3. o link do mapa existe, com padrão e .env");
-  ok(/const O_QUE_LEVAR = "O que levar: carteira de vacinação, exames recentes se tiver, e os remédios que a criança usa\.";/.test(SERVER), "3b. e a lista do que levar, igual ao FATO do prompt");
+  ok(/const O_QUE_LEVAR = "O que levar: carteira de vacinação, exames recentes se tiver, e os remédios que a criança usa\.";/.test(fs.readFileSync(path.join(__dirname, "..", "instrucoes-da-consulta.js"), "utf8")), "3b. e a lista do que levar, igual ao FATO do prompt (no módulo das instruções)");
   const confirmacao = SERVER.slice(SERVER.indexOf("const texto = `Pagamento recebido!"), SERVER.indexOf("registrarPagamentoNaSessao(a.telefone, a);"));
-  ok(/Endereço: Rua Ranulpho Alvarenga Ferreira, 61\\n\$\{LINK_MAPA\}/.test(confirmacao), "3c. a confirmação do pagamento leva o endereço com o mapa");
-  ok(/\$\{O_QUE_LEVAR\}/.test(confirmacao), "3d. e o que levar");
-  ok(/Se precisar remarcar ou for atrasar, é só me avisar por aqui\./.test(confirmacao), "3e. e o que fazer se atrasar, sem tom de regra");
+  ok(/Instrucoes\.blocoDoLocal\(a, \{ endereco: ENDERECO_CONSULTORIO, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA \}\)/.test(confirmacao) && /const ENDERECO_CONSULTORIO = "Rua Ranulpho Alvarenga Ferreira, 61";/.test(SERVER), "3c. a confirmação do pagamento leva o endereço com o mapa (ou o vídeo, pela modalidade)");
+  ok(/\$\{Instrucoes\.blocoDoQueLevar\(a\)\}/.test(confirmacao), "3d. e o que levar");
+  ok(/\$\{Instrucoes\.avisoDeAtraso\(a, "confirmacao"\)\}/.test(confirmacao), "3e. e o que fazer se atrasar, sem tom de regra");
   ok(!/Qualquer coisa até lá, é só me chamar por aqui\./.test(confirmacao), "3f. no lugar da frase genérica de antes");
   const lembretes = SERVER.slice(SERVER.indexOf("async function enviarLembretes("), SERVER.indexOf("async function enviarLembretes(") + 3000);
-  ok(/Passando pra lembrar[^`]*\$\{O_QUE_LEVAR\}/.test(lembretes), "3g. o lembrete da semana antes diz o que levar");
-  ok(/hoje é o dia da consulta[^`]*\$\{LINK_MAPA\}[^`]*\$\{O_QUE_LEVAR\}[^`]*Se for atrasar, me avisa por aqui\./.test(lembretes), "3h. o do dia leva mapa, o que levar e o aviso de atraso");
+  ok(/Passando pra lembrar[^`]*\$\{Instrucoes\.blocoDoQueLevar\(a\)\}/.test(lembretes), "3g. o lembrete da semana antes diz o que levar");
+  ok(/hoje é o dia da \$\{Instrucoes\.nomeDaConsulta\(a\)\}[^`]*\$\{Instrucoes\.blocoDoLocal\(a, \{ endereco: CARLA_CONFIG\.endereco, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA \}\)\}[^`]*\$\{Instrucoes\.blocoDoQueLevar\(a\)\}[^`]*\$\{Instrucoes\.avisoDeAtraso\(a, "dia"\)\}/.test(lembretes), "3h. o do dia leva mapa, o que levar e o aviso de atraso, pela modalidade");
   ok(/Se perguntarem como chegar ou pedirem localização, mande o link do mapa junto do endereço: https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=Rua\+Ranulpho/.test(ESTAVEL), "3i. e a Carla sabe mandar o mapa quando perguntam como chegar");
 }
 
