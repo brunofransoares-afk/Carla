@@ -285,12 +285,13 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(crm.situacoes.some((s) => s.chave === "fechou_com_voce"), "11m. existe o filtro");
   ok(Crm.linhaDoTempo({ eventos: [{ em: "2026-09-01T00:00:00Z", tipo: "virou_paciente" }] })[0].texto.includes("conta como conversão"), "11n. a linha do tempo explica o que aquele clique fez");
 
-  // O painel: só registra na PRIMEIRA marcação, e só pra quem falou com a Carla
+  // O painel: o clique é conversão sem exigir sessão (a conversa pode ter sido limpa, ou
+  // nem ter passado pela Carla). Só não grava de novo quem já tem conversão vigente.
   const rota = PAINEL.slice(PAINEL.indexOf('"/api/marcar-paciente"'), PAINEL.indexOf('"/api/desmarcar-paciente"'));
-  ok(/const jaEraPaciente = Storage\.lerPacientesManuais\(\)\.includes\(telefone\);/.test(rota), "11o. o painel olha se já era paciente ANTES de marcar");
-  ok(/if \(!jaEraPaciente && Storage\.obterSessao\(telefone\)\) \{\s*\n\s*Eventos\.registrar\("virou_paciente", telefone/.test(rota), "11p. e registra a conversão só na primeira marcação de quem tem sessão (falou com a Carla)");
+  ok(/if \(!Crm\.temConversaoVigente\(Eventos\.lerEventos\(\{\}\), telefone\)\) \{\s*\n\s*Eventos\.registrar\("virou_paciente", telefone, \{ origem: "painel" \}\);\s*\n\s*contouComoConversao = true;/.test(rota), "11o. marcar grava a conversão a quem ainda não tem uma vigente");
+  ok(!/obterSessao|jaEraPaciente|lerPacientesManuais\(\)\.includes/.test(rota), "11p. sem exigir sessão nem olhar só o botão: paciente é paciente");
   const rotaDes = PAINEL.slice(PAINEL.indexOf('"/api/desmarcar-paciente"'), PAINEL.indexOf('"/api/mensagem-manual"'));
-  ok(/if \(eraMarcado\) Eventos\.registrar\("paciente_desmarcado", corpo\.telefone/.test(rotaDes), "11q. desmarcar grava o compensatório, só se estava marcado");
+  ok(/const tinhaConversao = !!corpo\.telefone && Crm\.temConversaoVigente\(Eventos\.lerEventos\(\{\}\), corpo\.telefone\);/.test(rotaDes) && /if \(tinhaConversao\) Eventos\.registrar\("paciente_desmarcado", corpo\.telefone/.test(rotaDes) && !/eraMarcado/.test(rotaDes), "11q. desmarcar grava o compensatório pra qualquer conversão vigente, não só pra quem estava no botão");
   ok(/Marcar como paciente \(fechou com você\)/.test(JS), "11r. o botão da ficha diz o que a marcação significa");
   fs.rmSync(RAIZ, { recursive: true, force: true });
 }
@@ -386,21 +387,87 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(tels.includes("+31"), "13. marcado sem evento e com sessão: ganha a conversão");
   ok(!tels.includes("+32"), "13b. quem já tem virou_paciente não ganha outro");
   ok(tels.includes("+33") && lista.find((p) => p.telefone === "+33").em === AGORA, "13c. sessão sem data: entra datado de agora");
-  ok(!tels.includes("+34"), "13d. sem sessão (nunca falou com a Carla) não é conversão, é cadastro");
+  ok(tels.includes("+34") && lista.find((p) => p.telefone === "+34").em === AGORA, "13d. SEM sessão também entra: paciente no painel é conversão, com ou sem conversa guardada (datado de agora se não há rastro)");
   ok(tels.includes("+35"), "13e. desmarcado e marcado de novo: o último evento manda, então ganha");
   eq(lista.find((p) => p.telefone === "+31").em.toISOString(), "2026-08-01T10:00:00.000Z", "13f. datado na última conversa, pra cair no período certo do funil");
   ok(/function reconciliarConversoesDePacientes\(\)/.test(PAINEL) && /reconciliarConversoesDePacientes\(\);\s*\n\s*const timerReconciliarConversoes = setInterval\(reconciliarConversoesDePacientes, 10 \* 60_000\)/.test(PAINEL), "13g. o painel roda isso ao subir e a cada 10 minutos");
   ok(/Eventos\.registrar\("virou_paciente", p\.telefone, \{ origem: "retroativo" \}, p\.em\)/.test(PAINEL), "13h. gravando com a data certa e a origem marcada");
-  // 10/09, segunda rodada: o painel subiu com 18 pacientes e "1 de 15". A retroativa só
-  // olhava o botão; os pacientes dele vêm do contato salvo no celular. Agora vale o que o
-  // painel mostra como paciente, pela mesma função que pinta a etiqueta.
+  // 10/09, segunda rodada: 18 pacientes e "1 de 15". A retroativa só olhava o botão.
+  // 11/09, terceira: ainda "1". A segunda versão só contava quem tinha sessão, e os
+  // pacientes dele são contatos salvos no celular ou conversas já limpas. Agora a lista
+  // vem da MESMA montagem que pinta a aba Famílias, e sessão não é exigida.
   const reconcilia = PAINEL.slice(PAINEL.indexOf("function reconciliarConversoesDePacientes()"), PAINEL.indexOf("async function atenderRequisicao("));
-  ok(/const pacientes = Object\.keys\(sessoes\)\.filter\(\(telefone\) => Storage\.ehPacienteNoPainel\(telefone\)\);/.test(reconcilia), "13i. a retroativa conta quem o PAINEL mostra como paciente (botão ou nome salvo no celular), não só o botão");
-  ok(/pacientesManuais: pacientes,/.test(reconcilia) && !/pacientesManuais: Storage\.lerPacientesManuais\(\)/.test(reconcilia), "13j. e passa essa lista, não a do botão");
+  ok(/pacientes: pacientesDoPainel\(\),/.test(reconcilia) && !/Object\.keys\(sessoes\)|lerPacientesManuais|ehPacienteNoPainel|pacientesManuais:/.test(reconcilia), "13i. a retroativa recebe a lista de pacientes do painel, sem filtrar por sessão nem só pelo botão");
+  const doPainel = PAINEL.slice(PAINEL.indexOf("function pacientesDoPainel()"), PAINEL.indexOf("function reconciliarConversoesDePacientes()"));
+  ok(/Crm\.montarCrm\(\{\s*\n\s*contatos: Storage\.listarTodosContatos\(\),\s*\n\s*agendamentos: Storage\.lerTodosAgendamentos\(\),/.test(doPainel) && /dadosCrm: Crm\.lerCrm\(ARQ_CRM\),/.test(doPainel) && /crm\.contatos\.filter\(\(c\) => c\.ehPaciente\)\.map\(\(c\) => c\.telefone\)/.test(doPainel), "13j. e essa lista é a montagem da aba Famílias (botão, nome salvo, consulta realizada), filtrada por ehPaciente");
+  const rotaFunil = PAINEL.slice(PAINEL.indexOf('pathname === "/api/funil")'), PAINEL.indexOf('pathname === "/api/funil.csv")'));
+  ok(/reconciliarConversoesDePacientes\(\);/.test(rotaFunil) && rotaFunil.indexOf("reconciliarConversoesDePacientes();") < rotaFunil.indexOf("Eventos.funil({ desde, ate })"), "13o. o funil reconcilia ANTES de contar: o número bate com a aba na hora em que a tela abre");
+  // Sem sessão, a data vem do último evento do telefone; sem evento, de agora.
+  const semSessao = Crm.pacientesSemConversao({ pacientes: ["+36"], sessoes: {}, eventos: [{ em: "2026-07-01T10:00:00Z", tipo: "mensagem", telefone: "+36" }, { em: "2026-07-03T10:00:00Z", tipo: "escalou", telefone: "+36" }], agora: AGORA });
+  eq(semSessao[0].em.toISOString(), "2026-07-03T10:00:00.000Z", "13p. sem sessão, datado no último evento daquele telefone");
+  ok(Crm.temConversaoVigente([{ tipo: "virou_paciente", telefone: "+1" }], "+1") && !Crm.temConversaoVigente([{ tipo: "virou_paciente", telefone: "+1" }, { tipo: "paciente_desmarcado", telefone: "+1" }], "+1") && !Crm.temConversaoVigente([], "+1"), "13q. conversão vigente: o último evento manda");
   ok(/fetch\("\/api\/funil\?periodo=tudo"\)/.test(JS) && /async function atualizarConversaoGeral\(\)/.test(JS), "13k. o número do topo é desde o começo: quem fechou há dois meses continua sendo conversão");
   ok(/leads particulares, desde o começo/.test(JS), "13l. e diz isso na tela");
   ok(/setInterval\(atualizarConversaoGeral, 60000\)/.test(JS), "13m. atualizado sozinho");
   ok(!/document\.getElementById\("kpi-conversao"\)\.textContent = `\$\{c\.taxa\}%`;\s*\n\s*document\.getElementById\("kpi-conversao-detalhe"\)\.textContent = c\.base === 0 \? "sem dados ainda" : `\$\{c\.fecharam\} de \$\{c\.base\} leads particulares`;/.test(JS), "13n. o anel da aba Funil não sobrescreve mais o número do topo com o período dele");
+}
+
+// ------------------------------------------------- 14. de ponta a ponta: 18 pacientes na aba, 18 na conversão
+{
+  // Os pacientes do Dr. Bruno como eles existem de verdade: salvo com nome no celular sem
+  // nunca ter falado com a Carla; marcado no botão com a conversa já limpa; consulta
+  // realizada registrada na ficha. Nenhum tem sessão. Todos têm que ser conversão.
+  const RAIZ = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carla-conv-")), "bot");
+  fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
+  for (const f of ["storage-node.js", "arquivo-atomico.js", "grade-teleconsulta.js", "registro-de-eventos.js"]) fs.copyFileSync(path.join(__dirname, "..", f), path.join(RAIZ, f));
+  const IRMA = path.join(RAIZ, "carla-app", "js");
+  fs.mkdirSync(IRMA, { recursive: true });
+  fs.writeFileSync(path.join(IRMA, "config.js"), "global.CARLA_CONFIG = global.CARLA_CONFIG || {};\n");
+  fs.writeFileSync(path.join(IRMA, "agenda.js"), "const p2 = (n) => String(n).padStart(2, \"0\");\nmodule.exports = { gerarSlotsPossiveis: () => [], formatHora: (h) => h, toDateStr: (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}` };\n");
+  const S = require(path.join(RAIZ, "storage-node.js"));
+  const Ev = require(path.join(RAIZ, "registro-de-eventos.js"));
+  const ARQ = path.join(RAIZ, "data", "crm.json");
+
+  S.registrarContatoWhatsapp("+41", { nomeSalvo: "Mãe do Théo" });
+  S.registrarContatoWhatsapp("+42", { pushName: "Fernanda" });
+  S.marcarPacienteManual("+42");
+  Ev.registrar("mensagem", "+42", { classe: "preco" }, new Date("2026-08-01T10:00:00Z"));
+  S.registrarContatoWhatsapp("+43", { pushName: "Carlos" });
+  ok(Crm.registrarConsultaRealizada(ARQ, "+43", { data: "2026-06-20", crianca: "Davi" }, AGORA).ok, "14. consulta realizada registrada na ficha");
+  S.registrarContatoWhatsapp("+44", { pushName: "lead" });
+  Ev.registrar("mensagem", "+44", { classe: "preco" }, new Date("2026-09-01T10:00:00Z"));
+  eq(Object.keys(S.lerSessoes()).length, 0, "14b. ninguém tem sessão");
+
+  // Espelha pacientesDoPainel + reconciliarConversoesDePacientes, chamada a chamada.
+  const doPainel = () => Crm.montarCrm({ contatos: S.listarTodosContatos(), agendamentos: S.lerTodosAgendamentos(), funilContatos: [], dadosCrm: Crm.lerCrm(ARQ), agora: AGORA });
+  const pacientes = doPainel().contatos.filter((c) => c.ehPaciente).map((c) => c.telefone).sort();
+  eq(pacientes.join(","), "+41,+42,+43", "14c. a aba Famílias mostra os três como Paciente");
+  eq(doPainel().contatos.filter((c) => c.situacoes.some((s) => s === "paciente")).length, 3, "14d. e o filtro Paciente conta três");
+
+  const pendentes = Crm.pacientesSemConversao({ pacientes, sessoes: S.lerSessoes(), eventos: Ev.lerEventos({}), agora: AGORA });
+  for (const p of pendentes) Ev.registrar("virou_paciente", p.telefone, { origem: "retroativo" }, p.em);
+  const f = Ev.funil({});
+  eq(f.conversaoParticular.fecharam, 3, "14e. os três viram conversão");
+  eq(f.conversaoParticular.base, 4, "14f. sobre os quatro que existem (três pacientes e um lead)");
+  eq(f.conversaoParticular.taxa, 75, "14g. 75%, não 0%");
+  eq(Ev.lerEventos({}).find((e) => e.tipo === "virou_paciente" && e.telefone === "+42").em, "2026-08-01T10:00:00.000Z", "14h. o marcado sem sessão foi datado na última conversa dele");
+  eq(Crm.pacientesSemConversao({ pacientes, sessoes: S.lerSessoes(), eventos: Ev.lerEventos({}), agora: AGORA }).length, 0, "14i. segunda rodada não grava nada: idempotente");
+
+  // Desmarcar quem entrou pelo nome salvo também tira a conversão.
+  ok(Crm.temConversaoVigente(Ev.lerEventos({}), "+41"), "14j. o salvo no celular tem conversão vigente");
+  Ev.registrar("paciente_desmarcado", "+41", { origem: "painel" });
+  eq(Ev.funil({}).conversaoParticular.fecharam, 2, "14k. desmarcado: sai da conversão sem apagar a trilha");
+  // A retroativa da #114 chamava Storage.lerSessoes(), que não era exportada: quebrava,
+  // caía no catch e só escrevia no log. Nunca rodou. Toda função que o painel chama em
+  // Storage, Crm e Eventos tem que existir de verdade, não só no texto.
+  const faltando = [];
+  for (const [modulo, obj] of [["Storage", S], ["Crm", Crm], ["Eventos", Ev]]) {
+    for (const m of PAINEL.matchAll(new RegExp(`\\b${modulo}\\.(\\w+)\\(`, "g"))) {
+      if (typeof obj[m[1]] !== "function") faltando.push(`${modulo}.${m[1]}`);
+    }
+  }
+  eq([...new Set(faltando)].join(","), "", "14l. tudo que o painel chama em Storage, Crm e Eventos existe e é função");
+  fs.rmSync(path.dirname(RAIZ), { recursive: true, force: true });
 }
 
 console.log(`\npainel-crm: ${passou} passaram, ${falhou} falharam`);
