@@ -349,7 +349,14 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   const r1 = Crm.registrarConsultaRealizada(arq, "+1", { data: "2026-06-17", crianca: " Léo ", tipoConsulta: "puericultura" }, AGORA);
   ok(r1.ok && r1.consulta.crianca === "Léo" && r1.consulta.tipoConsulta === "puericultura", "12y. registra, aparando o nome");
   ok(!Crm.registrarConsultaRealizada(arq, "+1", { data: "2026-06-17", crianca: "Léo" }, AGORA).ok, "12z. a mesma consulta duas vezes é recusada");
-  ok(Crm.registrarConsultaRealizada(arq, "+1", { data: "2026-06-17", crianca: "Léo", tipoConsulta: "inventado" }, AGORA).ok === false || true, "12aa. (tipo desconhecido vira nulo, não erro)");
+  // Esta asserção terminava em "|| true" e nunca falhava (apontado na auditoria de 10/09).
+  // Pior: ela reusava a consulta de 12y, então o resultado era "recusada por duplicidade" e
+  // o tipo desconhecido nunca chegava a ser exercitado. Agora é outra consulta, e o que se
+  // afirma é o comportamento: aceita e guarda o tipo como nulo, em vez de recusar.
+  const rTipo = Crm.registrarConsultaRealizada(arq, "+9", { data: "2026-06-18", crianca: "Léo", tipoConsulta: "inventado" }, AGORA);
+  ok(rTipo.ok, "12aa. tipo desconhecido não faz a consulta ser recusada");
+  eq(rTipo.consulta.tipoConsulta, null, "12aa2. ele vira nulo, e a consulta fica registrada sem tipo");
+  eq(Crm.lerCrm(arq).consultasRealizadas["+9"][0].tipoConsulta, null, "12aa3. inclusive no arquivo");
   ok(Crm.marcarRetornoAvisado(arq, "+1", "2026-06-17:3", true, AGORA).ok, "12ab. marcar avisado");
   eq(Crm.lerCrm(arq).retornos["+1"]["2026-06-17:3"], AGORA.toISOString(), "12ac. gravado com a hora");
   ok(!Crm.marcarRetornoAvisado(arq, "+1", "2026-06-17:4", true).ok, "12ad. só 3 ou 6");
