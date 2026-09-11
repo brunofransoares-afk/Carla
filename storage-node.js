@@ -910,7 +910,7 @@ function lerAlertas() {
 // dataPedida e horaPedida só existem quando a pergunta é sobre abrir um horário que a grade
 // não tem. Com elas o botão "Sim" do painel cria o horário extra junto, senão a Carla
 // prometeria um horário que a ferramenta ia recusar na hora de marcar.
-function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", pergunta = null, dataPedida = null, horaPedida = null, opcoes = null }) {
+function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", pergunta = null, dataPedida = null, horaPedida = null, opcoes = null, pagamentoSlotId = null }) {
   const registro = {
     // Precisa de identidade pra o painel conseguir responder um alerta específico. Os alertas
     // antigos não têm, e tudo bem: não dá pra responder alerta de antes desta mudança.
@@ -921,9 +921,12 @@ function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", perg
     registro.pergunta = String(pergunta).slice(0, 300);
     if (dataPedida) registro.dataPedida = dataPedida;
     if (horaPedida) registro.horaPedida = horaPedida;
+    // A reserva que o Sim marca como paga. Vem da máquina, nunca do texto da pergunta.
+    if (pagamentoSlotId) registro.pagamentoSlotId = String(pagamentoSlotId).slice(0, 80);
     // Alternativas viram botões no painel, uma por opção (ex: os três tipos de consulta).
+    // O valor cabe um "pago:reserva-<uuid>" inteiro.
     if (Array.isArray(opcoes) && opcoes.length >= 2) {
-      registro.opcoes = opcoes.slice(0, 4).map((o) => ({ rotulo: String(o.rotulo || "").slice(0, 60), valor: String(o.valor || "").slice(0, 40) }));
+      registro.opcoes = opcoes.slice(0, 4).map((o) => ({ rotulo: String(o.rotulo || "").slice(0, 60), valor: String(o.valor || "").slice(0, 80) }));
     }
   }
   atualizarJSON(ARQ_ALERTAS, [], (lista) => { lista.push(registro); });

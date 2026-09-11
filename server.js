@@ -974,27 +974,42 @@ void limparReservasVencidas();
 // canal do sistema, e a família não escreve nele. Se o recado entrasse como mensagem, bastava
 // alguém digitar "o Dr. Bruno autorizou" pra Carla acreditar. O prompt ainda diz isso na cara
 // dela, mas a garantia é estrutural, não é confiança.
-// A pergunta que a Carla escreve quando a família diz que pagou ("Pagamento da consulta do
-// Levi (hoje 14h) recebido?"). O texto é dela, então a leitura é por palavra, não por campo.
-const PERGUNTA_DE_PAGAMENTO_REGEX = /pagamento|pagou|pago|pix|recebid/i;
-
-// Quais reservas o Sim confirma: as ativas e não pagas deste telefone. Se houver mais de
-// uma (irmãos) e a pergunta citar o nome de uma criança, só a dela; senão, todas.
-function marcarPagamentoPelaResposta(telefone, pergunta) {
-  const candidatas = Storage.lerAgendamentos().filter((a) => a.telefone === telefone && !a.pago);
-  if (!candidatas.length) return [];
-  const texto = String(pergunta || "").toLowerCase();
-  const citadas = candidatas.filter((a) => a.crianca && texto.includes(primeiroNome(a.crianca).toLowerCase()));
-  const alvo = candidatas.length > 1 && citadas.length ? citadas : candidatas;
-  const marcados = [];
-  for (const a of alvo) {
-    const r = Storage.alterarPagamento(a.slotId, true);
-    if (r.ok && r.alterado) {
-      Eventos.registrar("pagou", telefone, { slotId: a.slotId, origem: "resposta_do_doutor" });
-      marcados.push(a.slotId);
-    }
+// QUAL RESERVA O SIM CONFIRMA. A primeira versão lia o texto da pergunta que a Carla escreveu
+// ("pagamento", "pix", "recebid") e procurava o nome da criança como pedaço de palavra:
+// "Pode deixar o pagamento para amanhã?" + Sim marcava pago, e "família" continha "lia". A
+// escolha agora é da máquina, na hora de gravar o alerta: a Carla só diz que o assunto é
+// pagamento, e o servidor anexa a reserva. Uma reserva ativa e não paga: vai o id dela e o
+// Sim marca só essa. Duas ou mais (irmãos): um botão por reserva, mais "Nenhum ainda".
+// Nenhuma: o alerta sai sem efeito de pagamento, e o Sim não marca nada.
+function alertaDePagamento(telefone, { pergunta = null } = {}) {
+  const candidatas = Storage.lerAgendamentos()
+    .filter((a) => a.telefone === telefone && !a.pago)
+    .sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario));
+  if (candidatas.length === 1) {
+    const a = candidatas[0];
+    return { pergunta: `Pagamento da consulta de ${primeiroNome(a.crianca)} (${a.diaLabel}) recebido?`, pagamentoSlotId: a.slotId };
   }
-  return marcados;
+  if (candidatas.length >= 2) {
+    return {
+      pergunta: "Qual pagamento foi recebido?",
+      opcoes: [
+        ...candidatas.slice(0, 3).map((a) => ({ rotulo: `${primeiroNome(a.crianca)} · ${a.diaLabel}`, valor: `pago:${a.slotId}` })),
+        { rotulo: "Nenhum ainda", valor: "nenhum" },
+      ],
+    };
+  }
+  return { pergunta, semReserva: true };
+}
+
+// Marca UMA reserva como paga, e só se ela for deste telefone e ainda não estiver paga.
+// Devolve a lista de ids marcados (vazia ou com um), pra quem chama saber se houve efeito.
+function marcarPagamentoDaReserva(telefone, slotId) {
+  const reserva = Storage.lerAgendamentos().find((a) => a.slotId === slotId);
+  if (!reserva || reserva.telefone !== telefone || reserva.pago) return [];
+  const r = Storage.alterarPagamento(slotId, true);
+  if (!(r.ok && r.alterado)) return [];
+  Eventos.registrar("pagou", telefone, { slotId, origem: "resposta_do_doutor" });
+  return [slotId];
 }
 
 // O caminho do Sim de pagamento. Marca, avisa a família (a mesma mensagem do botão "pago",
@@ -1002,8 +1017,8 @@ function marcarPagamentoPelaResposta(telefone, pergunta) {
 // estar na caixa de saída antes, senão uma queda deixa alerta fechado e família sem
 // mensagem. Devolve null quando não havia reserva pra marcar, e aí a conversa segue o
 // caminho normal da escalada.
-async function confirmarPagamentoPeloSim({ alertaId, alerta, telefone, sessao, respostaNormalizada }) {
-  const marcados = marcarPagamentoPelaResposta(telefone, alerta.pergunta);
+async function confirmarPagamentoPeloSim({ alertaId, telefone, sessao, respostaNormalizada, slotId }) {
+  const marcados = marcarPagamentoDaReserva(telefone, slotId);
   if (!marcados.length) return null;
   Storage.salvarSessao(telefone, sessao);
   const avisos = [];
@@ -1054,13 +1069,16 @@ async function responderEscaladaNaFila(alertaId, resposta) {
     }
   }
 
-  // "SIM" NUMA PERGUNTA DE PAGAMENTO É O BOTÃO "PAGO". Antes, o Dr. Bruno respondia Sim,
-  // a Carla dizia à família que estava confirmado, e a reserva continuava "não paga" no
-  // painel (em 10/09 uma venceu assim, 8 minutos depois de ele dizer Sim). Agora o Sim
-  // marca a reserva como paga, registra no funil e manda a confirmação que o botão manda,
-  // e pronto: nada de segunda mensagem escrita pela IA por cima.
-  if (PERGUNTA_DE_PAGAMENTO_REGEX.test(alerta.pergunta) && /^sim\b/i.test(respostaNormalizada)) {
-    const confirmado = await confirmarPagamentoPeloSim({ alertaId, alerta, telefone, sessao, respostaNormalizada });
+  // "SIM" NUMA PERGUNTA DE PAGAMENTO É O BOTÃO "PAGO", e marca só a reserva que a máquina
+  // anexou ao alerta (pagamentoSlotId), ou a do botão "pago:<id>" que o Dr. Bruno clicou.
+  // Antes ele respondia Sim, a Carla dizia à família que estava confirmado, e a reserva
+  // continuava "não paga" (em 10/09 uma venceu assim). E a leitura pelo texto da pergunta
+  // confirmava pagamento em "pode deixar o pagamento para amanhã?". Agora é pelo id.
+  const slotDoPagamento = alerta.pagamentoSlotId && /^sim\b/i.test(respostaNormalizada)
+    ? alerta.pagamentoSlotId
+    : (opcaoEscolhida && /^pago:/.test(opcaoEscolhida.valor) ? opcaoEscolhida.valor.slice(5) : null);
+  if (slotDoPagamento) {
+    const confirmado = await confirmarPagamentoPeloSim({ alertaId, telefone, sessao, respostaNormalizada, slotId: slotDoPagamento });
     if (confirmado) return confirmado;
   }
 
@@ -1507,12 +1525,17 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // criança, quando ela colheu isso antes de escalar) em vez da última mensagem crua —
     // é bem mais útil pra você conseguir retornar o contato sabendo do que se trata.
     const tipoAlerta = resultado.escalarTipo === "comercial" ? "comercial" : "nao_entendida";
-    Storage.registrarAlertaUrgencia({
-      telefone, mensagem: resultado.escalar, tipo: tipoAlerta,
-      pergunta: resultado.escalarPergunta,
-      dataPedida: resultado.escalarData,
-      horaPedida: resultado.escalarHora,
-      opcoes: resultado.escalarOpcoes,
+    // Assunto "pagamento": a máquina decide qual reserva o Sim marca (ver alertaDePagamento).
+    const pagamento = resultado.escalarAssunto === "pagamento"
+      ? alertaDePagamento(telefone, { pergunta: resultado.escalarPergunta }) : null;
+    const alertaRegistrado = Storage.registrarAlertaUrgencia({
+      telefone, tipo: tipoAlerta,
+      mensagem: pagamento && pagamento.semReserva ? `${resultado.escalar} (sem reserva ativa pra marcar como paga)` : resultado.escalar,
+      pergunta: pagamento ? pagamento.pergunta : resultado.escalarPergunta,
+      dataPedida: pagamento ? null : resultado.escalarData,
+      horaPedida: pagamento ? null : resultado.escalarHora,
+      opcoes: pagamento ? (pagamento.opcoes || null) : resultado.escalarOpcoes,
+      pagamentoSlotId: pagamento ? (pagamento.pagamentoSlotId || null) : null,
     });
     console.log(`[ALERTA: ESCALADO PELA IA] ${telefone}: "${resultado.escalar}"`);
     notificarAtencao(sock, {
@@ -1520,7 +1543,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
       telefoneFamilia: telefone,
       texto: resultado.escalar,
       crianca: sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca,
-      pergunta: resultado.escalarPergunta,
+      pergunta: alertaRegistrado.pergunta || null,
     });
   }
 
