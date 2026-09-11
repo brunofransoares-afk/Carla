@@ -122,8 +122,10 @@ const DIA = "2026-09-14";                           // segunda
     "7. consultar_horarios e confirmar_agendamento têm o parâmetro modalidade");
   eq((CEREBRO.match(/enum: \["teleconsulta", "presencial", null\]/g) || []).length, 2, "7b. nas DUAS ferramentas");
   ok(/const filtros = \{ diaPreferido, periodo, dataPreferida, modalidade \};/.test(CEREBRO), "7c. a busca normal filtra por modalidade");
-  ok(/extrasDisponiveis\(ctx\.now, ctx\.idsOcupados, \{ modalidade: input\.modalidade === "teleconsulta" \? "teleconsulta" : null \}\)/.test(CEREBRO),
+  ok(/const modalidadeUrgente = input\.modalidade === "teleconsulta" \? "teleconsulta" : null;/.test(CEREBRO) && /extrasDisponiveis\(ctx\.now, ctx\.idsOcupados, \{ modalidade: modalidadeUrgente \}\)/.test(CEREBRO),
     "7d. e a busca urgente também, senão o caminho do 'pra hoje' vazaria horário de vídeo");
+  ok(/Storage\.semHorarioDeVideo\(Agenda\.disponiveis\(ctx\.now, ctx\.idsOcupados\), modalidadeUrgente, ctx\.now\)/.test(CEREBRO),
+    "7d2. e a GRADE da busca urgente também: a marca pode estar em cima de um horário normal");
   ok(/const modalidade = input\.modalidade === "teleconsulta" \? "teleconsulta" : null;/.test(CEREBRO),
     "7e. na busca, tudo que não é 'teleconsulta' vira null (presencial)");
 }
@@ -151,6 +153,49 @@ const DIA = "2026-09-14";                           // segunda
   ok(/Você não anuncia que existem horários "extras de vídeo" nem oferece teleconsulta por conta própria/.test(SEM_COMENTARIO),
     "9e. e a regra antiga de só falar de tele quando perguntarem continua de pé, escrita ao lado");
   ok(/Só fale sobre teleconsulta \(e a ressalva/.test(SEM_COMENTARIO), "9f. (a regra antiga, intacta)");
+}
+
+// ------------------------------------------------- 10. a marca em cima de um horário da GRADE
+{
+  // Auditoria de 10/09, problema 7: liberar um "só teleconsulta" no mesmo instante de um
+  // horário normal fazia a deduplicação conservar o slot da grade e jogar a marca fora. O
+  // horário era gravado como restrito e tratado como livre pra qualquer um.
+  //
+  // A grade deste teste tem 08:00 na segunda. O extra marcado cai exatamente em cima dela.
+  const GRADE = [{ id: "grade-2026-09-14-08:00", date: DIA, time: "08:00", label: "segunda-feira (14/09) às 08:00" }];
+  const Agenda = require(path.join(IRMA, "agenda.js"));
+  Agenda.gerarSlotsPossiveis = () => GRADE;
+
+  Storage.adicionarHorarioExtra(DIA, "08:00", { soTeleconsulta: true });
+  const todos = Storage.slotsPossiveisComExtras(AGORA);
+  const oito = todos.filter((s) => s.time === "08:00");
+  eq(oito.length, 1, "10. continua sendo UMA vaga só: a deduplicação não virou horário duplicado");
+  eq(oito[0].id, "grade-2026-09-14-08:00", "10b. e o id é o da grade, como antes (reserva e efeitos externos não mudam de chave)");
+  eq(oito[0].soTeleconsulta, true, "10c. mas a restrição sobreviveu: é ela que faz a ferramenta recusar presencial");
+  ok(/\(só teleconsulta\)$/.test(oito[0].label), "10d. e o label diz isso, que é o que a Carla lê");
+
+  const doPainel = Storage.listarHorariosDoDia(DIA, AGORA).horarios.find((h) => h.time === "08:00");
+  eq(doPainel && doPainel.soTeleconsulta, true, "10e. o painel mostra a marca nesse horário (antes mostrava como normal)");
+
+  // O filtro que protege a oferta da grade, executado.
+  const semVideo = Storage.semHorarioDeVideo(GRADE, null, AGORA);
+  eq(semVideo.length, 0, "10f. numa busca presencial, esse horário da grade some da lista");
+  eq(Storage.semHorarioDeVideo(GRADE, "teleconsulta", AGORA).length, 1, "10g. e continua existindo pra quem pediu vídeo");
+  eq(Storage.semHorarioDeVideo([{ date: DIA, time: "09:00" }], null, AGORA).length, 1, "10h. um horário sem marca nenhuma não é afetado");
+  eq(Storage.horariosSoTeleconsulta(AGORA).has(`${DIA}T08:00`), true, "10i. a restrição é indexada pelo HORÁRIO, não pelo id: é o que liga a marca do extra ao slot da grade");
+
+  // E o desfazer: tirar a marca devolve o horário pra todo mundo.
+  Storage.adicionarHorarioExtra(DIA, "08:00", { soTeleconsulta: false });
+  eq(Storage.semHorarioDeVideo(GRADE, null, AGORA).length, 1, "10j. tirando a marca, o horário volta pra busca presencial");
+  ok(!Storage.slotsPossiveisComExtras(AGORA).find((s) => s.time === "08:00").soTeleconsulta, "10k. e o slot volta a ser um horário normal, sem a marca");
+  Agenda.gerarSlotsPossiveis = () => [];
+}
+
+// ------------------------------------------------- 11. os três caminhos de busca usam o filtro
+{
+  ok(/const slotsGrade = Storage\.semHorarioDeVideo\(\s*\n\s*Agenda\.oferecerSlots\(ctx\.now, ctx\.idsOcupados, \{ \.\.\.filtros, periodo: periodoDaAgenda, count: 6 \}\),\s*\n\s*modalidade, ctx\.now\);/.test(CEREBRO), "11. a busca normal filtra a grade");
+  ok(/Storage\.semHorarioDeVideo\(Agenda\.disponiveis\(ctx\.now, ctx\.idsOcupados\), modalidadeUrgente, ctx\.now\)/.test(CEREBRO), "11b. a busca urgente também");
+  ok(/if \(Storage\.semHorarioDeVideo\(candidato, null, ctx\.now\)\.length < 2\) \{/.test(CEREBRO), "11c. e o par de horários seguidos, que é sempre presencial, descarta o par e continua procurando");
 }
 
 console.log(`\nhorario-so-teleconsulta: ${passou} passaram, ${falhou} falharam`);

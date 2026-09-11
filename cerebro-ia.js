@@ -640,6 +640,13 @@ async function executarFerramenta(nome, input, ctx) {
         const candidato = Agenda.doisSeguidos(ctx.now, idsExcluidos);
         if (!candidato) break;
         const [a, b] = candidato;
+        // Dois seguidos é sempre presencial: se um dos dois virou horário só de vídeo,
+        // o par não serve, e a busca continua.
+        if (Storage.semHorarioDeVideo(candidato, null, ctx.now).length < 2) {
+          idsExcluidos.add(a.id);
+          idsExcluidos.add(b.id);
+          continue;
+        }
         const intA = intervaloDoSlot(a);
         const intB = intervaloDoSlot(b);
         const [livreA, livreB] = await Promise.all([
@@ -665,9 +672,10 @@ async function executarFerramenta(nome, input, ctx) {
       // pediu encaixe rápido pra uma data distante só porque bateu com a preferência.
       // Junta os horários extras liberados na mão e reordena no tempo: num pedido urgente o
       // que importa é o mais cedo, então um extra pode legitimamente vir antes da grade.
+      const modalidadeUrgente = input.modalidade === "teleconsulta" ? "teleconsulta" : null;
       const candidatosUrgente = [
-        ...Agenda.disponiveis(ctx.now, ctx.idsOcupados),
-        ...Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, { modalidade: input.modalidade === "teleconsulta" ? "teleconsulta" : null }),
+        ...Storage.semHorarioDeVideo(Agenda.disponiveis(ctx.now, ctx.idsOcupados), modalidadeUrgente, ctx.now),
+        ...Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, { modalidade: modalidadeUrgente }),
       ].filter((c) => !periodoPedido || Ordem.bate(c, { periodo: periodoPedido }))
         .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).slice(0, 10);
       const livresUrgente = [];
@@ -720,7 +728,11 @@ async function executarFerramenta(nome, input, ctx) {
     const modalidade = input.modalidade === "teleconsulta" ? "teleconsulta" : null;
     const filtros = { diaPreferido, periodo, dataPreferida, modalidade };
     const pediuAlgo = diaPreferido !== null || periodo !== null || dataPreferida !== null;
-    const slotsGrade = Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { ...filtros, periodo: periodoDaAgenda, count: 6 });
+    // A grade não conhece a marca "só teleconsulta", que é aberta no painel. Quem vai ao
+    // consultório não pode receber um horário desses, nem quando ele coincide com a grade.
+    const slotsGrade = Storage.semHorarioDeVideo(
+      Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { ...filtros, periodo: periodoDaAgenda, count: 6 }),
+      modalidade, ctx.now);
     const slotsExtras = Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, filtros);
     const candidatos = Ordem.ordenarCandidatos(slotsGrade, slotsExtras, filtros);
 
