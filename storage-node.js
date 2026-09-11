@@ -172,7 +172,14 @@ function iniciarBancoAgendamentos() {
       ON agendamentos(estado, expires_at);
   `);
   bancoAgendamentos = db;
+  // A ORDEM IMPORTA. Importar o JSON antigo, DEPOIS soltar os prazos da política
+  // substituída, e só ENTÃO vencer o que sobrou. Com o vencimento antes, a primeira
+  // subida do processo já vencia as reservas antigas, e a migração chegava tarde demais
+  // pra salvá-las: foi assim que esta correção falhou na primeira tentativa.
   migrarAgendamentosDoJSON(db);
+  soltarPrazosDaPoliticaAntiga(db);
+  vencerReservasNoBanco(db, new Date(), false);
+  exportarAgendaLegada(db);
   return db;
 }
 
@@ -234,8 +241,42 @@ function migrarAgendamentosDoJSON(db) {
     db.prepare("INSERT INTO agenda_meta (chave, valor) VALUES (?, ?)")
       .run("json_importado_v1", now.toISOString());
   });
-  vencerReservasNoBanco(db, new Date(), false);
-  exportarAgendaLegada(db);
+}
+
+// A reserva deixou de ter prazo: o pagamento vale até o horário da consulta, e quem
+// decide é o Dr. Bruno no painel. Mudar só a CRIAÇÃO das reservas novas não bastava: as
+// que já estavam no banco continuavam com o prazo antigo gravado, e a rotina de vencimento
+// continuava vencendo elas sozinhas, inclusive disparando o cancelamento nas integrações
+// (auditoria de 10/09, problema 6). Esta migração roda uma vez, apaga o prazo das reservas
+// ativas e guarda quantas foram, pra dar pra conferir no log depois.
+//
+// Só mexe em quem está 'reservado'. Cancelada e vencida ficam como estão: já são história,
+// e reescrever o passado esconderia justamente o que essa mudança veio corrigir.
+function soltarPrazosDaPoliticaAntiga(db) {
+  return emTransacao(db, () => {
+    const feita = db.prepare("SELECT valor FROM agenda_meta WHERE chave = ?").get("prazo_antigo_removido_v1");
+    if (feita) return 0;
+    const alvo = db.prepare("SELECT COUNT(*) AS n FROM agendamentos WHERE estado = 'reservado' AND expires_at IS NOT NULL").get();
+    const quantas = (alvo && alvo.n) || 0;
+    if (quantas) {
+      // O payload também guarda o prazo, e é dele que o painel e o bot leem.
+      for (const linha of db.prepare("SELECT slot_id, payload_json FROM agendamentos WHERE estado = 'reservado' AND expires_at IS NOT NULL").all()) {
+        let payload;
+        try { payload = JSON.parse(linha.payload_json); } catch { payload = null; }
+        if (payload) {
+          payload.expiresAt = null;
+          payload.expiraEm = null;
+          db.prepare("UPDATE agendamentos SET expires_at = NULL, payload_json = ? WHERE slot_id = ?").run(JSON.stringify(payload), linha.slot_id);
+        } else {
+          db.prepare("UPDATE agendamentos SET expires_at = NULL WHERE slot_id = ?").run(linha.slot_id);
+        }
+      }
+      console.log(`[AGENDA] ${quantas} reserva(s) com o prazo antigo perderam o vencimento automático.`);
+    }
+    db.prepare("INSERT INTO agenda_meta (chave, valor) VALUES (?, ?)")
+      .run("prazo_antigo_removido_v1", `${new Date().toISOString()} (${quantas})`);
+    return quantas;
+  });
 }
 
 function vencerReservasNoBanco(db, now = new Date(), exportar = true) {
