@@ -267,26 +267,36 @@ async function recuperarCancelamentosNaoEnfileirados() {
   }
 }
 
-// Marcações de paciente feitas antes de o clique virar evento de conversão ganham o evento
-// agora, datado na última conversa. Roda ao subir e de tempos em tempos; é idempotente,
-// porque só entra quem ainda não tem virou_paciente vigente.
+// O que a aba Famílias mostra como "Paciente", pela MESMA montagem que pinta a etiqueta:
+// marcado no botão, salvo com nome no celular do Dr. Bruno ou com consulta realizada
+// registrada. É esta lista que a conversão tem que bater, número por número.
+function pacientesDoPainel() {
+  const crm = Crm.montarCrm({
+    contatos: Storage.listarTodosContatos(),
+    agendamentos: Storage.lerTodosAgendamentos(),
+    funilContatos: [],
+    dadosCrm: Crm.lerCrm(ARQ_CRM),
+  });
+  return crm.contatos.filter((c) => c.ehPaciente).map((c) => c.telefone);
+}
+
+// Todo paciente do painel sem conversão vigente ganha o evento agora. Roda ao subir, de
+// tempos em tempos e antes de responder o funil; é idempotente, porque só entra quem ainda
+// não tem virou_paciente vigente. Já falhou duas vezes por ser estreita demais (só o botão;
+// depois só quem tinha sessão), então a regra agora é literal: paciente no painel = conversão.
 function reconciliarConversoesDePacientes() {
   try {
-    // "Paciente" aqui é o que o painel MOSTRA como paciente: marcado no botão OU salvo com
-    // nome no celular do Dr. Bruno (menos quem ele forçou como não-paciente). A primeira
-    // versão contava só o botão, e o painel subiu com 18 pacientes e "1 de 15" na conversão.
-    // Só entra quem tem sessão (falou com a Carla); a função abaixo já filtra isso.
-    const sessoes = Storage.lerSessoes();
-    const pacientes = Object.keys(sessoes).filter((telefone) => Storage.ehPacienteNoPainel(telefone));
     const pendentes = Crm.pacientesSemConversao({
-      pacientesManuais: pacientes,
-      sessoes,
+      pacientes: pacientesDoPainel(),
+      sessoes: Storage.lerSessoes(),
       eventos: Eventos.lerEventos({}),
     });
     for (const p of pendentes) Eventos.registrar("virou_paciente", p.telefone, { origem: "retroativo" }, p.em);
-    if (pendentes.length) console.log(`[CRM] ${pendentes.length} paciente(s) marcado(s) antes do registro ganharam a conversão retroativa.`);
+    if (pendentes.length) console.log(`[CRM] ${pendentes.length} paciente(s) do painel sem conversão ganharam a conversão retroativa.`);
+    return pendentes.length;
   } catch (erro) {
     console.error("[CRM] Não consegui reconciliar as conversões de pacientes:", erro.message);
+    return 0;
   }
 }
 
@@ -475,6 +485,9 @@ async function atenderRequisicao(req, res) {
   if (new URL(req.url, "http://x").pathname === "/api/funil") {
     const periodo = new URL(req.url, "http://x").searchParams.get("periodo") || "30d";
     const { desde, ate, rotulo } = Eventos.periodoPara(periodo);
+    // Antes de contar, garante que todo paciente do painel já é conversão: assim o número
+    // bate com a aba Famílias na hora em que a tela abre, sem esperar o timer.
+    reconciliarConversoesDePacientes();
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     const f = Eventos.funil({ desde, ate });
     // A lista de contatos crus não vai pro navegador: ela cresce sem teto e a tela não usa.
@@ -818,13 +831,12 @@ async function atenderRequisicao(req, res) {
       return;
     }
     // Marcar como paciente CONTA COMO CONVERSÃO no funil, no anel e no CRM: é o jeito de o
-    // Dr. Bruno dizer "essa eu fechei", quando foi ele que assumiu a conversa. Só conta pra
-    // quem chegou a falar com a Carla (tem sessão): um número velho cadastrado à mão é
-    // classificação, não venda. E só na primeira marcação, pra clique repetido não somar.
-    const jaEraPaciente = Storage.lerPacientesManuais().includes(telefone);
+    // Dr. Bruno dizer "essa eu fechei". Sem exigir sessão: a conversa pode ter sido limpa ou
+    // nem ter passado pela Carla, e mesmo assim é paciente dele. Só não grava de novo quem
+    // já tem conversão vigente, pra clique repetido não somar.
     const pacientes = Storage.marcarPacienteManual(telefone);
     let contouComoConversao = false;
-    if (!jaEraPaciente && Storage.obterSessao(telefone)) {
+    if (!Crm.temConversaoVigente(Eventos.lerEventos({}), telefone)) {
       Eventos.registrar("virou_paciente", telefone, { origem: "painel" });
       contouComoConversao = true;
     }
@@ -836,10 +848,11 @@ async function atenderRequisicao(req, res) {
   if (req.url === "/api/desmarcar-paciente" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     // Desmarcar grava o evento compensatório: o arquivo continua append-only e o funil
-    // aplica os dois na ordem, então a conversão some sem apagar a trilha.
-    const eraMarcado = !!corpo.telefone && Storage.lerPacientesManuais().includes(corpo.telefone);
+    // aplica os dois na ordem, então a conversão some sem apagar a trilha. Vale pra qualquer
+    // conversão vigente (botão, nome salvo ou retroativa), não só pra quem estava no botão.
+    const tinhaConversao = !!corpo.telefone && Crm.temConversaoVigente(Eventos.lerEventos({}), corpo.telefone);
     const pacientes = corpo.telefone ? Storage.desmarcarPacienteManual(corpo.telefone) : Storage.lerPacientesManuais();
-    if (eraMarcado) Eventos.registrar("paciente_desmarcado", corpo.telefone, { origem: "painel" });
+    if (tinhaConversao) Eventos.registrar("paciente_desmarcado", corpo.telefone, { origem: "painel" });
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ ok: true, pacientesManuais: pacientes }));
     return;

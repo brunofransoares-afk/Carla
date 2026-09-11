@@ -476,28 +476,44 @@ function modelosPara({ responsavel = null, crianca = null, linkAvaliacao = null,
 
 // ---------------------------------------------------------------- conversão retroativa
 
-// Quem já estava marcado como paciente ANTES de o clique virar evento de conversão. Sem
-// isto o painel subia dizendo 0% de conversão com dezoito pacientes marcados: o funil só
-// sabe o que está no registro, e essas marcações foram feitas quando o clique não registrava
-// nada. Devolve quem precisa ganhar o evento, datado na última conversa (a melhor
-// aproximação de quando fechou), pra entrar no período certo do funil.
-//
-// Regras iguais às do clique: só quem tem sessão (falou com a Carla), e só se não existe
-// virou_paciente depois do último paciente_desmarcado.
-function pacientesSemConversao({ pacientesManuais = [], sessoes = {}, eventos = [], agora = new Date() } = {}) {
+// Estado vigente de conversão por telefone: virou_paciente liga, paciente_desmarcado desliga,
+// aplicados na ordem do arquivo. É a mesma leitura que o funil faz.
+function conversoesVigentes(eventos = []) {
   const estado = new Map();
   for (const e of eventos) {
     if (!e || !e.telefone) continue;
     if (e.tipo === "virou_paciente") estado.set(e.telefone, true);
     if (e.tipo === "paciente_desmarcado") estado.set(e.telefone, false);
   }
+  return estado;
+}
+
+function temConversaoVigente(eventos, telefone) {
+  return conversoesVigentes(eventos).get(telefone) === true;
+}
+
+// Quem o painel mostra como paciente e ainda não tem conversão vigente. NÃO exige sessão:
+// a primeira versão exigia, e os pacientes do Dr. Bruno (salvos com nome no celular, ou
+// com a conversa já limpa no painel) ficavam de fora. Resultado: 18 pacientes na aba e
+// "1 de 15" na conversão. A regra é uma só: paciente no painel é conversão.
+//
+// A data do evento: última conversa (sessão), senão o último evento daquele telefone,
+// senão agora. Serve pra cair no período certo do funil.
+function pacientesSemConversao({ pacientes = null, pacientesManuais = [], sessoes = {}, eventos = [], agora = new Date() } = {}) {
+  const estado = conversoesVigentes(eventos);
+  const ultimoEvento = new Map();
+  for (const e of eventos) {
+    if (!e || !e.telefone || !e.em) continue;
+    if (!ultimoEvento.has(e.telefone) || e.em > ultimoEvento.get(e.telefone)) ultimoEvento.set(e.telefone, e.em);
+  }
   const lista = [];
-  for (const telefone of pacientesManuais) {
-    const sessao = sessoes[telefone];
-    if (!sessao) continue;
+  for (const telefone of (pacientes || pacientesManuais)) {
     if (estado.get(telefone) === true) continue;
-    const em = new Date(sessao.ultimaAtividade || "");
-    lista.push({ telefone, em: Number.isNaN(em.getTime()) ? agora : em });
+    const sessao = sessoes[telefone] || {};
+    const data = [sessao.ultimaAtividade, ultimoEvento.get(telefone)]
+      .map((v) => new Date(v || ""))
+      .find((d) => !Number.isNaN(d.getTime()));
+    lista.push({ telefone, em: data || agora });
   }
   return lista;
 }
@@ -603,6 +619,6 @@ module.exports = {
   preencherModelo, modelosPara,
   lerCrm, adicionarNota, removerNota, definirEtiquetas,
   registrarConsultaRealizada, removerConsultaRealizada, marcarRetornoAvisado,
-  pacientesSemConversao,
+  pacientesSemConversao, conversoesVigentes, temConversaoVigente,
   _dataLocal: dataLocal,
 };

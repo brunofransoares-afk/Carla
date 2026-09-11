@@ -1301,7 +1301,7 @@ module.exports = {
   listarCancelamentosPendentesDeFila, marcarCancelamentoEnfileirado,
   lerAlertas, registrarAlertaUrgencia, acharAlerta, responderAlerta,
   _fecharBancoAgendamentosParaTeste: fecharBancoAgendamentosParaTeste,
-  limparAlertas, formatarDataBR, obterSessao, salvarSessao,
+  limparAlertas, formatarDataBR, lerSessoes, obterSessao, salvarSessao,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,
   lerBloqueiosHorarios, alternarBloqueioHorario, listarHorariosDoDia,
