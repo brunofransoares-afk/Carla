@@ -995,6 +995,8 @@ function retomarAtendimento(telefone) {
     if (!sessao) return false;
     sessao.aguardandoHumano = false;
     sessao.aguardandoHumanoDesde = null;
+    // O botão "Retomar" é o único jeito de desfazer a pausa que a mensagem manual criou.
+    sessao.pausadaPeloDoutor = false;
     return true;
   });
 }

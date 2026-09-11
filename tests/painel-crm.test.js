@@ -206,7 +206,7 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
 {
   const bloco = SERVER.slice(SERVER.indexOf("async function mensagemManual("), SERVER.indexOf("async function processarMensagem("));
   ok(/\{ carlaContinua = false \} = \{\}/.test(bloco), "9. carlaContinua nasce false: texto livre cala a Carla, como sempre");
-  ok(/if \(!carlaContinua\) \{\s*\n\s*sessao\.aguardandoHumano = true;/.test(bloco), "9b. e só não cala quando o painel pediu");
+  ok(/\} else \{\s*\n\s*sessao\.aguardandoHumano = true;\s*\n\s*sessao\.aguardandoHumanoDesde = agora\.toISOString\(\);\s*\n\s*sessao\.pausadaPeloDoutor = true;/.test(bloco), "9b. e só não cala quando o painel pediu; quando cala, a pausa é a do doutor (não expira)");
   ok(/mensagemManual\(dados\.telefone, dados\.texto, \{ carlaContinua: dados\.carlaContinua === true \}\)/.test(SERVER), "9c. a rota interna lê a flag como booleano estrito");
 }
 
