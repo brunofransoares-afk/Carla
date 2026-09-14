@@ -1052,6 +1052,58 @@ function salvarSessao(telefone, sessao) {
   atualizarJSON(ARQ_SESSOES, {}, (sessoes) => { sessoes[telefone] = sessao; });
 }
 
+// Só chamar depois de o WhatsApp confirmar o vínculo LID -> telefone. Não cruza nomes
+// nem textos. Preserva a sessão canônica; a duplicada fica arquivada para diagnóstico.
+function vincularIdentidadeWhatsapp(alias, telefone) {
+  if (!/^lid:\d{5,20}$/.test(alias) || !/^\+\d{8,15}$/.test(telefone)) throw new Error("Vínculo de WhatsApp inválido.");
+  const anterior = lerContatosWhatsappMapa()[alias];
+  if (anterior && anterior.vinculadoAoTelefone) {
+    if (anterior.vinculadoAoTelefone !== telefone) throw new Error("Vínculo de WhatsApp divergente; requer conferência.");
+    return false;
+  }
+  atualizarJSON(ARQ_SESSOES, {}, (sessoes) => {
+    const antiga = sessoes[alias];
+    if (!antiga) return;
+    const atual = sessoes[telefone] || { ...antiga, telefone };
+    // Uma mudança de identificador nunca pode desfazer a decisão de deixar a Carla quieta.
+    if (antiga.pausadaPeloDoutor) atual.pausadaPeloDoutor = true;
+    if (antiga.aguardandoHumano && !atual.aguardandoHumano) {
+      atual.aguardandoHumano = true;
+      atual.aguardandoHumanoDesde = antiga.aguardandoHumanoDesde;
+    }
+    sessoes[telefone] = atual;
+    antiga.vinculadoAoTelefone = telefone;
+  });
+  if (contatoSilenciado(alias)) silenciarContato(telefone);
+  if (lerNaoPacientesManuais().includes(alias)) desmarcarPacienteManual(telefone);
+  else if (lerPacientesManuais().includes(alias) && !lerNaoPacientesManuais().includes(telefone)) marcarPacienteManual(telefone);
+  // Marca por último: se a gravação anterior falhar, a próxima tentativa completa o vínculo.
+  atualizarJSON(ARQ_CONTATOS_WHATSAPP, {}, (contatos) => {
+    const antiga = contatos[alias] || {};
+    const atual = contatos[telefone] || {};
+    contatos[telefone] = { ...atual,
+      nomeSalvo: atual.nomeSalvo || antiga.nomeSalvo || null,
+      pushName: atual.pushName || antiga.pushName || null,
+      apresentadaEm: atual.apresentadaEm || antiga.apresentadaEm || null,
+    };
+    contatos[alias] = { ...antiga, vinculadoAoTelefone: telefone };
+  });
+  return true;
+}
+
+function portalManualAvisado(telefone, chave) {
+  return !!lerContatosWhatsappMapa()[telefone]?.avisosPortalManual?.[chave];
+}
+
+function marcarPortalManualAvisado(telefone, chave) {
+  return atualizarJSON(ARQ_CONTATOS_WHATSAPP, {}, (contatos) => {
+    const contato = contatos[telefone] || { nomeSalvo: null, pushName: null };
+    contato.avisosPortalManual = contato.avisosPortalManual || {};
+    if (!contato.avisosPortalManual[chave]) contato.avisosPortalManual[chave] = new Date().toISOString();
+    contatos[telefone] = contato;
+  });
+}
+
 // Tira o telefone do estado "aguardando humano" pelo painel — útil quando você já resolveu
 // por fora e quer que a Carla volte a responder esse número sozinha antes das 2h automáticas.
 function retomarAtendimento(telefone) {
@@ -1149,7 +1201,7 @@ function removerMensagemPendentePorChave(chaveIdempotencia) {
 function listarContatosRecentes(limite = 20) {
   const sessoes = lerSessoes();
   return Object.entries(sessoes)
-    .filter(([, s]) => s && s.ultimaAtividade)
+    .filter(([, s]) => s && s.ultimaAtividade && !s.vinculadoAoTelefone)
     .map(([telefone, s]) => ({
       telefone,
       ultimaAtividade: s.ultimaAtividade,
@@ -1297,7 +1349,7 @@ function listarTodosContatos() {
   const silenciados = new Set(lerContatosSilenciados());
   const pacientesManuais = new Set(lerPacientesManuais());
   const telefones = new Set([...Object.keys(contatosWhatsapp), ...pacientesManuais]);
-  const lista = [...telefones].map((telefone) => {
+  const lista = [...telefones].filter((telefone) => !contatosWhatsapp[telefone]?.vinculadoAoTelefone).map((telefone) => {
     const info = contatosWhatsapp[telefone] || {};
     const sessao = sessoes[telefone];
     const marcadoManualmente = pacientesManuais.has(telefone);
@@ -1330,7 +1382,7 @@ function listarTodosContatos() {
 // com sessão registrada) resultaram em pelo menos um agendamento de verdade.
 function metricasConversao() {
   const sessoes = lerSessoes();
-  const totalContatos = Object.keys(sessoes).length;
+  const totalContatos = Object.values(sessoes).filter((s) => !s?.vinculadoAoTelefone).length;
   const telefonesComAgendamento = new Set(lerAgendamentos().map((a) => a.telefone));
   const totalFechados = telefonesComAgendamento.size;
   const taxa = totalContatos === 0 ? 0 : Math.round((totalFechados / totalContatos) * 100);
@@ -1372,6 +1424,7 @@ module.exports = {
   lerAlertas, registrarAlertaUrgencia, acharAlerta, responderAlerta,
   _fecharBancoAgendamentosParaTeste: fecharBancoAgendamentosParaTeste,
   limparAlertas, formatarDataBR, lerSessoes, obterSessao, salvarSessao,
+  vincularIdentidadeWhatsapp, portalManualAvisado, marcarPortalManualAvisado,
   agendamentosProntosParaLembrete, marcarLembreteEnviado,
   lerBloqueios, alternarBloqueioDia,
   lerBloqueiosHorarios, alternarBloqueioHorario, listarHorariosDoDia,

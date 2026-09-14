@@ -20,7 +20,7 @@ let passou = 0, falhou = 0; const erros = [];
 function ok(cond, msg) { if (cond) { passou++; return; } falhou++; erros.push(msg); }
 function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + ", veio " + JSON.stringify(a) + ")"); }
 
-const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
+const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8").replace(/\r\n/g, "\n");
 const STORAGE = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8");
 const TELA = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8");
 const DUAS_HORAS = 2 * 60 * 60 * 1000;

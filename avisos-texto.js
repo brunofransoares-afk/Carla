@@ -49,7 +49,7 @@ function checarAviso({ endereco, nomeDaVariavel, conectado, agendamento, email }
 // presume é o prontuário, pelo primeiro nome, e erra).
 function textoPortal({ endereco, crianca, email }) {
   return [
-    `Oi! O Dr. Bruno liberou o portal de ${crianca} 😊`,
+    crianca ? `Oi! O Dr. Bruno liberou o portal de ${crianca} 😊` : "Oi! O Dr. Bruno liberou o portal da sua família 😊",
     "",
     "É onde fica tudo num lugar só: você guarda os exames, a carteira de vacinação e o peso e altura, e compara os exames antigos com os novos. As receitas e os documentos que o Dr. Bruno passar chegam por lá também, e você acompanha o crescimento e as vacinas que ainda faltam.",
     "",
@@ -61,6 +61,22 @@ function textoPortal({ endereco, crianca, email }) {
     // "menu do navegador" se ninguém disser. Uma linha pra cada, sem virar tutorial.
     "Se quiser deixar como aplicativo no celular: abra o link, toque no menu do navegador e escolha \"Adicionar à Tela de Início\". No iPhone o menu é o ícone de compartilhar; no Android, os três pontinhos.",
   ].join("\n");
+}
+
+// Este envio é uma decisão manual do médico, independente de reserva ou pagamento.
+// Não altera o e-mail da consulta nem cria acesso no prontuário.
+function prepararPortalManual({ telefone, email, endereco, acessoLiberado }) {
+  if (!/^\+[1-9]\d{7,14}$/.test(String(telefone || ""))) return { ok: false, motivo: "Telefone de WhatsApp inválido." };
+  const emailFinal = String(email || "").trim();
+  if (emailFinal.length > 254 || !/^[^\s<>@\u0000-\u001f\u007f]+@[^\s<>@\u0000-\u001f\u007f]+\.[^\s<>@\u0000-\u001f\u007f]+$/.test(emailFinal)) {
+    return { ok: false, motivo: "Preencha um e-mail válido do responsável." };
+  }
+  try {
+    const url = new URL(String(endereco || "").trim());
+    if (url.protocol !== "https:" || url.username || url.password) throw new Error();
+  } catch { return { ok: false, motivo: "Endereço HTTPS do portal não configurado." }; }
+  if (acessoLiberado !== true) return { ok: false, motivo: "Confirme que o acesso já está liberado no prontuário." };
+  return { ok: true, email: emailFinal, texto: textoPortal({ endereco: endereco.trim(), email: emailFinal }) };
 }
 
 // O guia é produto pago: esta mensagem só sai por um toque do Dr. Bruno, DEPOIS de ele já
@@ -88,4 +104,4 @@ function textoGuia({ endereco, email }) {
   ].join("\n");
 }
 
-module.exports = { emailDoAviso, checarAviso, textoPortal, textoGuia };
+module.exports = { emailDoAviso, checarAviso, textoPortal, textoGuia, prepararPortalManual };

@@ -21,6 +21,7 @@ const { criarIntegracoesDuraveis } = require(path.join(__dirname, "integracoes-d
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const PainelWebhook = require(path.join(__dirname, "painel-webhook.js"));
 const Crm = require(path.join(__dirname, "crm.js"));
+const Avisos = require(path.join(__dirname, "avisos-texto.js"));
 
 // Notas e etiquetas do CRM. Arquivo próprio, fora do SQLite e das sessões: é anotação do
 // Dr. Bruno, não estado da Carla, e limpar uma conversa não pode apagar o que ele escreveu.
@@ -562,6 +563,12 @@ async function atenderRequisicao(req, res) {
       contato,
       consultas,
       notas,
+      portal: {
+        disponivel: /^https:\/\//.test(String(process.env.PORTAL_URL || "")),
+        emailSugerido: consultas.find((c) => c.responsavelEmail)?.responsavelEmail
+          || Storage.lerDadosPendentes(telefone)?.email || "",
+        modelo: Avisos.textoPortal({ endereco: String(process.env.PORTAL_URL || "").trim(), email: "{{EMAIL_RESPONSAVEL}}" }),
+      },
       etiquetas: dadosCrm.etiquetas[telefone] || [],
       linhaDoTempo: Crm.linhaDoTempo({ eventos, notas, consultasManuais: dadosCrm.consultasRealizadas[telefone] || [], retornosAvisados: dadosCrm.retornos[telefone] || {} }),
       // As últimas falas da conversa, do jeito que a Carla as guarda. É o que responde
@@ -654,6 +661,15 @@ async function atenderRequisicao(req, res) {
   // Botão "portal" da lista de agendamentos: o Dr. Bruno liberou o acesso no prontuário,
   // toca aqui e a Carla manda o link pra família. Quem manda a mensagem é o processo do
   // bot (a conexão do WhatsApp vive lá), então isto só encaminha pra porta interna dele.
+  if (req.url === "/api/portal-manual" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = await encaminharAoBot("/interno/portal-manual", JSON.stringify({
+      telefone: corpo.telefone, email: corpo.email, acessoLiberado: corpo.acessoLiberado === true,
+    }));
+    res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(r.texto);
+    return;
+  }
   if (req.url === "/api/avisar-portal" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);
     const r = await encaminharAoBot("/interno/portal-liberado", JSON.stringify({ telefone: corpo.telefone }));

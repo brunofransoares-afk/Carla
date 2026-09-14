@@ -33,6 +33,19 @@
 
   * { box-sizing: border-box; }
 
+  .portal-manual input[type="email"], .portal-manual textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--cartao-borda);
+    border-radius: 9px; background: var(--vidro); color: var(--texto);
+    font: inherit; font-size: 14px; line-height: 1.5;
+  }
+  .portal-manual textarea { resize: vertical; min-height: 170px; color: var(--texto-fraco); }
+  .portal-manual label { font-size: 13px; }
+  .portal-manual button[type="submit"] {
+    min-height: 44px; padding: 10px 16px; font-size: 13px; font-weight: 600;
+    background: var(--ouro); color: var(--fundo-base); border-radius: 10px;
+  }
+  .portal-manual input:focus, .portal-manual textarea:focus { outline: 2px solid var(--ouro); outline-offset: 2px; }
+
   :root {
     --fundo-topo: #0a2129;
     --fundo-meio: #071921;
@@ -1257,8 +1270,12 @@
   // seguinte agiria sobre a família errada (auditoria de 10/09, problema 5). Duas conferências,
   // porque uma só não basta: o número do pedido e o telefone que a resposta diz ser.
   let pedidoDaFicha = 0;
+  // Rascunhos só nesta página (não em localStorage), separados por família. Atualizar o
+  // painel ou trocar de ficha não troca o destinatário nem apaga o e-mail digitado.
+  const rascunhosPortal = new Map();
   async function atualizarFicha(forcar = false) {
     if (!telefoneAberto) return;
+    if (rascunhosPortal.get(telefoneAberto)?.enviando) return;
     if (!forcar && alguemDigitandoEm("#ficha-contato textarea, #ficha-contato input")) return;
     const meuPedido = ++pedidoDaFicha;
     const telefonePedido = telefoneAberto;
@@ -1266,6 +1283,7 @@
       const resp = await fetch(`/api/crm/contato?telefone=${encodeURIComponent(telefonePedido)}`);
       const f = await resp.json();
       if (meuPedido !== pedidoDaFicha || telefonePedido !== telefoneAberto) return;
+      if (rascunhosPortal.get(telefonePedido)?.enviando) return;
       if (f.ok && f.telefone !== telefonePedido) return;
       if (!f.ok) { document.getElementById("ficha-corpo").innerHTML = `<div class="vazio">${escapeHtml(f.erro || "Não achei essa família.")}</div>`; return; }
       fichaAtual = f;
@@ -1308,6 +1326,21 @@
         </tr>`).join("")}</tbody></table></div>`}
     </div>`;
 
+    const rascunhoPortal = rascunhosPortal.get(c.telefone) || { email: f.portal?.emailSugerido || "", acessoLiberado: false, aviso: "", enviando: false };
+    rascunhosPortal.set(c.telefone, rascunhoPortal);
+    const portal = f.portal ? `<div class="ficha-secao portal-manual"><h3>Acesso ao portal <span>envio pelo WhatsApp</span></h3>
+      <p class="pos-consulta-aviso">Serve também para consultas marcadas por fora da Carla. Este botão só envia a mensagem; o acesso precisa já estar liberado no prontuário.</p>
+      <form id="form-portal-manual">
+        <label for="portal-email">E-mail do responsável</label>
+        <input id="portal-email" type="email" required maxlength="254" autocomplete="off" placeholder="responsavel@exemplo.com" value="${escapeHtml(rascunhoPortal.email)}" style="display:block;width:100%;box-sizing:border-box;margin:8px 0 12px">
+        <label for="portal-previa">Mensagem que a família vai receber</label>
+        <textarea id="portal-previa" readonly rows="8" style="display:block;width:100%;box-sizing:border-box;margin:8px 0 12px"></textarea>
+        <label style="display:flex;gap:8px;align-items:start;margin-bottom:12px"><input id="portal-liberado" type="checkbox" required ${rascunhoPortal.acessoLiberado ? "checked" : ""}> Já liberei o acesso com esse e-mail no prontuário.</label>
+        <button class="btn-ficha" type="submit" ${!f.portal.disponivel || rascunhoPortal.enviando ? "disabled" : ""}>Enviar acesso pelo WhatsApp</button>
+        <p id="portal-aviso" class="msg-manual-aviso" role="status" aria-live="polite">${escapeHtml(f.portal.disponivel ? rascunhoPortal.aviso : "O endereço do portal precisa ser configurado antes do envio.")}</p>
+      </form>
+    </div>` : "";
+
     const registrar = `<div class="registrar-realizada">
       <span class="pos-consulta-aviso" style="margin:0">Consulta feita fora da Carla? Registra aqui: ela passa a contar no pós-consulta e nos retornos.</span>
       <div class="registrar-form">
@@ -1338,9 +1371,10 @@
     const pos = c.posConsulta
       ? `<div class="pos-consulta-aviso">Consulta de <b>${escapeHtml(c.posConsulta.crianca || "criança")}</b> em ${formatarDataBR(c.posConsulta.data)}: faz <b>${c.posConsulta.diasDesde} dia${c.posConsulta.diasDesde === 1 ? "" : "s"}</b>, restam <b>${c.posConsulta.diasRestantes}</b> dos 30 de acompanhamento pelo WhatsApp.</div>`
       : `<div class="pos-consulta-aviso">Cada botão preenche a mensagem abaixo com o nome da criança. Você lê, ajusta se quiser, e manda.</div>`;
+    const atalhoPortal = f.portal ? `<button type="button" data-portal-manual-atalho ${f.portal.disponivel ? "" : "disabled"} title="${escapeHtml(f.portal.disponivel ? "Abrir a mensagem de acesso ao portal e revisar o e-mail" : "Configure o endereço do portal antes de enviar")}">Mensagem do portal<small>editar e enviar</small></button>` : "";
     const modelos = `<div class="ficha-secao"><h3>Pós-consulta</h3>${pos}<div class="modelos">${f.modelos.map((m) =>
       `<button data-modelo="${escapeHtml(m.id)}" ${m.disponivel ? "" : "disabled"} title="${escapeHtml(m.disponivel ? (m.carlaContinua ? "Depois dessa a Carla continua a conversa" : "Depois dessa a Carla fica quieta até você retomar") : m.motivo)}">${escapeHtml(m.nome)}<small>${escapeHtml(m.quando)}</small></button>`
-    ).join("")}</div></div>`;
+    ).join("")}${atalhoPortal}</div></div>`;
 
     const acoes = `<div class="ficha-secao"><h3>Ações</h3><div class="contato-botoes">
       <button class="btn-mensagem-contato" data-telefone="${escapeHtml(c.telefone)}">Mensagem</button>
@@ -1390,7 +1424,52 @@
         <button class="btn-fechar-ficha" title="Fechar ficha">✕</button>
       </div>
       <div class="ficha-chips"><span class="chip estagio">${escapeHtml(c.estagio.rotulo)}</span>${chipsDe(c)}</div>
-      ${dados}${criancas}${consultas}${retornos}${modelos}${acoes}${caixa}${historico}${notas}${etiquetas}${linha}`;
+      ${dados}${criancas}${consultas}${portal}${retornos}${modelos}${acoes}${caixa}${historico}${notas}${etiquetas}${linha}`;
+
+    const formPortal = alvo.querySelector("#form-portal-manual");
+    if (formPortal) {
+      const email = formPortal.querySelector("#portal-email");
+      const liberado = formPortal.querySelector("#portal-liberado");
+      const previa = formPortal.querySelector("#portal-previa");
+      const atualizarPrevia = () => {
+        previa.value = f.portal.modelo.replace("{{EMAIL_RESPONSAVEL}}", () => email.value.trim() || "[preencha o e-mail acima]");
+      };
+      atualizarPrevia();
+      email.addEventListener("input", () => {
+        rascunhoPortal.email = email.value;
+        rascunhoPortal.aviso = "";
+        formPortal.querySelector("#portal-aviso").textContent = "";
+        // Corrigir o endereço exige reconfirmar a liberação para esse endereço.
+        rascunhoPortal.acessoLiberado = false;
+        liberado.checked = false;
+        atualizarPrevia();
+      });
+      liberado.addEventListener("change", () => { rascunhoPortal.acessoLiberado = liberado.checked; });
+      formPortal.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        if (telefoneAberto !== c.telefone || rascunhoPortal.enviando || !formPortal.reportValidity()) return;
+        const botao = formPortal.querySelector("button[type=submit]");
+        const aviso = formPortal.querySelector("#portal-aviso");
+        const pedido = { telefone: c.telefone, email: email.value.trim(), acessoLiberado: liberado.checked };
+        rascunhoPortal.enviando = true;
+        botao.disabled = email.disabled = liberado.disabled = true;
+        aviso.textContent = "Registrando envio…";
+        try {
+          const resp = await postJSON("/api/portal-manual", pedido);
+          const r = await resp.json();
+          rascunhoPortal.aviso = r.ok
+            ? (r.jaAvisado ? "Essa mensagem já foi enviada para este e-mail." : r.pendente ? "Mensagem guardada. A Carla enviará quando o WhatsApp reconectar." : "Mensagem enviada pelo WhatsApp.")
+            : (r.motivo || r.erro || "Não consegui enviar. Tente novamente.");
+        } catch {
+          rascunhoPortal.aviso = "Não consegui confirmar o envio. Pode tentar novamente: o botão evita duplicação.";
+        } finally {
+          rascunhoPortal.enviando = false;
+          botao.disabled = !f.portal.disponivel;
+          email.disabled = liberado.disabled = false;
+          aviso.textContent = rascunhoPortal.aviso;
+        }
+      });
+    }
 
     alvo.querySelector(".btn-fechar-ficha").addEventListener("click", fecharFicha);
     ligarBotoesDeConsulta(alvo);
@@ -1412,6 +1491,13 @@
       });
     });
     alvo.querySelectorAll(".modelos button[data-modelo]").forEach((btn) => btn.addEventListener("click", () => usarModelo(btn.dataset.modelo)));
+    alvo.querySelectorAll("[data-portal-manual-atalho]").forEach((btn) => btn.addEventListener("click", () => {
+      const card = alvo.querySelector(".portal-manual");
+      if (!card) return;
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      const campo = card.querySelector("#portal-email");
+      if (campo) { campo.focus(); campo.select(); }
+    }));
     alvo.querySelectorAll("[data-retorno-recado]").forEach((btn) => btn.addEventListener("click", () => usarModelo("retorno", Number(btn.dataset.retornoRecado))));
     alvo.querySelectorAll("[data-retorno-avisado]").forEach((btn) => btn.addEventListener("click", () => marcarRetornoAvisado(c.telefone, btn.dataset.retornoAvisado, true)));
     alvo.querySelectorAll("[data-retorno-desfazer]").forEach((btn) => btn.addEventListener("click", () => marcarRetornoAvisado(c.telefone, btn.dataset.retornoDesfazer, false)));
