@@ -32,6 +32,8 @@ const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"))
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
 const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
+const IdentidadeWhatsapp = require(path.join(__dirname, "identidade-whatsapp.js"));
+const { criarMemoriaMensagens } = require(path.join(__dirname, "memoria-mensagens-whatsapp.js"));
 const Preco = require(path.join(__dirname, "preco-da-consulta.js"));
 const EstadoAtendimento = require(path.join(__dirname, "estado-atendimento.js"));
 const TriagemEmergencia = require(path.join(__dirname, "triagem-emergencia.js"));
@@ -41,6 +43,7 @@ const Instrucoes = require(path.join(__dirname, "instrucoes-da-consulta.js"));
 const Crm = require(path.join(__dirname, "crm.js"));
 const { criarCaixaDeSaida } = require(path.join(__dirname, "caixa-de-saida.js"));
 const { criarIntegracoesDuraveis } = require(path.join(__dirname, "integracoes-duraveis.js"));
+const { criarAvisadorPortalManual } = require(path.join(__dirname, "portal-manual.js"));
 
 const ATRASO_RESPOSTA_MS = 3000;
 const PORTA_TRAVA = 3357;
@@ -184,6 +187,21 @@ async function avisarPagamentoConfirmadoNaFila(slotId) {
   return { ok: true };
 }
 
+async function avisarPortalManual(dados) {
+  const avisar = criarAvisadorPortalManual({
+    storage: Storage,
+    fila: filaMensagens,
+    endereco: () => String(process.env.PORTAL_URL || "").trim(),
+    contatoExiste: (telefone) => Storage.listarTodosContatos().some((c) => c.telefone === telefone)
+      || !!Storage.obterSessao(telefone)
+      || Storage.lerTodosAgendamentos().some((a) => a.telefone === telefone)
+      || Crm.consultasManuaisDoTelefone(Crm.lerCrm(ARQ_CRM), telefone).length > 0,
+    enviar: (telefone, texto, opcoes) => enviarResposta(sockAtivo,
+      telefone.slice(1) + "@s.whatsapp.net", telefone, texto, true, opcoes),
+  });
+  return avisar(dados);
+}
+
 async function avisarPortalLiberado({ telefone, email }) {
   const agendamento = telefone
     ? [...Storage.lerAgendamentos()].reverse().find((a) => a.telefone === telefone)
@@ -285,6 +303,20 @@ function iniciarTravaInstancia() {
           console.error("[PAGAMENTO] Erro ao avisar a família:", erro.message);
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ ok: false, motivo: erro.message }));
+        }
+      });
+      return;
+    }
+    if (req.method === "POST" && req.url === "/interno/portal-manual") {
+      lerCorpoJsonInterno(req, res, async (dados) => {
+        try {
+          const r = await avisarPortalManual(dados);
+          res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(r));
+        } catch (erro) {
+          console.error("[PORTAL MANUAL] Falha ao enviar:", erro.message);
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: false, motivo: "Não consegui registrar o envio. Tente novamente." }));
         }
       });
       return;
@@ -392,6 +424,7 @@ function iniciarTravaInstancia() {
 const DEBOUNCE_MS = 6000;
 const buffers = new Map(); // telefone -> { textos, jid, timer }
 const filaMensagens = criarFilaPorChave();
+const memoriaMensagens = criarMemoriaMensagens({ arquivo: path.join(__dirname, "data", "memoria-mensagens-whatsapp.json") });
 const entradasRecentes = new Map(); // telefone -> timestamps do último minuto
 const avisosDeTaxa = new Map();
 
@@ -414,46 +447,32 @@ function deveAvisarLimiteDeTaxa(telefone, agora = Date.now()) {
   return true;
 }
 
-// O WhatsApp pode reentregar a mesma mensagem depois de uma reconexão (ex: instabilidade de
-// rede) — se isso acontecer fora da janela do debounce acima, viraria um segundo
-// processamento completo da mesma mensagem, gerando uma resposta duplicada e confusa (a IA
-// vendo a mesma pergunta "de novo" já com a primeira resposta no histórico). Guarda o ID de
-// cada mensagem já vista por um tempo pra nunca processar a mesma duas vezes.
-const DEDUP_JANELA_MS = 10 * 60 * 1000;
-const idsMensagensVistas = new Map(); // msg.key.id -> timestamp de quando foi vista
-
-function jaProcessouMensagem(id) {
-  if (!id) return false;
-  const agora = Date.now();
-  for (const [msgId, vistoEm] of idsMensagensVistas) {
-    if (agora - vistoEm > DEDUP_JANELA_MS) idsMensagensVistas.delete(msgId);
-  }
-  if (idsMensagensVistas.has(id)) return true;
-  idsMensagensVistas.set(id, agora);
-  return false;
-}
-
 function normalizarTelefone(jid) {
   return "+" + jid.split("@")[0];
 }
 
-// Quando o contato vem como "@lid" (id interno do WhatsApp), o Baileys costuma informar o
-// JID real (com o número de telefone) em remoteJidAlt — prioriza ele. Sem isso, cai num
-// pseudo-telefone "lid:..." só pra ter uma chave estável (não é um número de verdade).
+// Usado apenas pela sincronização de contatos com número explícito. Entradas @lid
+// precisam passar pela resolução assíncrona antes de tocar sessão, fila ou silenciamento.
 function telefoneDoJid(jid, remoteJidAlt) {
-  const jidComTelefone = remoteJidAlt?.endsWith("@s.whatsapp.net")
-    ? remoteJidAlt
-    : (jid.endsWith("@s.whatsapp.net") ? jid : null);
-  return jidComTelefone ? normalizarTelefone(jidComTelefone) : `lid:${jid.split("@")[0]}`;
+  return IdentidadeWhatsapp.telefoneDeJid(jid) || IdentidadeWhatsapp.telefoneDeJid(remoteJidAlt);
 }
 
-function agendarProcessamento(jid, telefone, texto) {
+function concluirEntradas(telefone, entradas) {
+  for (const entrada of entradas || []) memoriaMensagens.concluir(telefone, entrada);
+}
+
+function liberarEntradas(telefone, entradas) {
+  for (const entrada of entradas || []) memoriaMensagens.liberar(telefone, entrada);
+}
+
+function agendarProcessamento(jid, telefone, texto, entrada = null) {
   let buffer = buffers.get(telefone);
   if (!buffer) {
-    buffer = { textos: [], jid, timer: null };
+    buffer = { textos: [], entradas: [], jid, timer: null };
     buffers.set(telefone, buffer);
   }
   buffer.textos.push(texto);
+  if (entrada) buffer.entradas.push(entrada);
   buffer.jid = jid;
 
   if (buffer.timer) clearTimeout(buffer.timer);
@@ -470,7 +489,8 @@ function agendarProcessamento(jid, telefone, texto) {
         return processarFormatoNaoEntendido(conexao, buffer.jid, telefone, "texto_longo");
       }
       return processarMensagem(conexao, buffer.jid, telefone, textoCombinado);
-    }).catch((erro) => {
+    }).then(() => concluirEntradas(telefone, buffer.entradas)).catch((erro) => {
+      liberarEntradas(telefone, buffer.entradas);
       console.error("Erro ao processar mensagem:", erro);
     });
   }, DEBOUNCE_MS);
@@ -629,6 +649,7 @@ function aplicarEfeitoAposEnvio(efeito) {
   }
   else if (efeito.tipo === "marcar_guia") Storage.marcarGuiaAvisado(efeito.slotId);
   else if (efeito.tipo === "marcar_portal") Storage.marcarPortalAvisado(efeito.slotId);
+  else if (efeito.tipo === "marcar_portal_manual") Storage.marcarPortalManualAvisado(efeito.telefone, efeito.chave);
   else if (efeito.tipo === "marcar_pagamento") Storage.marcarPagamentoAvisado(efeito.slotId);
   else if (efeito.tipo === "marcar_reaquecimento") {
     const sessao = normalizarSessao(efeito.telefone, Storage.obterSessao(efeito.telefone));
@@ -1690,13 +1711,20 @@ function flushBuffersPendentes() {
   buffers.clear();
   return Promise.all(pendentes.map(([telefone, buffer]) => {
     if (buffer.timer) clearTimeout(buffer.timer);
-    if (!sockAtivo) return Promise.resolve();
+    if (!sockAtivo) {
+      liberarEntradas(telefone, buffer.entradas);
+      return Promise.resolve(); // As entradas permanecem no disco para o próximo início.
+    }
     const textoCombinado = buffer.textos.join("\n");
     return filaMensagens.enfileirar(telefone, async () => {
       await reenviarPendentesDoTelefone(sockAtivo, telefone);
       return processarMensagem(sockAtivo, buffer.jid, telefone, textoCombinado, { semAtraso: true });
     })
-      .catch((erro) => console.error("[ENCERRANDO] Erro ao esvaziar mensagem pendente:", erro.message));
+      .then(() => concluirEntradas(telefone, buffer.entradas))
+      .catch((erro) => {
+        liberarEntradas(telefone, buffer.entradas);
+        console.error("[ENCERRANDO] Erro ao esvaziar mensagem pendente:", erro.message);
+      });
   }));
 }
 
@@ -1771,6 +1799,20 @@ async function iniciar() {
     syncFullHistory: true,
   });
 
+  // Mensagens cujo LID ainda não ganhou um telefone aguardam no disco. O evento de
+  // mapeamento e a reconexão retomam a fila; o relógio cobre atualizações sem evento.
+  let retomandoEntradas = false;
+  async function retomarEntradas() {
+    if (encerrando || geracao !== geracaoConexao || sockAtivo !== sock || retomandoEntradas) return;
+    retomandoEntradas = true;
+    try { await receberMensagens({ messages: memoriaMensagens.pendentes(), type: "notify" }); }
+    catch (erro) { console.error("[ENTRADAS] Falha ao retomar mensagens:", erro.message); }
+    finally { retomandoEntradas = false; }
+  }
+  const timerEntradas = setInterval(retomarEntradas, 60_000);
+  timerEntradas.unref();
+  sock.ev.on("lid-mapping.update", retomarEntradas);
+
   sock.ev.on("creds.update", saveCreds);
 
   // Preenche a lista de contatos do WhatsApp (pro painel mostrar todo mundo, não só quem já
@@ -1820,6 +1862,7 @@ async function iniciar() {
     }
 
     if (connection === "close") {
+      clearInterval(timerEntradas);
       if (geracao !== geracaoConexao) return;
       if (sockAtivo === sock) sockAtivo = null;
       const codigo = lastDisconnect?.error?.output?.statusCode;
@@ -1839,6 +1882,7 @@ async function iniciar() {
       }
       (async () => {
         await reenviarMensagensPendentes(sock);
+        await retomarEntradas();
         await reconciliarPagamentosSemAviso();
         checarLembretes();
       })().catch((erro) =>
@@ -1846,31 +1890,53 @@ async function iniciar() {
     }
   });
 
-  sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (geracao !== geracaoConexao) return;
+  async function receberMensagens({ messages, type }) {
+    if (encerrando || geracao !== geracaoConexao) return;
     if (type !== "notify") return;
 
-    for (const msg of messages) {
-      if (!msg.message) continue;
-      if (jaProcessouMensagem(msg.key.id)) continue;
+    for (const msg of messages || []) {
+      if (!msg.message || !msg.key || !msg.key.id) continue;
+      try { await receberUmaMensagem(msg); }
+      catch (erro) { console.error("[ENTRADAS] Falha ao receber mensagem; será retomada se persistida:", erro.message); }
+    }
+  }
 
+  async function receberUmaMensagem(msg) {
       const jid = msg.key.remoteJid || "";
       // O WhatsApp mais recente pode identificar o contato por "@lid" (id interno) em vez
       // do número de telefone tradicional ("@s.whatsapp.net"). Aceita os dois; ignora só
       // grupos (@g.us), listas de transmissão e status.
       const ehContatoValido = jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid");
-      if (!ehContatoValido) continue;
+      if (!ehContatoValido) return;
 
-      const telefone = telefoneDoJid(jid, msg.key.remoteJidAlt);
+      // Grava antes de aguardar o Baileys: queda nessa consulta não perde a entrada.
+      const sistema = TextoDaMensagem.ehRecadoDeSistema(TextoDaMensagem.desembrulhar(msg.message));
+      if (!msg.key.fromMe && !sistema) memoriaMensagens.guardar(msg);
+      const identidade = await IdentidadeWhatsapp.resolverContato(sock, jid, msg.key.remoteJidAlt);
+      if (encerrando || geracao !== geracaoConexao) return;
+      if (!identidade) {
+        if (!msg.key.fromMe && !sistema) console.warn("[IDENTIDADE] Mensagem aguardando vínculo de telefone do WhatsApp.");
+        return;
+      }
+      const { telefone, alias } = identidade;
+      if (alias) await filaMensagens.enfileirar(telefone, () => Storage.vincularIdentidadeWhatsapp(alias, telefone));
 
       // Mensagem enviada pelo próprio Dr. Bruno (do celular dele) — a Carla nunca responde
       // isso, mas ainda vale registrar o contato na lista do painel (sem nome, já que o
       // pushName aqui seria o dele mesmo, não de quem ele está falando).
       if (msg.key.fromMe) {
         Storage.registrarContatoWhatsapp(telefone, {});
-        continue;
+        return;
       }
 
+      if (sistema) return;
+      if (memoriaMensagens.iniciar(telefone, msg, Storage.obterSessao(telefone)) !== "nova") return;
+      const concluir = () => memoriaMensagens.concluir(telefone, msg);
+      const falhar = (erro) => {
+        memoriaMensagens.liberar(telefone, msg);
+        console.error("[ENTRADAS] Falha no processamento; entrada preservada:", erro.message);
+      };
+      try {
       Storage.registrarContatoWhatsapp(telefone, { pushName: msg.pushName || null });
 
       if (!permitirMensagemDoTelefone(telefone)) {
@@ -1879,9 +1945,9 @@ async function iniciar() {
             const conexao = sockAtivo;
             if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
             return processarFormatoNaoEntendido(conexao, jid, telefone, "taxa");
-          }).catch((erro) => console.error("[LIMITE] Erro ao avisar a família:", erro.message));
-        }
-        continue;
+          }).then(concluir).catch(falhar);
+        } else concluir();
+        return;
       }
 
       // Desembrulha ANTES de qualquer decisão. Mensagem temporária, ver uma vez e documento
@@ -1896,10 +1962,8 @@ async function iniciar() {
           const conexao = sockAtivo;
           if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
           return processarAudioRecebido(conexao, jid, telefone);
-        }).catch((erro) => {
-          console.error("Erro ao processar áudio:", erro.message);
-        });
-        continue;
+        }).then(concluir).catch(falhar);
+        return;
       }
 
       const texto = TextoDaMensagem.textoDe(conteudo);
@@ -1908,28 +1972,31 @@ async function iniciar() {
       // pm2 logs não aparecia nem que a mensagem tinha chegado, então uma família invisível
       // era indistinguível de uma família que nunca escreveu.
       if (!texto.trim()) {
-        if (TextoDaMensagem.ehRecadoDeSistema(conteudo)) continue;
+        if (TextoDaMensagem.ehRecadoDeSistema(conteudo)) { concluir(); return; }
         if (TextoDaMensagem.ehMidiaSemTexto(conteudo)) {
           console.log(`[MÍDIA SEM TEXTO] ${telefone}: ${TextoDaMensagem.tipoDe(conteudo)} — pedindo descrição em texto.`);
           filaMensagens.enfileirar(telefone, async () => {
             const conexao = sockAtivo;
             if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
             return processarFormatoNaoEntendido(conexao, jid, telefone, "midia");
-          }).catch((erro) => console.error("Erro ao processar mídia:", erro.message));
-          continue;
+          }).then(concluir).catch(falhar);
+          return;
         }
         console.warn(`[SEM TEXTO] ${telefone}: não consegui ler o texto de uma mensagem do tipo ${TextoDaMensagem.tipoDe(conteudo)}.`);
         filaMensagens.enfileirar(telefone, async () => {
           const conexao = sockAtivo;
           if (conexao) await reenviarPendentesDoTelefone(conexao, telefone);
           return processarFormatoNaoEntendido(conexao, jid, telefone, "desconhecido");
-        }).catch((erro) => console.error("Erro ao processar formato desconhecido:", erro.message));
-        continue;
+        }).then(concluir).catch(falhar);
+        return;
       }
 
       console.log(`[RECEBIDA] ${telefone} (jid: ${jid}): ${texto}`);
-      agendarProcessamento(jid, telefone, texto);
-    }
+      agendarProcessamento(jid, telefone, texto, msg);
+      } catch (erro) { falhar(erro); }
+  }
+  sock.ev.on("messages.upsert", (lote) => {
+    receberMensagens(lote).catch((erro) => console.error("[ENTRADAS] Falha no lote:", erro.message));
   });
 }
 

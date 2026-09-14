@@ -105,6 +105,7 @@ const Storage = require(path.join(RAIZ, "storage-node.js"));
   const db2 = new DatabaseSync(ARQ);
   eq(db2.prepare("SELECT COUNT(*) AS n FROM agenda_meta WHERE chave = ?").get("prazo_antigo_removido_v1").n, 1, "3b. e a marca continua sendo uma só");
   db2.close();
+  Storage2._fecharBancoAgendamentosParaTeste();
 }
 
 // ------------------------------------------------- 4. o código que garante isso
@@ -121,6 +122,7 @@ const Storage = require(path.join(RAIZ, "storage-node.js"));
   ok(!/vencerReservasNoBanco\(db, new Date\(\), false\);/.test(fonte.slice(fonte.indexOf("function migrarAgendamentosDoJSON("), fonte.indexOf("function soltarPrazosDaPoliticaAntiga("))), "4g. o vencimento saiu de dentro da importação do JSON, que é onde ele passava na frente");
 }
 
+Storage._fecharBancoAgendamentosParaTeste();
 fs.rmSync(TEMP, { recursive: true, force: true });
 console.log(`\nprazo-antigo-some: ${passou} passaram, ${falhou} falharam`);
 if (falhou) { erros.forEach((e) => console.log("  FALHOU: " + e)); process.exit(1); }

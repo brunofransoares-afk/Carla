@@ -19,7 +19,7 @@ function ok(cond, msg) { if (cond) { passou++; return; } falhou++; erros.push(ms
 function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + ", veio " + JSON.stringify(a) + ")"); }
 
 const Preco = require(path.join(__dirname, "..", "preco-da-consulta.js"));
-const CEREBRO = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
+const CEREBRO = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8").replace(/\r\n/g, "\n");
 const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
 const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREBRO.indexOf("function montarContextoDoAtendimento("));
 const REGRA = ESTAVEL.slice(ESTAVEL.indexOf("QUANDO A FAMÍLIA PEDIR O VALOR DE TODAS"), ESTAVEL.indexOf("O PREÇO NA PRIMEIRA MENSAGEM DA CONVERSA"));

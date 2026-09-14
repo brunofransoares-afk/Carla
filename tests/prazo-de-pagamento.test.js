@@ -62,19 +62,19 @@ const em = (data, hora) => {
 
 // ------------------------------------------------- 3. a reserva não vence sozinha
 {
-  const storage = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8");
+  const storage = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8").replace(/\r\n/g, "\n");
   ok(!/limiteDePagamento/.test(storage), "3. o cálculo de vencimento padrão saiu do storage");
   ok(/expiresAt: expiracao \? expiracao\.toISOString\(\) : null,/.test(storage), "3b. reserva nova nasce sem expiresAt, a não ser que alguém passe um explicitamente");
   ok(/if \(!copia\.expiresAt\) copia\.expiresAt = null;/.test(storage), "3c. e a normalização não inventa um");
   ok(/item\.expiresAt = null;\n    \/\/ Se um clique em "Pago" foi desfeito/.test(storage), "3d. desmarcar pago não recoloca prazo");
   ok(/NÃO EXISTE MAIS PRAZO AUTOMÁTICO/.test(storage), "3e. escrito no lugar onde o cálculo morava");
-  const cerebro = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
+  const cerebro = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8").replace(/\r\n/g, "\n");
   ok(!/pagarAgora|expiraEm/.test(cerebro), "3f. a ferramenta não devolve mais 'pague agora' nem vencimento");
 }
 
 // ------------------------------------------------- 4. o prompt parou de apressar
 {
-  const cerebro = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
+  const cerebro = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8").replace(/\r\n/g, "\n");
   const prompt = cerebro.slice(cerebro.indexOf("const PROMPT_ESTAVEL = `"), cerebro.indexOf("function montarSystemPrompt("));
   ok(/O PRAZO DE PAGAMENTO É ATÉ O HORÁRIO DA CONSULTA, SEMPRE\./.test(prompt), "4. a regra nova está no prompt");
   ok(/nunca diga "até amanhã", "ainda hoje", "de manhã", "agora"/.test(prompt), "4b. com as frases antigas proibidas uma a uma");
@@ -116,7 +116,7 @@ const em = (data, hora) => {
 
 // ------------------------------------------------- 10. o resto da regra continua escrito
 {
-  const fonte = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
+  const fonte = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8").replace(/\r\n/g, "\n");
   ok(/PAGAMENTO ANTES DA CONSULTA, SEM EXCEÇÃO/.test(fonte),
     "10. a regra está no prompt");
   ok(!/em dinheiro, Pix ou cartão/.test(fonte),
@@ -159,7 +159,7 @@ const em = (data, hora) => {
   ok(!/(^|\s)(da|do) \$\{|\bdela\b/m.test(bot.slice(bot.indexOf("function primeiroNome"), bot.indexOf("async function avisarPortalLiberado"))),
     "10. e não chuta o sexo da criança por artigo: a primeira versão escrevia \"do Isis\"");
 
-  const prompt = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8");
+  const prompt = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8").replace(/\r\n/g, "\n");
   ok(/NESSA MENSAGEM VOCÊ NÃO PEDE E-MAIL NEM DATA DE NASCIMENTO/.test(prompt),
     "10. e a Carla foi proibida de antecipar esse pedido na mensagem da reserva");
   ok(/VOCÊ NÃO PERGUNTA MAIS "PIX OU CARTÃO\?"/.test(prompt),

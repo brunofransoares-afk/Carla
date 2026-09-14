@@ -30,7 +30,7 @@ function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + "
 
 const RAIZ = path.join(__dirname, "..");
 const Preco = require(path.join(RAIZ, "preco-da-consulta.js"));
-const LER = (f) => fs.readFileSync(path.join(RAIZ, f), "utf8");
+const LER = (f) => fs.readFileSync(path.join(RAIZ, f), "utf8").replace(/\r\n/g, "\n");
 const CEREBRO = LER("cerebro-ia.js"), SERVER = LER("server.js"), STORAGE = LER("storage-node.js");
 const PROMPT = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREBRO.indexOf("function montarSystemPrompt("));
 const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");

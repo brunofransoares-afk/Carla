@@ -475,6 +475,7 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
     }
   }
   eq([...new Set(faltando)].join(","), "", "14l. tudo que o painel chama em Storage, Crm e Eventos existe e é função");
+  S._fecharBancoAgendamentosParaTeste();
   fs.rmSync(path.dirname(RAIZ), { recursive: true, force: true });
 }
 

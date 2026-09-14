@@ -25,7 +25,7 @@ const erros = [];
 function ok(cond, msg) { if (cond) { passou++; return; } falhou++; erros.push(msg); }
 function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + ", veio " + JSON.stringify(a) + ")"); }
 
-const LER = (f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+const LER = (f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8").replace(/\r\n/g, "\n");
 const CEREBRO = LER("cerebro-ia.js"), SERVER = LER("server.js");
 const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREBRO.indexOf("function limparDadoDinamico("));
 const CONTEXTO = CEREBRO.slice(CEREBRO.indexOf("function montarContextoDoAtendimento("), CEREBRO.indexOf("function montarSystemPrompt("));
