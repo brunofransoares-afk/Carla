@@ -9,6 +9,7 @@ const fs = require("fs");
 const http = require("http");
 const { exec } = require("child_process");
 const Seguranca = require(path.join(__dirname, "painel-seguranca.js"));
+const Sso = require(path.join(__dirname, "sso-do-spi.js"));
 const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
 
 const PAINEL_SENHA = String(process.env.PAINEL_SENHA || "");
@@ -199,6 +200,10 @@ function redirecionar(res, destino) {
 
 const html = fs.readFileSync(path.join(__dirname, "dashboard.html"));
 const PASTA_ICONES = path.join(__dirname, "icons");
+// Login único vindo do SPI. Sem o segredo, a porta responde 503 dizendo qual variável falta,
+// nunca 401: um 401 sem motivo já custou uma noite de investigação num login que estava certo.
+const SSO_SEGREDO = String(process.env.CARLA_SSO_SECRET || "").trim() || null;
+const nonces = Sso.criarNonces();
 const ARQUIVO_FONTE = path.join(__dirname, "fontes", "montserrat.woff2");
 
 // Repassa pro bot o aviso de que o Dr. Bruno liberou o portal de uma criança no
@@ -318,6 +323,38 @@ async function atenderRequisicao(req, res) {
   if (caminhoPedido === "/fontes/montserrat.woff2" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "font/woff2", "Cache-Control": "public, max-age=31536000, immutable" });
     res.end(fs.readFileSync(ARQUIVO_FONTE));
+    return;
+  }
+
+  // LOGIN ÚNICO DO SPI. Fica ANTES da checagem de senha, porque a prova de identidade vem no
+  // próprio ticket. É a metade que faltava do contrato escrito na Edge Function "carla-sso".
+  if (caminhoPedido === "/sso" && req.method === "GET") {
+    if (!SSO_SEGREDO) {
+      res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Login pelo SPI indisponível: falta CARLA_SSO_SECRET no .env do painel.");
+      return;
+    }
+    // Mesmo limitador do login por senha: um ticket é uma tentativa de entrada, e tentar
+    // adivinhar assinatura tem que custar o mesmo que tentar adivinhar senha.
+    const limite = limiteLogin.verificar(cliente);
+    if (!limite.permitido) {
+      res.writeHead(429, { "Content-Type": "text/plain; charset=utf-8", "Retry-After": limite.tentarEm });
+      res.end("Muitas tentativas. Aguarde alguns minutos.");
+      return;
+    }
+    const ticket = new URL(req.url, "http://painel.local").searchParams.get("ticket") || "";
+    const conferido = Sso.verificarTicket(ticket, SSO_SEGREDO, { nonces });
+    if (!conferido.ok) {
+      // O motivo fica no log, não na tela: pra quem tenta adivinhar, toda recusa é igual.
+      console.warn(`[SSO] Ticket recusado (${conferido.motivo}) de ${cliente}`);
+      enviarPaginaLogin(res, { status: 401, mensagem: "Este link de entrada não vale mais. Abra o painel pelo SPI de novo." });
+      return;
+    }
+    limiteLogin.limpar(cliente);
+    const sessao = sessoes.abrir();
+    console.log(`[SSO] Entrada pelo SPI${conferido.email ? ` (${conferido.email})` : ""} -> ${conferido.destino}`);
+    res.setHeader("Set-Cookie", Seguranca.cookieSeguro(NOME_COOKIE, sessao.token, SESSAO_SEGUNDOS));
+    redirecionar(res, conferido.destino);
     return;
   }
 

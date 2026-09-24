@@ -263,6 +263,42 @@ substituído). Vale rodar depois de mexer neste arquivo: a integração roda em
 background e falha em silêncio de propósito, então um erro aqui não aparece
 sozinho.
 
+## Entrar no painel pelo SPI (login único)
+
+Quem já está logado no SPI abre o painel da Carla sem digitar senha. O SPI assina um
+**ticket** curto; o painel confere a assinatura e abre a sessão dele. O painel nunca recebe
+senha, e o SPI nunca guarda a senha do painel.
+
+O caminho: SPI → Edge Function `carla-sso` → `GET /sso?ticket=...` no painel → sessão aberta
+→ redireciona pro destino pedido.
+
+### Uma variável no `.env`
+
+- **`CARLA_SSO_SECRET`** = o mesmo valor do secret `CARLA_SSO_SECRET` da função `carla-sso`
+  no Supabase do SPI. Gere com `openssl rand -base64 48`.
+
+  Sem ela, `/sso` responde **503 dizendo que falta a variável** (e o painel segue normal, com
+  senha). Nunca 401: um 401 sem motivo já custou uma noite de investigação num login certo.
+
+É um segredo **diferente** do `PORTAL_WEBHOOK_SECRET`, de propósito: aquele deixa a máquina
+mandar mensagem pra família, este deixa entrar no painel. Vazar um não entrega o outro.
+
+### O que o painel exige de cada ticket
+
+Tudo abaixo é obrigatório, e a ordem importa. A assinatura vem primeiro, porque antes dela
+nenhum campo do ticket merece confiança:
+
+1. **Assinatura** HMAC-SHA256 do corpo, conferida em tempo constante.
+2. **Prazo**: vencido não entra. Validade acima de **5 minutos** também não, mesmo assinada,
+   senão o ticket viraria uma senha permanente na barra de endereço.
+3. **Nonce**: o mesmo ticket não entra duas vezes. Um link copiado do histórico do navegador
+   não vira acesso repetível. A lista vive em memória e é limpa pelo vencimento.
+4. **Destino**: só caminho do próprio painel. `https://…`, `//outro.site` e `/\outro.site`
+   viram `/`, senão o SSO seria um redirecionador aberto saindo do domínio do consultório.
+
+Tentar adivinhar um ticket custa o mesmo que tentar adivinhar a senha: a rota usa o mesmo
+limitador do login. O motivo da recusa vai pro `pm2 logs carla-painel`, nunca pra tela.
+
 ## Avisar a família a pedido do prontuário
 
 O prontuário do SPI manda a Carla avisar a família — o link do portal quando a
