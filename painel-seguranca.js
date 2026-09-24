@@ -70,14 +70,20 @@ function criarSessoes({ nomeCookie, ttlMs, agora = () => Date.now(), maximo = 50
     while (sessoes.size > maximo) sessoes.delete(sessoes.keys().next().value);
   }
 
-  function entrar(recebida, senha) {
+  // Cria a sessão. Não confere nada: quem chama já provou quem é. Existe separado de
+  // entrar() pra que o único jeito de chegar aqui sem senha seja um caminho que fez a própria
+  // prova (hoje, o ticket assinado do SPI).
+  function abrir() {
     limpar();
-    if (!compararSegredo(recebida, senha)) return { ok: false };
-
     const token = crypto.randomBytes(32).toString("base64url");
     sessoes.set(token, agora() + ttl);
     limpar();
     return { ok: true, token, nova: true };
+  }
+
+  function entrar(recebida, senha) {
+    if (!compararSegredo(recebida, senha)) return { ok: false };
+    return abrir();
   }
 
   function autenticar(req, senha, { permitirBasic = true } = {}) {
@@ -94,7 +100,7 @@ function criarSessoes({ nomeCookie, ttlMs, agora = () => Date.now(), maximo = 50
     return entrar(enviada, senha);
   }
 
-  return { autenticar, entrar, tamanho: () => sessoes.size };
+  return { autenticar, abrir, entrar, tamanho: () => sessoes.size };
 }
 
 function cookieSeguro(nome, token, ttlSegundos) {
