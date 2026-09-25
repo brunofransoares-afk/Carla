@@ -33,6 +33,13 @@ const Agenda = (() => {
     return `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
   }
 
+  // Um horário só existe se ainda dá tempo de chegar nele. A conta é uma só, aqui, porque
+  // ela precisa dar a mesma resposta na grade, nos horários abertos à mão e na reserva.
+  function temAntecedencia(dataObj, now) {
+    const minutos = (dataObj.getTime() - now.getTime()) / 60000;
+    return minutos >= CARLA_CONFIG.antecedenciaMinimaMin;
+  }
+
   // Dentro de uma janela de atendimento (ex: 08:00-12:00), calcula os horários de início
   // possíveis, sempre com 1h de consulta + 30min de intervalo, sem passar do fim da janela.
   function horariosDaJanela(janela) {
@@ -56,12 +63,11 @@ const Agenda = (() => {
       const horarios = janelas.flatMap(horariosDaJanela);
       const dateStr = toDateStr(d);
       for (const hhmm of horarios) {
-        if (i === 0) {
-          // Não oferece horário que já passou hoje.
-          const [h, m] = hhmm.split(":").map(Number);
-          const slotDate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
-          if (slotDate <= now) continue;
-        }
+        // Não oferece horário que já passou, nem horário que começa antes da antecedência
+        // mínima. A conferência é sempre, e não só no dia de hoje: a janela pode atravessar
+        // a meia-noite, e um "só hoje" seria um buraco esperando o dia em que atravessar.
+        const [hSlot, mSlot] = hhmm.split(":").map(Number);
+        if (!temAntecedencia(new Date(d.getFullYear(), d.getMonth(), d.getDate(), hSlot, mSlot), now)) continue;
         slots.push({
           id: slotId(dateStr, hhmm),
           date: dateStr,
@@ -174,11 +180,8 @@ const Agenda = (() => {
           const idA = slotId(dateStr, horarios[j]);
           const idB = slotId(dateStr, horarios[j + 1]);
           if (idsOcupados.has(idA) || idsOcupados.has(idB)) continue;
-          if (i === 0) {
-            const [hA, mA] = horarios[j].split(":").map(Number);
-            const dataA = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hA, mA);
-            if (dataA <= now) continue;
-          }
+          const [hA, mA] = horarios[j].split(":").map(Number);
+          if (!temAntecedencia(new Date(d.getFullYear(), d.getMonth(), d.getDate(), hA, mA), now)) continue;
           const rotular = (hhmm) => `${CARLA_CONFIG.nomesDiaSemana[d.getDay()]} (${toDateLabel(d)}) às ${formatHora(hhmm)}`;
           return [
             { id: idA, date: dateStr, time: horarios[j], weekday: d.getDay(), label: rotular(horarios[j]) },
@@ -223,12 +226,15 @@ const Agenda = (() => {
       return { ok: false, motivo: "Esse horário ajustado ficaria muito próximo de outra consulta já marcada nesse dia." };
     }
 
-    if (toDateStr(now) === slotBase.date) {
-      const [h, m] = horarioDesejado.split(":").map(Number);
-      const dataAjustada = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
-      if (dataAjustada <= now) {
-        return { ok: false, motivo: "Esse horário ajustado já passou." };
-      }
+    // O ajuste de até 30 minutos pode empurrar o horário pra dentro da janela de
+    // antecedência (ofereceu 11h30 às 10h45, a família pede 11h). Ajuste não é exceção.
+    const [hAjuste, mAjuste] = horarioDesejado.split(":").map(Number);
+    const dataAjustada = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hAjuste, mAjuste);
+    if (dataAjustada <= now) {
+      return { ok: false, motivo: "Esse horário ajustado já passou." };
+    }
+    if (!temAntecedencia(dataAjustada, now)) {
+      return { ok: false, motivo: `Esse horário ajustado começa em menos de ${CARLA_CONFIG.antecedenciaMinimaMin} minutos, e a agenda precisa de pelo menos isso de antecedência. Ofereça o horário original ou outro mais adiante.` };
     }
 
     return {
@@ -243,7 +249,7 @@ const Agenda = (() => {
     };
   }
 
-  return { gerarSlotsPossiveis, disponiveis, oferecerSlots, doisSeguidos, ajustarHorario, formatHora, toDateLabel, toDateStr };
+  return { gerarSlotsPossiveis, disponiveis, oferecerSlots, doisSeguidos, ajustarHorario, temAntecedencia, formatHora, toDateLabel, toDateStr };
 })();
 
 // Compatibilidade com Node (require) — ver explicação em config.js.

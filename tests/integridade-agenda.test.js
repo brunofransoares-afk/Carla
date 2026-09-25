@@ -23,7 +23,7 @@ fs.copyFileSync(path.join(__dirname, "..", "storage-node.js"), path.join(RAIZ, "
 fs.copyFileSync(path.join(__dirname, "..", "arquivo-atomico.js"), path.join(RAIZ, "arquivo-atomico.js"));
 fs.copyFileSync(path.join(__dirname, "..", "grade-teleconsulta.js"), path.join(RAIZ, "grade-teleconsulta.js"));
 fs.writeFileSync(path.join(RAIZ, "carla-app", "js", "config.js"), `
-global.CARLA_CONFIG = { nomesDiaSemana: ["domingo","segunda","terça","quarta","quinta","sexta","sábado"] };
+global.CARLA_CONFIG = { antecedenciaMinimaMin: 60, nomesDiaSemana: ["domingo","segunda","terça","quarta","quinta","sexta","sábado"] };
 `);
 fs.writeFileSync(path.join(RAIZ, "carla-app", "js", "agenda.js"), `
 function toDateStr(d) {
@@ -32,7 +32,10 @@ function toDateStr(d) {
 function gerarSlotsPossiveis() {
   return [{ id: "grade-2099-09-10-09:00", date: "2099-09-10", time: "09:00", label: "10/09 às 09:00" }];
 }
-module.exports = { toDateStr, gerarSlotsPossiveis, formatHora: (h) => h };
+// A antecedência mínima vem junto: storage-node.js consulta a agenda pra saber dela, e um
+// dublê sem ela esconderia a trava.
+module.exports = { toDateStr, gerarSlotsPossiveis, formatHora: (h) => h,
+  temAntecedencia: (d, now) => (d.getTime() - now.getTime()) / 60000 >= (global.CARLA_CONFIG.antecedenciaMinimaMin || 0) };
 `);
 
 // Migração: o JSON preexistente entra no banco sem ser a única cópia recuperável.

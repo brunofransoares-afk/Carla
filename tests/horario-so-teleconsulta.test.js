@@ -33,8 +33,10 @@ fs.mkdirSync(path.join(RAIZ, "data"), { recursive: true });
 for (const f of ["storage-node.js", "arquivo-atomico.js", "grade-teleconsulta.js"]) fs.copyFileSync(path.join(__dirname, "..", f), path.join(RAIZ, f));
 const IRMA = path.join(RAIZ, "carla-app", "js");
 fs.mkdirSync(IRMA, { recursive: true });
-fs.writeFileSync(path.join(IRMA, "config.js"), 'global.CARLA_CONFIG = { nomesDiaSemana: ["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"] };\n');
-fs.writeFileSync(path.join(IRMA, "agenda.js"), "module.exports = { gerarSlotsPossiveis: () => [], formatHora: (h) => h };\n");
+fs.writeFileSync(path.join(IRMA, "config.js"), 'global.CARLA_CONFIG = { antecedenciaMinimaMin: 60, nomesDiaSemana: ["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"] };\n');
+// O dublê carrega a antecedência mínima igual à de verdade: storage-node.js a consulta
+// pela agenda, e um dublê sem ela esconderia a trava em vez de exercitá-la.
+fs.writeFileSync(path.join(IRMA, "agenda.js"), "module.exports = { gerarSlotsPossiveis: () => [], formatHora: (h) => h,\n  temAntecedencia: (d, now) => (d.getTime() - now.getTime()) / 60000 >= (global.CARLA_CONFIG.antecedenciaMinimaMin || 0) };\n");
 const Storage = require(path.join(RAIZ, "storage-node.js"));
 
 const LER = (f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
