@@ -30,6 +30,23 @@ const CARLA_CONFIG = {
     "quinta-feira", "sexta-feira", "sábado",
   ],
   duracaoConsultaMin: 60,
+
+  /*
+   * ANTECEDÊNCIA MÍNIMA PRA MARCAR (2026-09-25). O dono: "se eu tenho um horario as 11h em
+   * aberto, e ja for 10h, ela nao pode marcar... as vezes eu nem to no consultorio e sao 10 e
+   * 50 e ela marca pra 11".
+   *
+   * Até aqui a única trava era o horário não ter COMEÇADO: às 10h50 um horário de 11h ainda
+   * era oferecível e reservável. Só que quem marca uma consulta precisa sair de casa, e quem
+   * atende precisa estar lá. Um horário que começa em dez minutos não é horário livre, é um
+   * horário que ninguém consegue cumprir.
+   *
+   * Vale pra grade e pros horários abertos à mão no painel, e vale DUAS vezes: na hora de
+   * oferecer e na hora de reservar. São momentos diferentes, e a conversa acontece no meio.
+   * Um pedido dentro da janela não é recusa seca: é caso de escalar_humano, e quem decide
+   * abrir uma exceção é o Dr. Bruno.
+   */
+  antecedenciaMinimaMin: 60,
   intervaloMin: 30,
   horizonteDias: 30,
 };

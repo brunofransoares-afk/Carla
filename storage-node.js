@@ -454,7 +454,11 @@ function listarSlotsExtras(now = new Date()) {
     .filter((s) => {
       const [ano, mes, dia] = s.date.split("-").map(Number);
       const [h, m] = s.time.split(":").map(Number);
-      return new Date(ano, mes - 1, dia, h, m) > now;
+      // A MESMA ANTECEDÊNCIA DA GRADE. Horário aberto à mão no painel também precisa dela:
+      // um extra de 11h aberto ontem não fica mais fácil de cumprir por ser extra. Quando o
+      // Dr. Bruno quiser abrir uma exceção pra daqui a pouco, quem faz isso é ele, no painel,
+      // respondendo um escalar_humano, e não a Carla decidindo sozinha.
+      return Agenda.temAntecedencia(new Date(ano, mes - 1, dia, h, m), now);
     })
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 }

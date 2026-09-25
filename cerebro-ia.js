@@ -800,6 +800,22 @@ async function executarFerramenta(nome, input, ctx) {
     if (!slotReal) {
       return { sucesso: false, motivo: "Esse horário não corresponde a um horário real da agenda. Se essa consulta já foi confirmada antes nesta conversa, não chame essa ferramenta de novo, apenas continue a conversa normalmente (ex: informando a forma de pagamento)." };
     }
+    // A ANTECEDÊNCIA É CONFERIDA DE NOVO AQUI, e não só na hora de oferecer. Entre a oferta
+    // e o "pode ser esse" passa uma conversa inteira: um horário de 11h oferecido às 10h05
+    // chega aqui às 10h50 valendo, se ninguém olhar o relógio outra vez. O dono descreveu
+    // exatamente esse caso: "as vezes eu nem to no consultorio e sao 10 e 50 e ela marca
+    // pra 11". Recusar aqui é o que fecha; recusar só lá é só atrasar o problema.
+    const [anoSlot, mesSlot, diaSlot] = slotReal.date.split("-").map(Number);
+    const [horaSlot, minutoSlot] = slotReal.time.split(":").map(Number);
+    const inicioDoSlot = new Date(anoSlot, mesSlot - 1, diaSlot, horaSlot, minutoSlot);
+    if (!Agenda.temAntecedencia(inicioDoSlot, ctx.now)) {
+      const minimo = (global.CARLA_CONFIG && global.CARLA_CONFIG.antecedenciaMinimaMin) || 60;
+      return {
+        sucesso: false,
+        motivo: `O horário ${slotReal.label} começa em menos de ${minimo} minutos, e a agenda precisa de pelo menos isso de antecedência. NÃO marque. Diga à família, com naturalidade, que pra hoje tão em cima você precisa confirmar com o Dr. Bruno, chame escalar_humano com a pergunta pronta (quem é, qual criança, que horário) e pare. Se ela aceitar outro horário, consulte de novo.`,
+      };
+    }
+
     const modalidade = input.modalidade === "teleconsulta" ? "teleconsulta" : "presencial";
     // Horário aberto só pra vídeo não vira consulta presencial, nem por engano: a família
     // apareceria no consultório num horário em que o Dr. Bruno não pode receber ninguém.
