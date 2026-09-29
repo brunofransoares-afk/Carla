@@ -103,9 +103,9 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
 {
   // Esta mudança é sobre QUANTO ela fala na primeira mensagem. Nada do que ela faz podia
   // mudar junto.
-  ok(/Aqui é a Carla, o atendimento automático do consultório do Dr\. Bruno Soares, pediatra/.test(SEM_COMENTARIO),
+  ok(/Meu nome é Carla, sou a secretária virtual dele, e este atendimento é automatizado/.test(SEM_COMENTARIO),
     "6. a apresentação continua a mesma");
-  ok(/NESSE CASO a parte 2 fica só em quem você é/.test(SEM_COMENTARIO),
+  ok(/NESSE CASO a parte 3 inteira some e a parte 2 fica só nas boas-vindas e em quem você é/.test(SEM_COMENTARIO),
     "6b. quem chegou perguntando continua sem a lista do que ela resolve");
   ok(/nunca responda só "O valor é R\$ 450\." secamente/.test(SEM_COMENTARIO),
     "6c. e o valor continua proibido de sair seco: enxugar não é voltar a ser frio");

@@ -105,6 +105,24 @@ const lerPreco = extrairLeitorDePreco();
   ok(/NÃO existe retorno presencial/.test(SEM_COMENTARIO), "6. retorno presencial não existe");
   ok(/acompanhamento dos resultados dos exames que porventura forem pedidos, enviados pelo WhatsApp, e o WhatsApp pra dúvidas durante 30 dias/.test(SEM_COMENTARIO),
     "6b. o que existe é exames por WhatsApp e 30 dias de dúvidas");
+
+  /*
+   * RETORNO GRATUITO NÃO EXISTE, E ISSO PRECISA ESTAR DITO, NÃO DEDUZIDO. A regra já dizia
+   * que não há retorno presencial e que outra consulta é consulta nova. Faltava a resposta à
+   * pergunta que a família realmente faz, que não é "existe retorno?" e sim "eu pago de
+   * novo?". Sem a frase, ela dependia de a Carla inferir de "consulta nova", e inferência é
+   * onde o modelo escorrega pra simpatia: "não se preocupe, a gente dá um jeito".
+   *
+   * O dono, em 29/09/2026: "eu tô falando de retorno gratuito".
+   */
+  ok(/NÃO EXISTE RETORNO GRATUITO, nem consulta de cortesia, nem desconto pra quem já veio/.test(SEM_COMENTARIO),
+    "6b2. e está escrito que retorno gratuito não existe, com essas palavras");
+  ok(/se a família perguntar se o retorno é cobrado, a resposta é sim/.test(SEM_COMENTARIO),
+    "6b3. com a resposta pronta pra pergunta que a família faz de verdade");
+  ok(/é uma consulta nova, do tipo que for, com o valor daquele tipo/.test(SEM_COMENTARIO),
+    "6b4. e a consulta nova vem com o valor do tipo dela, não solta");
+  ok(/continua com o WhatsApp dos 30 dias, e é ali que a dúvida daquela consulta é respondida sem custo/.test(SEM_COMENTARIO),
+    "6b5. dizendo o que É de graça, senão a recusa fica seca e a família ouve só 'paga de novo'");
   ok(!/já está incluso no valor/.test(SEM_COMENTARIO), "6c. a frase antiga do retorno incluso sumiu");
   ok(/SÓ pra puericultura e pra investigação\/acompanhamento de neurodesenvolvimento\. Consulta de urgência não existe por vídeo/.test(SEM_COMENTARIO),
     "6d. tele: só puericultura e neurodesenvolvimento");

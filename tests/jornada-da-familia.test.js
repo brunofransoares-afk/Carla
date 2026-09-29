@@ -34,15 +34,38 @@ const CONTEXTO = CEREBRO.slice(CEREBRO.indexOf("function montarContextoDoAtendim
 // Alinhado com o Dr. Bruno em 10/09: sem valor no menu, menu pra todo mundo (mesmo quem já
 // disse o que procura), e o tipo não muda depois de escolhido. O detalhe dessa trava está em
 // tests/caso-liso.test.js.
+function menuTexto() {
+  const inicio = ESTAVEL.indexOf("O Dr. Bruno trabalha com 3 tipos de consulta");
+  return ESTAVEL.slice(inicio, ESTAVEL.indexOf('"\n', inicio));
+}
 {
   ok(/O Dr\. Bruno trabalha com 3 tipos de consulta 😊/.test(ESTAVEL), "1. o menu abre dizendo que são três tipos");
-  ok(/1\. Consulta de urgência\nPra um sintoma agudo de agora: febre, tosse, dor, vômito, machucado\./.test(ESTAVEL), "1b. opção 1, com o que ela trata");
-  ok(/Ela é direcionada só à queixa do momento, não entra rotina nem avaliação de desenvolvimento\./.test(ESTAVEL), "1c. e deixa claro o que NÃO entra na urgência");
-  ok(/2\. Consulta de puericultura\nA consulta de rotina, com duração média de 1 hora e uma avaliação completa e individualizada/.test(ESTAVEL), "1d. opção 2, detalhada");
-  ok(/3\. Consulta de neurodesenvolvimento e saúde mental\nInvestigação ou acompanhamento de autismo, TDAH, TOD, atraso de fala, comportamento e ansiedade\./.test(ESTAVEL), "1e. opção 3, detalhada");
+  ok(/1\. Consulta de urgência\nA queixa de agora: febre, tosse, dor, vômito, machucado\./.test(ESTAVEL), "1b. opção 1, numa linha");
+  ok(/2\. Consulta de puericultura\nA consulta de rotina, com avaliação completa da criança\./.test(ESTAVEL), "1d. opção 2, numa linha");
+  ok(/3\. Consulta de neurodesenvolvimento e saúde mental\nAutismo, TDAH, atraso de fala, comportamento e ansiedade\./.test(ESTAVEL), "1e. opção 3, numa linha");
+
+  /*
+   * O MENU CABE NA TELA. Ele tinha 230 palavras e descrevia os três tipos inteiros, com
+   * duração, acompanhamento de exames, 30 dias de WhatsApp e portal, pra alguém que ia
+   * escolher um. O dono: "aquela mensagem que explica os tipos de consulta, eu acho que ela
+   * está muito longa, cansa de ler". Quem cansa de ler não escolhe: desiste.
+   *
+   * O teto é de palavras e não de caracteres porque é o que corresponde ao esforço de
+   * leitura. Se alguém precisar mesmo passar dele, que passe de propósito, mexendo aqui.
+   */
+  const palavrasDoMenu = menuTexto().split(/\s+/).filter(Boolean).length;
+  ok(palavrasDoMenu <= 70, "1b2. o menu inteiro cabe em 70 palavras (tem " + palavrasDoMenu + ")");
+
+  // E o que saiu do menu não sumiu do atendimento: continua na mensagem do valor, sobre o
+  // tipo que a família escolheu. Cortar informação e cortar repetição são coisas diferentes.
+  ok(/duração média de 1 hora, com uma avaliação completa e individualizada/.test(ESTAVEL),
+    "1b3. a duração e a avaliação completa continuam, na mensagem do valor");
+  ok(/o WhatsApp pra dúvidas durante 30 dias/.test(ESTAVEL),
+    "1b4. os 30 dias também");
+  ok(/ESTE MENU É CURTO DE PROPÓSITO/.test(ESTAVEL),
+    "1b5. e está escrito por que ele é curto, pra ninguém voltar a encher as opções");
   ok(/Qual delas você está procurando\? Pode responder só com o número\./.test(ESTAVEL), "1f. fecha pedindo o número");
-  const inicioMenu = ESTAVEL.indexOf("O Dr. Bruno trabalha com 3 tipos de consulta");
-  const menu = ESTAVEL.slice(inicioMenu, ESTAVEL.indexOf('"\n', inicioMenu));
+  const menu = menuTexto();
   ok(!/R\$/.test(menu), "1g. NENHUM valor dentro do menu: primeiro escolhe, depois direciona");
   ok(/o menu vai pra TODO MUNDO que pergunta valor ou pede pra marcar, mesmo quem já disse o que procura/.test(ESTAVEL), "1h. menu pra todo mundo, inclusive quem já contou o caso");
   ok(/Você é uma automação e se apresentou como uma: não precisa parecer humana adivinhando o tipo, precisa ser certa\./.test(ESTAVEL), "1i. com o motivo: ela é automação, não precisa adivinhar");
