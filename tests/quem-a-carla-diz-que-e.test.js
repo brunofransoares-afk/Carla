@@ -1,21 +1,25 @@
 /*
  * Bateria de quem a Carla diz que é.
  *
- * Até hoje ela abria com "Aqui é a Carla, secretária do Dr. Bruno Soares". Secretária é
- * gente, e não existe uma Carla de carne e osso. A secretária da clínica se chama Jéssica,
- * e não é do consultório do Dr. Bruno. Então a família conversava três dias com a Carla,
- * chegava lá, e encontrava outra pessoa.
+ * ORIGEM DA REGRA. Ela abria com "Aqui é a Carla, secretária do Dr. Bruno Soares". Secretária
+ * é gente, e não existe uma Carla de carne e osso. A secretária da clínica se chama Jéssica.
+ * Então a família conversava três dias com a Carla, chegava lá, e encontrava outra pessoa.
+ * A palavra foi banida, e a abertura passou a dizer "o atendimento automático".
  *
- * A regra que mandava assumir ser automática quando PERGUNTAVAM já existia e estava certa
- * (ninguém nunca mentiu quando questionado). O problema era a afirmação positiva antes: um
- * cargo humano dito na primeira linha, que a maioria nunca ia questionar.
+ * O QUE MUDOU EM 29/09/2026, a pedido do dono: "a Carla deve ser mais afetiva com o paciente
+ * ... Meu nome é Carla, sou a secretária do Dr. Bruno. Esse é um primeiro atendimento
+ * automatizado." Ele quer de volta a recepção calorosa, e um sistema que se apresenta como
+ * "o atendimento automático" recebe mal quem chega.
  *
- * O QUE MUDA E O QUE NÃO MUDA. Declarar a natureza transforma o nome de mentira em rótulo:
- * "Carla" colado em "secretária" é uma afirmação sobre uma pessoa; colado em "atendimento
- * automático" é o nome do sistema, como Alexa. Por isso o nome fica, o tom fica, e o registro
- * de secretária de consultório particular (linha COMO VOCÊ FALA) fica também, DE PROPÓSITO:
- * aquilo é sobre como ela escreve, não sobre o que ela diz ser, e é o que a impede de ficar
- * robótica. Tem teste abaixo trancando isso, pra ninguém "consertar" depois por engano.
+ * A palavra voltou COM O QUALIFICADOR: secretária VIRTUAL, e a frase da automação na mesma
+ * respiração. Isso resolve o caso da Jéssica sem voltar à frieza: ninguém sai de uma mensagem
+ * que diz "secretária virtual, atendimento automatizado" achando que vai encontrar a Carla na
+ * recepção. O que esta bateria vigia, então, deixou de ser "a palavra não aparece" e passou a
+ * ser "a palavra nunca aparece sozinha".
+ *
+ * O registro de secretária de consultório particular (linha COMO VOCÊ FALA) continua sendo
+ * outra coisa: aquilo é sobre COMO ela escreve, não sobre o que ela diz ser, e é o que a
+ * impede de ficar robótica. Tem teste abaixo trancando isso, pra ninguém "consertar" por engano.
  *
  * E a escalada mudou junto. Não existe equipe: quem resolve o que ela não resolve é o Dr.
  * Bruno. Mas quem VOLTA com a resposta continua sendo ela, porque num consultório premium
@@ -44,12 +48,28 @@ const CEREBRO = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "ut
 const PROMPT = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREBRO.indexOf("function montarSystemPrompt("));
 const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
 
-// ------------------------------------------------- 1. ela não afirma mais ser secretária
+// ------------------------------------------------- 1. "secretária" NUNCA aparece sozinha
 {
-  ok(!/Aqui é a Carla, secretária/.test(SEM_COMENTARIO), "1. a apresentação não pode mais dizer secretária");
-  ok(!/^Você é Carla, secretária/m.test(SEM_COMENTARIO), "1b. a identidade no topo do prompt não pode dizer secretária");
+  // A TRAVA CENTRAL DESTE ARQUIVO. Toda ocorrência de "secretária/secretário" no que a Carla
+  // lê tem que ser seguida de "virtual" ou fazer parte de uma proibição/explicação. Uma
+  // sozinha é a Jéssica de volta: a família que lê "sou a secretária do Dr. Bruno" vai à
+  // clínica procurar a Carla.
+  const soltas = [];
+  const re = /secretári[ao]([^]{0,12})/g;
+  let m;
+  while ((m = re.exec(SEM_COMENTARIO)) !== null) {
+    const depois = m[1];
+    const antes = SEM_COMENTARIO.slice(Math.max(0, m.index - 40), m.index);
+    const qualificada = /^\s+virtual/i.test(depois);
+    const proibicao = /NUNCA|não pode|sem o|registro é o de uma|existe uma/i.test(antes);
+    if (!qualificada && !proibicao) soltas.push(SEM_COMENTARIO.slice(Math.max(0, m.index - 50), m.index + 40));
+  }
+  eq(soltas.length, 0, "1. nenhuma 'secretária' solta, sem o 'virtual': " + JSON.stringify(soltas));
   ok(/NUNCA diz que é uma pessoa/.test(SEM_COMENTARIO), "1c. a proibição de dizer que é pessoa está no topo, onde ancora o resto");
-  ok(/NUNCA se apresenta como secretária/.test(SEM_COMENTARIO), "1d. e a proibição de se apresentar como secretária também");
+  ok(/NUNCA se apresenta como "secretária" sem o "virtual" junto/.test(SEM_COMENTARIO),
+    "1d. e a regra do qualificador está escrita no topo, onde ancora o resto");
+  ok(/existe uma secretária de carne e osso na clínica/.test(SEM_COMENTARIO),
+    "1e. com o MOTIVO junto, senão a próxima pessoa tira o 'virtual' achando que é firula");
 }
 
 // ------------------------------------------------- 2. o registro de secretária FICA
@@ -61,23 +81,24 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
     "2. a linha de REGISTRO tem que continuar existindo: ela é sobre o tom, não sobre a identidade");
   // Duas, e as duas são legítimas: a do registro (como escrever) e a proibição no topo
   // (não se apresentar assim). Qualquer terceira é uma afirmação voltando.
-  const ocorrencias = (SEM_COMENTARIO.match(/secretári/g) || []).length;
-  eq(ocorrencias, 2, "2b. 'secretária' só pode aparecer duas vezes: o registro e a proibição");
-  ok(/NUNCA se apresenta como secretária/.test(SEM_COMENTARIO), "2c. a segunda é a proibição, não uma afirmação");
+  ok(/o registro é o de uma secretária de consultório particular/.test(SEM_COMENTARIO),
+    "2b. e essa ocorrência é sobre o tom, não sobre a identidade");
 }
 
 // ------------------------------------------------- 3. a apresentação nova, inteira
 {
-  ok(/Aqui é a Carla, o atendimento automático do consultório do Dr\. Bruno Soares, pediatra/.test(SEM_COMENTARIO),
-    "3. a apresentação diz o que ela é");
-  ok(/Consigo ver valor, horário e marcar a consulta por aqui/.test(SEM_COMENTARIO),
+  ok(/Seja bem-vindo ao consultório do Dr\. Bruno Soares, pediatra/.test(SEM_COMENTARIO),
+    "3. a abertura recebe a pessoa antes de dizer o que é");
+  ok(/Meu nome é Carla, sou a secretária virtual dele, e este atendimento é automatizado/.test(SEM_COMENTARIO),
+    "3a. e diz quem ela é com o qualificador e a automação na MESMA frase");
+  ok(/já faço o seu agendamento/.test(SEM_COMENTARIO),
     "3b. diz o que ela resolve, e inclui MARCAR (que é o que fecha consulta, não só informar)");
   // Antes era "o que eu não resolver eu levo pro Dr. Bruno". A ideia de trocar por "equipe"
   // foi levantada e recusada: não existe equipe, e inventar uma seria trocar uma afirmação
   // falsa sobre ELA por uma afirmação falsa sobre uma organização. "Consultório" resolve o
   // que a "equipe" queria resolver (não parecer que tudo depende de uma pessoa só) sem
   // inventar ninguém: o consultório existe e é dele.
-  ok(/o que eu não resolver aqui, eu encaminho no consultório e te retorno/.test(SEM_COMENTARIO),
+  ok(/O que eu não resolver, eu encaminho no consultório e te retorno/.test(SEM_COMENTARIO),
     "3c. diz que existe um humano atrás. É a frase mais importante logo depois de assumir que é automática");
   // A apresentação vive no prompt, mas nem toda frase que a família lê vive lá: a resposta de
   // emergência (quando a IA não sobe) mora no CÓDIGO, e foi por ali que "Em breve alguém da
@@ -98,7 +119,7 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
   // Dois dos três últimos contatos reais chegaram com pergunta pronta (o Sávio perguntou de
   // convênio, o Almir mandou três perguntas). Pra esses, listar o que ela faz é barreira
   // entre a pergunta e a resposta.
-  ok(/NESSE CASO a parte 2 fica só em quem você é/.test(SEM_COMENTARIO),
+  ok(/NESSE CASO a parte 3 inteira some e a parte 2 fica só nas boas-vindas e em quem você é/.test(SEM_COMENTARIO),
     "4. quem chegou perguntando recebe a apresentação sem a lista do que ela resolve");
   ok(/sem a lista do que você resolve/.test(SEM_COMENTARIO), "4b. a regra diz explicitamente pra cortar a lista");
 }
@@ -137,7 +158,7 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
 {
   ok(/você já disse isso na primeira mensagem desta conversa, então não recite tudo de novo/.test(SEM_COMENTARIO),
     "7. perguntada de novo, ela confirma em vez de repetir a apresentação inteira");
-  ok(/Sou o atendimento automático do consultório do Dr\. Bruno/.test(SEM_COMENTARIO),
+  ok(/Sou a secretária virtual do Dr\. Bruno, o atendimento por aqui é automatizado/.test(SEM_COMENTARIO),
     "7b. e a resposta continua sendo a mesma palavra da abertura, pro sistema falar uma coisa só");
   ok(/nunca peça desculpas por ser automática/.test(SEM_COMENTARIO),
     "7c. sem pedido de desculpa: assumir com naturalidade era o certo antes e continua sendo");
