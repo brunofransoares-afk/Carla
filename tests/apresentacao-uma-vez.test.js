@@ -170,8 +170,8 @@ Storage.reservar({
   "6e. marca a apresentação como efeito posterior à entrega");
 
   ok(/precisaSeApresentar = false/.test(CEREBRO), "6f. o cérebro recebe a decisão, e o padrão é não apresentar");
-  ok(/a secretária virtual do Dr\. Bruno, o atendimento por aqui é automatizado 😊/.test(CEREBRO),
-    "6g. e sabe o que dizer, com o 'virtual' e a automação juntos");
+  ok(/a secretária do Dr\. Bruno, e este atendimento é automatizado no primeiro momento 😊/.test(CEREBRO),
+    "6g. e sabe o que dizer, com a automação colada na palavra secretária");
   ok(/Não reapresente o consultório, não liste o que você resolve/.test(CEREBRO),
     "6h. pra quem já é conhecido é UMA frase, não a abertura inteira: quem tem consulta amanhã não pode ser tratado como contato novo");
 }
