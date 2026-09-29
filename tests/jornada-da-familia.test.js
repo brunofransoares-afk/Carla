@@ -64,7 +64,8 @@ function menuTexto() {
     "1b4. os 30 dias também");
   ok(/ESTE MENU É CURTO DE PROPÓSITO/.test(ESTAVEL),
     "1b5. e está escrito por que ele é curto, pra ninguém voltar a encher as opções");
-  ok(/Qual delas você está procurando\? Pode responder só com o número\./.test(ESTAVEL), "1f. fecha pedindo o número");
+  ok(/Qual delas você está procurando\? Pode responder só com o número ou me contar o que está acontecendo\./.test(ESTAVEL),
+    "1f. fecha abrindo as duas portas: o número e o relato");
   const menu = menuTexto();
   ok(!/R\$/.test(menu), "1g. NENHUM valor dentro do menu: primeiro escolhe, depois direciona");
   ok(/o menu vai pra TODO MUNDO que pergunta valor ou pede pra marcar, mesmo quem já disse o que procura/.test(ESTAVEL), "1h. menu pra todo mundo, inclusive quem já contou o caso");

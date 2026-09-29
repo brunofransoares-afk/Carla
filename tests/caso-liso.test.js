@@ -90,10 +90,33 @@ const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREB
 
 // ------------------------------------------------- 4. a resposta ao menu
 {
-  ok(/A resposta que vale é "1", "2" ou "3", ou o nome do tipo por extenso/.test(ESTAVEL), "4. número ou nome do tipo");
-  ok(/Se a resposta não for uma dessas \(um sintoma solto, uma pergunta, "não sei"\), peça UMA vez, leve: "Me responde só com o número, 1, 2 ou 3\? 😊"/.test(ESTAVEL), "4b. outra coisa: pede o número uma vez");
-  ok(/Se ainda assim não vier, isso não é caso liso: diga que vai confirmar com o Dr\. Bruno e já retorna, e chame escalar_humano/.test(ESTAVEL), "4c. e na segunda, escala");
-  ok(/O TIPO NÃO MUDA DEPOIS DE ESCOLHIDO\. Se a família escolheu um tipo e depois disser algo que aponte pra outro/.test(ESTAVEL), "4d. tipo escolhido não muda");
+  /*
+   * O RELATO VALE COMO RESPOSTA (29/09/2026). O dono: "Pode responder só com o número ou me
+   * contar o que está acontecendo. E aí, quando a pessoa conta o que está acontecendo, se
+   * você tiver certeza absoluta de qual tipo de consulta é, você encaixa. Se não, você me
+   * manda aquele sinal para eu entrar no painel da Carla e dar a resposta certa."
+   *
+   * Antes, quem contava o caso em vez de responder um número levava o menu de volta na cara
+   * ("Me responde só com o número, 1, 2 ou 3?"). Obrigar uma mãe a transformar o filho em
+   * número é o oposto de atender, e é onde a conversa morria.
+   *
+   * O que este bloco guarda são as DUAS pontas, porque só uma delas é perigosa sozinha:
+   * a liberdade de encaixar, e a obrigação de escalar na dúvida.
+   */
+  ok(/o número \(ou o nome do tipo por extenso: "urgência", "rotina", "puericultura", "neurodesenvolvimento", "TDAH", "autismo"\) e o RELATO/.test(ESTAVEL),
+    "4. as duas respostas valem: o número e o relato");
+  ok(/NUNCA peça o número de novo pra quem contou o que está acontecendo, e nunca remande o menu por isso/.test(ESTAVEL),
+    "4b. e quem contou o caso não leva o menu de volta");
+  ok(/QUANDO O RELATO NÃO DEIXA DÚVIDA, VOCÊ MESMA ENCAIXA/.test(ESTAVEL), "4b2. relato claro, ela encaixa sozinha");
+  ok(/Diga qual foi, com naturalidade, junto do valor/.test(ESTAVEL),
+    "4b3. dizendo QUAL tipo ela entendeu, senão a família não tem como corrigir");
+  ok(/QUANDO FICA QUALQUER DÚVIDA, VOCÊ NÃO CHUTA/.test(ESTAVEL), "4c. e na dúvida, escala em vez de chutar");
+  ok(/Certeza absoluta encaixa; qualquer sombra de dúvida escala\. Não existe meio-termo, e não existe "acho que é"/.test(ESTAVEL),
+    "4c2. sem meio-termo: é o que separa encaixar de adivinhar");
+  ok(/ERRAR O TIPO É PIOR DO QUE PERGUNTAR/.test(ESTAVEL), "4c3. com o motivo, que é o que sustenta a escolha na hora");
+  ok(/O TIPO NÃO MUDA DEPOIS DE ESCOLHIDO\. Isto vale a partir da ESCOLHA DELA/.test(ESTAVEL), "4d. tipo escolhido não muda");
+  ok(/corrigir o seu palpite é ela escolhendo pela primeira vez, e ali você segue o que ela disse/.test(ESTAVEL),
+    "4d2. mas corrigir o encaixe da Carla não é trocar de tipo: é a família escolhendo");
   ok(/"A família escolheu puericultura pro Levi e agora diz que ele está com febre\. Qual consulta marcar\?"/.test(ESTAVEL), "4e. com o exemplo do print virando pergunta pro painel");
   ok(/com opcoes com os três tipos: rótulos "Urgência", "Puericultura" e "Neurodesenvolvimento", valores urgencia, puericultura e tnd\. No painel isso vira três botões/.test(ESTAVEL), "4i. e os três tipos vão como opções, que viram botões");
   ok(/Nunca repita o bloco de valor com outro tipo: isso é a Carla trocando o tipo sozinha, e a ferramenta recusa/.test(ESTAVEL), "4f. e o bloco de valor não se repete com outro tipo");

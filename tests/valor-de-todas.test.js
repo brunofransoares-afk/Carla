@@ -54,7 +54,8 @@ const REGRA = ESTAVEL.slice(ESTAVEL.indexOf("QUANDO A FAMÍLIA PEDIR O VALOR DE 
   const fds = Preco.reais(Preco.TIPOS.urgencia.fimDeSemanaCentavos).replace(",00", "");
   ok(REGRA.includes(`a linha da urgência é ${fds} e é a única que existe`), "3c. e o fim de semana usa o valor de fim de semana da tabela");
   ok(/Todas em Pix ou cartão via link de pagamento\./.test(REGRA), "3d. com a forma de pagamento numa frase só");
-  ok(/Qual delas você está procurando\? Pode responder só com o número\."\n/.test(REGRA), "3e. e termina puxando a escolha do tipo, igual ao menu");
+  ok(/Qual delas você está procurando\? Pode responder só com o número ou me contar o que está acontecendo\."\n/.test(REGRA),
+    "3e. e termina puxando a escolha do tipo, igual ao menu, com as duas portas abertas");
 }
 
 // ------------------------------------------------- 4. a máquina: vários valores não travam o tipo
@@ -63,7 +64,7 @@ const REGRA = ESTAVEL.slice(ESTAVEL.indexOf("QUANDO A FAMÍLIA PEDIR O VALOR DE 
   const fonte = SERVER.slice(SERVER.indexOf("function valorEscrito("), SERVER.indexOf("function combinarEfeitos("));
   const registra = new Function("Preco", fonte + "\nreturn precoParticularInformado;")(Preco);
 
-  const lista = `O atendimento é particular 😊\n\nUrgência: R$ 350\nPuericultura: R$ 450\nNeurodesenvolvimento e saúde mental: R$ 550\n\nTodas em Pix ou cartão via link de pagamento. Qual delas você está procurando? Pode responder só com o número.`;
+  const lista = `O atendimento é particular 😊\n\nUrgência: R$ 350\nPuericultura: R$ 450\nNeurodesenvolvimento e saúde mental: R$ 550\n\nTodas em Pix ou cartão via link de pagamento. Qual delas você está procurando? Pode responder só com o número ou me contar o que está acontecendo.`;
   eq(registra(lista), null, "4. a mensagem com os três valores não registra preço nenhum: o tipo da conversa não trava no primeiro número");
   eq(registra(`O atendimento é particular 😊\n\nUrgência: R$ 600\nPuericultura: R$ 450\n`), null, "4b. nem a de dois valores");
 
