@@ -136,7 +136,7 @@ const lerPreco = extrairLeitorDePreco();
   // tests/jornada-da-familia.test.js. Aqui só importa que as três opções continuam lá.
   ok(/1\. Consulta de urgência\n/.test(SEM_COMENTARIO) && /2\. Consulta de puericultura\n/.test(SEM_COMENTARIO) && /3\. Consulta de neurodesenvolvimento e saúde mental\n/.test(SEM_COMENTARIO),
     "7b. a pergunta do tipo, com as três opções");
-  ok(/SEM NENHUM valor nessa mensagem: primeiro a família escolhe, depois você direciona/.test(SEM_COMENTARIO), "7c. sem preço na pergunta do tipo");
+  ok(/SEM NENHUM valor nessa mensagem: primeiro o tipo fica claro, depois você direciona/.test(SEM_COMENTARIO), "7c. sem preço na pergunta do tipo");
   ok(/O TIPO NÃO MUDA DEPOIS DE ESCOLHIDO\./.test(SEM_COMENTARIO), "7d. na dúvida entre tipos, não escolhe: escala (ver caso-liso)");
   ok(/O VALOR VEM DEPOIS DO TIPO E ANTES DO PERÍODO, SEMPRE/.test(SEM_COMENTARIO), "7e. valor entre tipo e período");
   ok(/"Você prefere de manhã ou à tarde\?"/.test(SEM_COMENTARIO), "7f. a mensagem do valor termina em manhã ou tarde");
