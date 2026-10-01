@@ -131,9 +131,21 @@ function menuTexto() {
   ok(/const LINK_MAPA = String\(process\.env\.LINK_MAPA \|\| ""\)\.trim\(\)\s*\n\s*\|\| "https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=Rua\+Ranulpho\+Alvarenga\+Ferreira,\+61,\+Limeira\+-\+SP";/.test(SERVER), "3. o link do mapa existe, com padrão e .env");
   ok(/const O_QUE_LEVAR = "O que levar: carteira de vacinação, exames recentes se tiver, e os remédios que a criança usa\.";/.test(fs.readFileSync(path.join(__dirname, "..", "instrucoes-da-consulta.js"), "utf8")), "3b. e a lista do que levar, igual ao FATO do prompt (no módulo das instruções)");
   const confirmacao = SERVER.slice(SERVER.indexOf("const texto = `Pagamento recebido!"), SERVER.indexOf("registrarPagamentoNaSessao(a.telefone, a);"));
-  ok(/Instrucoes\.blocoDoLocal\(a, \{ endereco: ENDERECO_CONSULTORIO, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA \}\)/.test(confirmacao) && /const ENDERECO_CONSULTORIO = "Rua Ranulpho Alvarenga Ferreira, 61";/.test(SERVER), "3c. a confirmação do pagamento leva o endereço com o mapa (ou o vídeo, pela modalidade)");
-  ok(/\$\{Instrucoes\.blocoDoQueLevar\(a\)\}/.test(confirmacao), "3d. e o que levar");
-  ok(/\$\{Instrucoes\.avisoDeAtraso\(a, "confirmacao"\)\}/.test(confirmacao), "3e. e o que fazer se atrasar, sem tom de regra");
+  /*
+   * O BOTÃO "PAGO" DEIXOU DE MANDAR MENSAGEM (2026-10-01). O dono: "pode retirar aquela
+   * funcao, nao precisa mais enviar nada quando aperta PAgo".
+   *
+   * O que a mensagem levava não se perdeu: endereço e o que levar a família já recebe na
+   * mensagem da reserva, e os dois voltam nos lembretes (uma semana antes e no dia, que
+   * continuam com blocoDoLocal, blocoDoQueLevar e avisoDeAtraso, incluindo o link do vídeo).
+   * O e-mail e o nascimento passaram a ser pedidos logo depois da reserva. O que some é o
+   * aviso de "pagamento recebido", e isso foi escolha dele.
+   */
+  ok(!/Pagamento recebido/.test(SERVER), "3c. o botão Pago não manda mais mensagem nenhuma");
+  ok(/Instrucoes\.blocoDoLocal\(a, \{ endereco: CARLA_CONFIG\.endereco, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA \}\)/.test(SERVER),
+    "3d. e o endereço (ou o link do vídeo) continua chegando no lembrete do dia");
+  ok(/hoje é o dia da \$\{Instrucoes\.nomeDaConsulta\(a\)\}/.test(SERVER) && /Instrucoes\.avisoDeAtraso\(a, "dia"\)/.test(SERVER),
+    "3e. junto com o que fazer se atrasar");
   ok(!/Qualquer coisa até lá, é só me chamar por aqui\./.test(confirmacao), "3f. no lugar da frase genérica de antes");
   const lembretes = SERVER.slice(SERVER.indexOf("async function enviarLembretes("), SERVER.indexOf("async function enviarLembretes(") + 3000);
   ok(/Passando pra lembrar[^`]*\$\{Instrucoes\.blocoDoQueLevar\(a\)\}/.test(lembretes), "3g. o lembrete da semana antes diz o que levar");

@@ -36,9 +36,21 @@ const semModalidade = { crianca: "Ana" };
 // ------------------------------------------------- 2. as três mensagens do bot usam o módulo, com a reserva
 {
   const confirmacao = SERVER.slice(SERVER.indexOf("const texto = `Pagamento recebido!"), SERVER.indexOf("registrarPagamentoNaSessao(a.telefone, a);"));
-  ok(/A \$\{Instrucoes\.nomeDaConsulta\(a\)\} de \$\{primeiroNome\(a\.crianca\)\} está confirmada/.test(confirmacao), "2. a confirmação diz consulta ou teleconsulta");
-  ok(/\$\{Instrucoes\.blocoDoLocal\(a, \{ endereco: ENDERECO_CONSULTORIO, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA \}\)\}/.test(confirmacao), "2b. local pela modalidade");
-  ok(/\$\{Instrucoes\.blocoDoQueLevar\(a\)\}\$\{pedido\}/.test(confirmacao) && /\$\{Instrucoes\.avisoDeAtraso\(a, "confirmacao"\)\}/.test(confirmacao), "2c. o que levar e o aviso pela modalidade, e o pedido de e-mail e data continua");
+  /*
+   * O BOTÃO "PAGO" DEIXOU DE MANDAR MENSAGEM (2026-10-01). O dono: "pode retirar aquela
+   * funcao, nao precisa mais enviar nada quando aperta PAgo".
+   *
+   * O que a mensagem levava não se perdeu: endereço e o que levar a família já recebe na
+   * mensagem da reserva, e os dois voltam nos lembretes (uma semana antes e no dia, que
+   * continuam com blocoDoLocal, blocoDoQueLevar e avisoDeAtraso, incluindo o link do vídeo).
+   * O e-mail e o nascimento passaram a ser pedidos logo depois da reserva. O que some é o
+   * aviso de "pagamento recebido", e isso foi escolha dele.
+   */
+  ok(!/está confirmada para/.test(SERVER), "2. a confirmação do pagamento não existe mais");
+  ok(/hoje é o dia da \$\{Instrucoes\.nomeDaConsulta\(a\)\}/.test(SERVER),
+    "2b. e o lembrete do dia continua dizendo consulta ou teleconsulta pela modalidade");
+  ok(/Instrucoes\.blocoDoLocal\(a, \{ endereco: CARLA_CONFIG\.endereco, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA \}\)/.test(SERVER),
+    "2c. com o endereço ou o link do vídeo, que é onde isso não pode faltar");
   ok(!/Endereço: Rua Ranulpho|O_QUE_LEVAR|Se precisar remarcar ou for atrasar/.test(confirmacao), "2d. nada fixo de presencial sobrou na confirmação");
   const lembretes = SERVER.slice(SERVER.indexOf("async function enviarLembretes("), SERVER.indexOf("let sockAtivo = null;"));
   ok(/Passando pra lembrar que a \$\{Instrucoes\.nomeDaConsulta\(a\)\} de[^`]*\$\{Instrucoes\.blocoDoQueLevar\(a\)\}/.test(lembretes), "2e. lembrete da semana: nome e o que levar pela modalidade");

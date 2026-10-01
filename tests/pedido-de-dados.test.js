@@ -87,8 +87,11 @@ const COMPLETO = { ...SEM_NADA, responsavelEmail: "ana@exemplo.com", criancaData
   const posPedido = SERVER.indexOf("await pedirDadosDoPortal(");
   ok(posResposta > 0 && posPedido > posResposta,
     "5b. e DEPOIS da mensagem da Carla, senão ele atravessa o texto do pagamento");
-  ok(/const pedido = PedidoDeDados\.trechoNaConfirmacao\(a\);/.test(SERVER),
-    "5c. a confirmação do pagamento continua pedindo o que faltar");
+  // A confirmação do pagamento foi retirada inteira em 01/10/2026, horas depois desta
+  // mudança, a pedido do dono. O pedido ficou só onde ele já estava: logo depois da reserva.
+  // O trechoNaConfirmacao continua existindo e testado, pro dia em que a mensagem voltar.
+  ok(!/trechoNaConfirmacao/.test(SERVER),
+    "5c. a confirmação do pagamento não existe mais, então o pedido dela saiu junto");
   ok(/chaveIdempotencia: `dados-do-portal:\$\{acao\.slotId\}`/.test(SERVER),
     "5d. uma vez por reserva: um reenvio não pergunta duas vezes a mesma coisa");
   ok(/PedidoDeDados\.mensagemDepoisDaReserva\(a\)/.test(SERVER) && /if \(!texto\) continue;/.test(SERVER),

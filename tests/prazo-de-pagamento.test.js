@@ -146,8 +146,8 @@ const em = (data, hora) => {
   ok(/req\.url === "\/interno\/pagamento-confirmado"/.test(bot), "10. e o bot escuta esse caminho");
   ok(/if \(a\.pagamentoAvisadoEm\) return \{ ok: true, jaAvisado: true \};/.test(bot),
     "10. com trava contra mandar duas vezes, porque clique repetido acontece");
-  ok(/está confirmada para/.test(bot),
-    "10. e a mensagem confirma a consulta, o único momento em que essa palavra vale");
+  ok(!/está confirmada para/.test(bot),
+    "10. e o botão não manda mais mensagem: quem aperta Pago só marca como pago");
 
   /*
    * O E-MAIL E A DATA MUDARAM DE LUGAR DUAS VEZES, e as duas por motivo real.
@@ -162,8 +162,8 @@ const em = (data, hora) => {
    * reserva, e a confirmação pede o que AINDA faltar. O texto é um só (pedido-de-dados.js),
    * senão as duas frases divergem na primeira vez que alguém mexer numa delas.
    */
-  ok(/const pedido = PedidoDeDados\.trechoNaConfirmacao\(a\);/.test(bot),
-    "10. a confirmação continua pedindo o que faltar, pelo texto compartilhado");
+  ok(!/trechoNaConfirmacao/.test(bot),
+    "10b2. e o pedido do que faltava saiu junto: ele agora sai logo depois da reserva");
   ok(/await pedirDadosDoPortal\(resultado\.acoes, telefone, jid\);/.test(bot),
     "10b. e o pedido sai logo depois da reserva, sem esperar o pagamento");
   ok(/chaveIdempotencia: `dados-do-portal:\$\{acao\.slotId\}`/.test(bot),
