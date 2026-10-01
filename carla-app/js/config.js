@@ -47,6 +47,18 @@ const CARLA_CONFIG = {
    * abrir uma exceção é o Dr. Bruno.
    */
   antecedenciaMinimaMin: 60,
+
+  /*
+   * A GRADE NUNCA OFERECE HOJE (2026-10-01). O dono: "eu vou pedir para você parar de
+   * oferecer datas do dia de hoje. Nunca ofereça datas do dia atual. Passe a oferecer sempre
+   * da próxima semana. Ou dos próximos dias ali." E vale pra urgência também.
+   *
+   * É mais forte do que a antecedência mínima e NÃO a substitui: as duas valem em lugares
+   * diferentes. A grade fixa nunca mostra hoje; o horário que o Dr. Bruno abre NA MÃO pelo
+   * painel pode ser hoje, e aí só a antecedência mínima se aplica. Essa diferença é o
+   * encaixe: quando ele autoriza, o horário existe e a Carla marca normalmente.
+   */
+  grade: { nuncaHoje: true },
   intervaloMin: 30,
   horizonteDias: 30,
 };

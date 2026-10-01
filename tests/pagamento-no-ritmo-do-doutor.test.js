@@ -96,7 +96,11 @@ const JS = TELA.match(/<script>([\s\S]*)<\/script>/)[1];
   ok(/const pagamento = resultado\.escalarAssunto === "pagamento"\s*\n\s*\? alertaDePagamento\(telefone, \{ pergunta: resultado\.escalarPergunta \}\) : null;/.test(SERVER), "2n. o bot só anexa reserva quando o assunto é pagamento");
   ok(/pagamentoSlotId: pagamento \? \(pagamento\.pagamentoSlotId \|\| null\) : null,/.test(SERVER) && /opcoes: pagamento \? \(pagamento\.opcoes \|\| null\) : resultado\.escalarOpcoes,/.test(SERVER), "2o. e grava o id ou os botões no alerta");
   ok(/if \(pagamentoSlotId\) registro\.pagamentoSlotId = String\(pagamentoSlotId\)\.slice\(0, 80\);/.test(STORAGE) && /valor: String\(o\.valor \|\| ""\)\.slice\(0, 80\)/.test(STORAGE), "2p. o storage persiste o id, e o valor do botão cabe um 'pago:reserva-<uuid>' inteiro");
-  ok(/assunto: \{ type: "string", enum: \["pagamento", "outro"\]/.test(CEREBRO) && /ctx\.escalarAssunto = input\.assunto === "pagamento" \? "pagamento" : "outro";/.test(CEREBRO) && /escalarAssunto: ctx\.escalarAssunto \|\| "outro",/.test(CEREBRO), "2q. a ferramenta tem o assunto, tipado, e ele sai no resultado da IA");
+  ok(/assunto: \{ type: "string", enum: \["pagamento", "encaixe", "outro"\]/.test(CEREBRO) && /ctx\.escalarAssunto = \["pagamento", "encaixe"\]\.includes\(input\.assunto\) \? input\.assunto : "outro";/.test(CEREBRO) && /escalarAssunto: ctx\.escalarAssunto \|\| "outro",/.test(CEREBRO), "2q. a ferramenta tem o assunto, tipado, e ele sai no resultado da IA");
+  // "encaixe" entrou em 01/10/2026 e é o que faz o painel desenhar o campo de horário. Um
+  // assunto que o modelo invente continua caindo em "outro", que é o caminho sem poder nenhum.
+  ok(/if \(assunto === "encaixe"\) registro\.assunto = "encaixe";/.test(STORAGE),
+    "2q2. e só 'encaixe' é gravado no alerta: assunto inventado não vira painel especial");
   ok(/Chame escalar_humano com assunto "pagamento"/.test(CEREBRO), "2r. e o prompt manda usar");
 }
 

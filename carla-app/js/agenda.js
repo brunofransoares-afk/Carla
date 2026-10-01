@@ -40,6 +40,15 @@ const Agenda = (() => {
     return minutos >= CARLA_CONFIG.antecedenciaMinimaMin;
   }
 
+  // E a GRADE tem uma regra a mais: ela nunca mostra o dia de hoje, nem pra urgência. Isto
+  // não vale pros horários abertos à mão no painel, e a diferença é o produto inteiro do
+  // encaixe: a grade é o que a Carla oferece sozinha, o extra é o que o Dr. Bruno autorizou.
+  function ehDiaOferecivelPelaGrade(dataObj, now) {
+    if (!temAntecedencia(dataObj, now)) return false;
+    if (!CARLA_CONFIG.grade || !CARLA_CONFIG.grade.nuncaHoje) return true;
+    return toDateStr(dataObj) !== toDateStr(now);
+  }
+
   // Dentro de uma janela de atendimento (ex: 08:00-12:00), calcula os horários de início
   // possíveis, sempre com 1h de consulta + 30min de intervalo, sem passar do fim da janela.
   function horariosDaJanela(janela) {
@@ -67,7 +76,7 @@ const Agenda = (() => {
         // mínima. A conferência é sempre, e não só no dia de hoje: a janela pode atravessar
         // a meia-noite, e um "só hoje" seria um buraco esperando o dia em que atravessar.
         const [hSlot, mSlot] = hhmm.split(":").map(Number);
-        if (!temAntecedencia(new Date(d.getFullYear(), d.getMonth(), d.getDate(), hSlot, mSlot), now)) continue;
+        if (!ehDiaOferecivelPelaGrade(new Date(d.getFullYear(), d.getMonth(), d.getDate(), hSlot, mSlot), now)) continue;
         slots.push({
           id: slotId(dateStr, hhmm),
           date: dateStr,
@@ -181,7 +190,7 @@ const Agenda = (() => {
           const idB = slotId(dateStr, horarios[j + 1]);
           if (idsOcupados.has(idA) || idsOcupados.has(idB)) continue;
           const [hA, mA] = horarios[j].split(":").map(Number);
-          if (!temAntecedencia(new Date(d.getFullYear(), d.getMonth(), d.getDate(), hA, mA), now)) continue;
+          if (!ehDiaOferecivelPelaGrade(new Date(d.getFullYear(), d.getMonth(), d.getDate(), hA, mA), now)) continue;
           const rotular = (hhmm) => `${CARLA_CONFIG.nomesDiaSemana[d.getDay()]} (${toDateLabel(d)}) às ${formatHora(hhmm)}`;
           return [
             { id: idA, date: dateStr, time: horarios[j], weekday: d.getDay(), label: rotular(horarios[j]) },
@@ -249,7 +258,7 @@ const Agenda = (() => {
     };
   }
 
-  return { gerarSlotsPossiveis, disponiveis, oferecerSlots, doisSeguidos, ajustarHorario, temAntecedencia, formatHora, toDateLabel, toDateStr };
+  return { gerarSlotsPossiveis, disponiveis, oferecerSlots, doisSeguidos, ajustarHorario, temAntecedencia, ehDiaOferecivelPelaGrade, formatHora, toDateLabel, toDateStr };
 })();
 
 // Compatibilidade com Node (require) — ver explicação em config.js.

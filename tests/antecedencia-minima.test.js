@@ -1,5 +1,5 @@
 /*
- * Bateria: a agenda precisa de antecedência, e não só de "ainda não começou".
+ * Bateria: a agenda precisa de antecedência, e a GRADE não oferece hoje de jeito nenhum.
  *
  * O dono, em 25/09: "se eu tenho um horario as 11h em aberto, e ja for 10h, ela nao pode
  * marcar. tem q ter ai uma trava de 1 h pelomenos, pq as vezes eu nem to no consultorio e sao
@@ -18,6 +18,19 @@
  *   5. A RESERVA. Este é o que fecha: entre oferecer e confirmar passa uma conversa inteira,
  *      e um horário de 11h oferecido às 10h05 chega no confirmar_agendamento às 10h50 se
  *      ninguém olhar o relógio outra vez.
+ *
+ * E EM 01/10/2026 ENTROU UMA REGRA MAIS FORTE POR CIMA. O dono: "eu vou pedir para você
+ * parar de oferecer datas do dia de hoje. Nunca ofereça datas do dia atual." Vale pra
+ * urgência também.
+ *
+ * AS DUAS REGRAS CONVIVEM, E A DIFERENÇA ENTRE ELAS É O PRODUTO INTEIRO DO ENCAIXE:
+ *
+ *   - A GRADE nunca mostra hoje. É o que a Carla oferece sozinha.
+ *   - O HORÁRIO ABERTO À MÃO no painel PODE ser hoje, e ali só a antecedência mínima vale.
+ *     É o que o Dr. Bruno autoriza quando responde um pedido de encaixe.
+ *
+ * Se alguém "uniformizar" isso e fizer a regra de hoje valer também pros extras, o encaixe
+ * para de funcionar em silêncio: ele abre o horário, e a Carla não acha. Tem teste abaixo.
  *
  * Um pedido dentro da janela não vira recusa seca: vira escalar_humano. Quem abre exceção é
  * o Dr. Bruno, não a Carla.
@@ -49,44 +62,41 @@ const horariosDeHoje = (now) => Agenda.disponiveis(now, new Set())
   ok(typeof Agenda.temAntecedencia === "function", "0b. e a conta mora num lugar só, exportada");
 }
 
-// ------------------------------------------------- 1. a grade
+// ------------------------------------------------- 1. a grade não oferece hoje, nunca
 {
-  ok(horariosDeHoje(as(9, 55)).indexOf("11:00") >= 0,
-    "1. às 09:55, o horário das 11h ainda é oferecido (65 minutos é antecedência suficiente)");
-  ok(horariosDeHoje(as(10, 50)).indexOf("11:00") < 0,
-    "1b. às 10:50 ele some: é o caso exato que o dono descreveu");
-  ok(horariosDeHoje(as(10, 0)).indexOf("11:00") >= 0,
-    "1c. exatamente 60 minutos ainda vale: a trava é 'pelo menos uma hora', não 'mais de'");
-  ok(horariosDeHoje(as(10, 1)).indexOf("11:00") < 0,
-    "1d. e um minuto a menos já não vale");
-  ok(horariosDeHoje(as(10, 50)).indexOf("14:00") >= 0,
-    "1e. o resto do dia continua de pé: a trava é do horário de perto, não do dia inteiro");
-  eq(horariosDeHoje(as(16, 0)).length, 0,
-    "1f. no fim da tarde não sobra horário de hoje, e isso não é erro");
+  eq(horariosDeHoje(as(6, 0)).length, 0,
+    "1. de madrugada, a grade não tem nenhum horário de hoje");
+  eq(horariosDeHoje(as(9, 55)).length, 0,
+    "1b. às 09:55 também não: o das 11h existia e saiu junto com o dia");
+  ok(Agenda.disponiveis(as(6, 0), new Set()).length > 10,
+    "1c. mas os outros dias continuam cheios: a regra é do dia de hoje, não da agenda");
+  const primeiro = Agenda.disponiveis(as(6, 0), new Set())[0];
+  ok(primeiro && primeiro.date > SEGUNDA,
+    "1d. e o mais cedo que existe é depois de hoje (" + (primeiro && primeiro.date) + ")");
 
-  // A conferência não é mais "só hoje". Uma janela que atravessasse a meia-noite deixaria
-  // um buraco de uma hora do outro lado, e buraco que depende do relógio é o pior tipo.
   const FONTE = fs.readFileSync(path.join(__dirname, "..", "carla-app", "js", "agenda.js"), "utf8");
-  ok(!/if \(i === 0\) \{[\s\S]{0,200}slotDate <= now/.test(FONTE),
-    "1g. a conferência de hoje virou conferência sempre");
-  eq((FONTE.match(/temAntecedencia\(/g) || []).length >= 4, true,
-    "1h. e ela é usada nos quatro caminhos da agenda, não só no primeiro");
+  ok(/function ehDiaOferecivelPelaGrade/.test(FONTE),
+    "1e. a regra da grade tem nome próprio, separada da antecedência");
+  eq((FONTE.match(/ehDiaOferecivelPelaGrade\(/g) || []).length >= 3, true,
+    "1f. e é usada na grade e no par dos irmãos, não só num lugar");
+  ok(/grade: \{ nuncaHoje: true \}/.test(fs.readFileSync(path.join(__dirname, "..", "carla-app", "js", "config.js"), "utf8")),
+    "1g. e a decisão está no config, com o motivo escrito");
 }
 
 // ------------------------------------------------- 2. o par de horários seguidos (irmãos)
 {
   const parCedo = Agenda.doisSeguidos(as(6, 0), new Set());
-  ok(parCedo && parCedo[0].date === SEGUNDA && parCedo[0].time === "08:00",
-    "2. de madrugada, o par dos irmãos começa às 8h");
-  const parTarde = Agenda.doisSeguidos(as(7, 30), new Set());
-  ok(parTarde && !(parTarde[0].date === SEGUNDA && parTarde[0].time === "08:00"),
-    "2b. às 07:30 o par das 8h já não serve: meia hora não dá tempo de trazer duas crianças");
+  ok(parCedo && parCedo[0].date > SEGUNDA,
+    "2. o par dos irmãos também não é hoje, nem de madrugada");
+  ok(parCedo && parCedo[0].date === parCedo[1].date && parCedo[0].time < parCedo[1].time,
+    "2b. e continua sendo um par de verdade: mesmo dia, um depois do outro");
 }
 
 // ------------------------------------------------- 3. o ajuste de até 30 minutos
 {
-  // Base 11h, e o ajuste pedido é 10h30: cabe na janela da manhã (10:30 + 1h fecha às 11:30,
-  // antes do meio-dia), então o que decide é só a antecedência.
+  // O AJUSTE CONTINUA SENDO SOBRE ANTECEDÊNCIA, e não sobre o dia: ele acontece em cima de
+  // um horário que a Carla já ofereceu, e um horário aberto à mão pelo Dr. Bruno pode ser
+  // hoje. Por isso a base aqui é um horário de hoje: é o caso do encaixe autorizado.
   const base = { id: SEGUNDA + "T11:00", date: SEGUNDA, time: "11:00", weekday: 1 };
   const cedo = Agenda.ajustarHorario(as(7, 0), base, "10:30", []);
   ok(cedo.ok, "3. às 07:00, ajustar 11h para 10h30 é permitido");
@@ -102,9 +112,18 @@ const horariosDeHoje = (now) => Agenda.disponiveis(now, new Set())
 {
   const FONTE = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8");
   ok(/Agenda\.temAntecedencia\(new Date\(ano, mes - 1, dia, h, m\), now\)/.test(FONTE),
-    "4. o extra aberto no painel passa pela MESMA conta da grade");
+    "4. o extra aberto no painel passa pela antecedência mínima");
   ok(!/return new Date\(ano, mes - 1, dia, h, m\) > now;/.test(FONTE),
     "4b. e a comparação antiga, que só olhava se tinha começado, saiu");
+
+  /*
+   * MAS O EXTRA NÃO PASSA PELA REGRA DE HOJE, e isto é o contrário de um descuido: é o que
+   * faz o encaixe existir. O Dr. Bruno responde "consigo às 15h", o painel abre o horário de
+   * HOJE, e a Carla precisa achá-lo pra oferecer. Se alguém uniformizar as duas regras aqui,
+   * o encaixe quebra em silêncio: o horário é aberto e some.
+   */
+  ok(!/ehDiaOferecivelPelaGrade/.test(FONTE),
+    "4c. o extra NÃO usa a regra da grade: horário aberto à mão pode ser hoje, e é isso que o encaixe é");
 }
 
 // ------------------------------------------------- 5. a reserva, que é a que fecha
