@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { escreverJSONAtomico } = require("./arquivo-atomico.js");
+const { COMMIT_CARREGADO } = require("./versao-do-codigo.js");
 
 const ARQUIVO = process.env.CARLA_STATUS_WHATSAPP
   ? path.resolve(process.env.CARLA_STATUS_WHATSAPP)
@@ -26,6 +27,8 @@ function registrar(estado, { agora = new Date(), pid = process.pid } = {}) {
     conectado: estado === "conectado",
     pid: Number(pid) || null,
     atualizadoEm: instante.toISOString(),
+    // O commit que o BOT carregou. Quem grava este arquivo é o bot, então é a versão dele.
+    codigo: COMMIT_CARREGADO,
   };
   fs.mkdirSync(path.dirname(ARQUIVO), { recursive: true });
   escreverJSONAtomico(ARQUIVO, registro);
@@ -58,6 +61,7 @@ function ler({ pidEsperado = null, agora = new Date(), validadeMs = VALIDADE_MS 
     estado: registro.estado,
     conectado: registro.estado === "conectado" && registro.conectado === true,
     atualizadoEm: registro.atualizadoEm,
+    codigo: registro.codigo || null,
   };
 }
 
@@ -78,6 +82,7 @@ function resumir({ rodando, existe, pid, agora = new Date() }) {
     whatsappConectado: whatsapp.conectado,
     whatsappEstado: whatsapp.estado,
     whatsappAtualizadoEm: whatsapp.atualizadoEm,
+    versaoBot: whatsapp.codigo || null,
   };
 }
 

@@ -1503,8 +1503,25 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
   };
 }
 
+// SUGESTÃO DE REAQUECIMENTO (2026-10-01). Um pedido à parte, SEM FERRAMENTAS: o que sai
+// daqui é só texto, que vai pra caixa de mensagem da ficha. Não marca, não cancela, não
+// manda nada. Quem decide e envia é o Dr. Bruno.
+async function sugerirReaquecimento({ system, pedido }) {
+  const api = obterCliente();
+  if (!api) throw new Error("IA indisponível (sem ANTHROPIC_API_KEY).");
+  const resposta = await LimiteIA.comLimiteGlobal(() => LimiteIA.iniciarChamada(() => api.messages.create({
+    model: MODELO,
+    max_tokens: 800,
+    system,
+    messages: [{ role: "user", content: pedido }],
+  })));
+  registrarUsoDeCache(resposta.usage);
+  return resposta.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+}
+
 module.exports = {
   responder,
+  sugerirReaquecimento,
   pareceEmergencia,
   avaliarEmergencia,
   iaDisponivel,

@@ -977,6 +977,16 @@
       botao.className = "ligar";
       botao.textContent = "Ligar Carla";
     }
+    // A VERSÃO QUE ESTÁ RODANDO. Painel e bot carregam o código cada um quando sobe; se um
+    // deles não reiniciou depois de uma atualização, ele continua com o comportamento velho
+    // (foi assim que uma confirmação de pagamento já retirada pôde sair). Diferentes = aviso.
+    const vp = status.versaoPainel, vb = status.versaoBot;
+    if (vp && vb && vp !== vb) {
+      texto.textContent += ` · ATENÇÃO: bot na versão ${vb}, painel na ${vp}. Desligue e ligue a Carla.`;
+      dot.className = "status aviso";
+    } else if (vp || vb) {
+      texto.textContent += ` · versão ${vb || vp}`;
+    }
     botao.disabled = acaoEmAndamento;
   }
 
@@ -1407,7 +1417,7 @@
 
     const acoes = `<div class="ficha-secao"><h3>Ações</h3><div class="contato-botoes">
       <button class="btn-mensagem-contato" data-telefone="${escapeHtml(c.telefone)}">Mensagem</button>
-      ${podeMostrarReaquecer(c, silenciado) ? `<button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}">Reaquecer</button>` : ""}
+      <button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}" title="A Carla escreve uma mensagem de retomada levando a conversa em conta. Você lê, ajusta e envia.">Reaquecer</button>
       ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
       <button class="btn-mini btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}" title="${c.ehPaciente ? "Tira a marcação de paciente (e a conversão que ela contou, se foi você que marcou)" : "Fechou com você? Marca aqui: conta como conversão no funil, no anel e nesta ficha"}">${c.ehPaciente ? "É paciente · desmarcar" : "Marcar como paciente (fechou com você)"}</button>
       <button class="btn-mini perigo btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado · reativar" : "Silenciar"}</button>
@@ -1563,6 +1573,7 @@
     caixa.hidden = false;
     const campo = caixa.querySelector("textarea");
     campo.value = m.texto;
+    delete caixa.dataset.reaquecimento;
     caixa.querySelector(".input-carla-continua").checked = !!m.carlaContinua;
     caixa.querySelector(".msg-manual-aviso").textContent = "";
     campo.focus();
@@ -1581,6 +1592,7 @@
     caixa.querySelector("textarea").value = "";
     caixa.querySelector(".msg-manual-aviso").textContent = "";
     caixa.querySelector(".input-carla-continua").checked = false;
+    delete caixa.dataset.reaquecimento;
     caixa.hidden = true;
     atualizarCrm();
   }
@@ -1601,7 +1613,8 @@
       const resp = await fetch("/api/mensagem-manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone, texto, carlaContinua }),
+        // reaquecimento: a caixa foi preenchida pelo botão Reaquecer. O bot registra como tal.
+        body: JSON.stringify({ telefone, texto, carlaContinua, reaquecimento: caixa.dataset.reaquecimento === "1" }),
       });
       const r = await resp.json();
       if (!r.ok) {
@@ -1699,39 +1712,42 @@
     atualizarCrm();
   }
 
-  // O botão só aparece pra quem faz sentido. As travas de VERDADE estão no servidor
-  // (reaquecimento.js), porque esconder botão não é segurança: isto aqui só evita mostrar
-  // uma opção que vai ser recusada. A conversa precisa ter pelo menos um dia parada.
-  function podeMostrarReaquecer(c, silenciado) {
-    if (silenciado || c.aguardandoHumano || c.fechou || c.proximaConsulta) return false;
-    if (!c.ultimaAtividade) return false;
-    return Date.now() - new Date(c.ultimaAtividade).getTime() >= 24 * 60 * 60 * 1000;
-  }
-
-  // Uma mensagem não solicitada, saindo de um número de WhatsApp que é o do consultório.
-  // Confirmação obrigatória: clique errado aqui não tem desfazer.
+  // REAQUECER EM QUALQUER CONTATO, E SÓ SUGERE (2026-10-01). O dono: "O botão de reaquecer
+  // tem que estar disponível em todo o contato. Eu decido o tempo" e "na mensagem sugerida,
+  // o botão deve levar a conversa em consideração ali e responder direito".
+  //
+  // O clique pede a sugestão (a Carla escreve com a conversa à vista) e a coloca na caixa de
+  // mensagem desta ficha, com "a Carla continua" marcado. Nada sai daqui: ele lê, ajusta e
+  // toca em Enviar. O que antes era motivo de recusa (conversa recente, já reaquecido, nunca
+  // respondeu) aparece como aviso embaixo da caixa, pra ele decidir sabendo.
   async function reaquecerContato(botao, telefone) {
-    if (!confirm(`Mandar uma mensagem de retomada para ${telefone}?\n\nA Carla escreve sozinha e continua a conversa se a pessoa responder. Isso só pode ser feito uma vez por contato.`)) return;
+    if (botao.disabled) return;
     botao.disabled = true;
-    botao.textContent = "Enviando...";
+    botao.textContent = "Escrevendo...";
+    let r = null;
     try {
       const resp = await postJSON("/api/reaquecer", { telefone });
-      const r = await resp.json();
-      if (!r.ok) {
-        alert("Não deu pra reaquecer: " + (r.motivo || "motivo desconhecido"));
-        botao.disabled = false;
-        botao.textContent = "Reaquecer";
-        return;
-      }
-      botao.textContent = "Reaquecido";
+      r = await resp.json().catch(() => null);
     } catch (e) {
-      alert("Não deu pra reaquecer: sem conexão com o painel.");
-      botao.disabled = false;
-      botao.textContent = "Reaquecer";
+      r = null;
     }
-    atualizar();
-    atualizarCrm();
-    atualizarFunil();
+    botao.disabled = false;
+    botao.textContent = "Reaquecer";
+    if (!r || !r.ok) {
+      alert("Não consegui a sugestão: " + ((r && r.motivo) || "sem conexão com a Carla"));
+      return;
+    }
+    const caixa = document.querySelector(`#ficha-contato .msg-manual[data-caixa="${CSS.escape(telefone)}"]`);
+    if (!caixa) return;
+    caixa.hidden = false;
+    caixa.dataset.reaquecimento = "1";
+    const campo = caixa.querySelector("textarea");
+    campo.value = r.texto;
+    caixa.querySelector(".input-carla-continua").checked = true;
+    const avisos = (r.avisos || []).join(" ");
+    caixa.querySelector(".msg-manual-aviso").textContent =
+      "Sugestão da Carla: leia, ajuste se quiser e toque em Enviar." + (avisos ? " Atenção: " + avisos : "");
+    campo.focus();
   }
 
   async function retomarAtendimentoContato(telefone) {

@@ -64,7 +64,7 @@ const esperaDaEscalada = () => ({ aguardandoHumano: true, aguardandoHumanoDesde:
 // ------------------------------------------------- 4. o envio manual roda na fila do telefone
 {
   const porta = SERVER.slice(SERVER.indexOf("async function mensagemManual(telefone"), SERVER.indexOf("async function mensagemManualNaFila("));
-  ok(/return filaMensagens\.enfileirar\(telefone, \(\) => mensagemManualNaFila\(telefone, limpo, carlaContinua\)\);/.test(porta), "4. o envio manual entra na fila daquele telefone");
+  ok(/return filaMensagens\.enfileirar\(telefone, \(\) => mensagemManualNaFila\(telefone, limpo, carlaContinua, reaquecimento\)\);/.test(porta), "4. o envio manual entra na fila daquele telefone");
   ok(!/Storage\.salvarSessao|normalizarSessao/.test(porta), "4b. e nada de sessão acontece fora da fila");
   const naFila = SERVER.slice(SERVER.indexOf("async function mensagemManualNaFila("), SERVER.indexOf("async function processarMensagem("));
   const leSessao = naFila.indexOf("normalizarSessao(telefone, Storage.obterSessao(telefone))");

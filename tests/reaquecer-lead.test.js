@@ -1,33 +1,29 @@
 /*
  * Bateria do reaquecimento de lead.
  *
- * A família falou, não fechou, sumiu. O Dr. Bruno aperta um botão e a Carla volta a falar
- * com ela UMA vez. Se a família responder, a conversa segue sozinha.
+ * O DONO (2026-10-01): "O botão de reaquecer tem que estar disponível em todo o contato. Eu
+ * decido o tempo, entendeu? Não é para o botão de reaquecer aparecer só depois de certo
+ * tempo. E na mensagem sugerida, o botão deve levar a conversa em consideração ali e
+ * responder direito."
  *
- * O PERIGO DESTA FUNÇÃO. A Carla roda em Baileys, cliente NÃO OFICIAL do WhatsApp. Mensagem
- * não solicitada em massa é o padrão clássico de banimento, e o número banido é o do
- * consultório: perde a sessão, perde o contato com todos os pacientes, perde a Carla. Por
- * isso não existe disparo em lote, existe um botão por vez, e existem travas duras.
+ * Então: o botão está em toda ficha, o clique só SUGERE (a Carla escreve com a conversa à
+ * vista, num pedido sem ferramentas), a sugestão cai na caixa de mensagem, e quem envia é ele.
+ * O que antes eram travas (conversa de hoje, já reaquecido, nunca respondeu, consulta
+ * marcada) virou aviso ao lado da sugestão.
  *
- * O PROBLEMA DAS 4 HORAS, que quase passou batido. O histórico é apagado quando a família
- * volta a escrever depois de 4h (server.js, historicoExpirou). O detalhe é o MOMENTO: a
- * limpeza roda na CHEGADA da mensagem. Então a conversa de três dias atrás de quem nunca
- * mais escreveu ainda está inteira no sessoes.json, e seria apagada exatamente quando a
- * família respondesse ao reaquecimento — a Carla ficaria sem memória no pior instante.
- *
- * A saída não foi aumentar o prazo (isso traz de volta o defeito que a regra conserta: ela
- * retomando "Pix ou cartão?" de outro assunto). O botão converte o passado em FATOS, uma
- * vez, e manda pelo prompt do sistema. Ela sabe O QUE aconteceu sem ter os TURNOS.
+ * O que continua de pé: um contato por vez, nunca em lote. A Carla roda num cliente não
+ * oficial do WhatsApp, e disparo em massa é o padrão clássico de banimento.
  *
  * Roda com:  node tests/reaquecer-lead.test.js
  */
 "use strict";
 const fs = require("fs");
 const path = require("path");
+const vm = require("vm");
 
 let passou = 0, falhou = 0;
 const erros = [];
-function ok(cond, msg) { if (cond) { passou++; return; } falhou++; erros.push(msg); }
+function ok(cond, msg) { if (typeof msg !== "string") throw new Error("ok(cond, msg)"); if (cond) { passou++; return; } falhou++; erros.push(msg); }
 function eq(a, b, msg) { ok(a === b, msg + " (esperado " + JSON.stringify(b) + ", veio " + JSON.stringify(a) + ")"); }
 
 const RAIZ = path.join(__dirname, "..");
@@ -42,175 +38,127 @@ const HA_TRES_DIAS = new Date("2026-08-17T12:00:00Z").toISOString();
 const HA_DUAS_HORAS = new Date("2026-08-20T10:00:00Z").toISOString();
 const OK = { respondeuAlgumaVez: true, ultimaAtividade: HA_TRES_DIAS };
 
-// ------------------------------------------------- 1. o caminho feliz
+// ------------------------------------------------- 1. ele decide: nada é recusado
 {
   const v = Reaquecimento.podeReaquecer(OK, AGORA);
-  ok(v.pode, "1. lead que respondeu e sumiu há 3 dias pode ser reaquecido");
-  eq(v.motivo, null, "1b. e sem motivo de recusa");
-}
-
-// ------------------------------------------------- 2. a regra de ouro
-{
-  // Quem nunca respondeu não é lead esfriado: é número errado, engano ou desinteresse
-  // total. É exatamente ali que mora a denúncia que derruba o número.
-  const v = Reaquecimento.podeReaquecer({ ...OK, respondeuAlgumaVez: false }, AGORA);
-  ok(!v.pode, "2. quem NUNCA respondeu não pode ser reaquecido");
-  ok(/nunca respondeu/.test(v.motivo), "2b. e o motivo diz isso pro Dr. Bruno");
-  ok(/bloqueado/.test(v.motivo), "2c. explicando o risco, senão parece burocracia e alguém tira a trava");
-}
-
-// ------------------------------------------------- 3. as outras travas
-{
+  ok(v.pode && v.avisos.length === 0, "1. lead que respondeu e sumiu há 3 dias: pode, sem aviso");
   const casos = [
-    [{ silenciado: true }, /silenciado/i, "3. número silenciado"],
-    [{ aguardandoHumano: true }, /esperando você/i, "3b. conversa em atendimento humano"],
-    [{ temConsultaFutura: true }, /consulta marcada/i, "3c. quem já tem consulta"],
-    [{ jaReaquecidoEm: HA_TRES_DIAS }, /Já foi reaquecido/, "3d. quem já foi reaquecido"],
-    [{ ultimaAtividade: null }, /Sem registro/, "3e. sem conversa nenhuma"],
-    [{ ultimaAtividade: HA_DUAS_HORAS }, /é de hoje/, "3f. conversa ainda quente"],
+    [{ silenciado: true }, /silenciado/i, "1b. número silenciado"],
+    [{ aguardandoHumano: true }, /esperando você/i, "1c. conversa esperando ele"],
+    [{ temConsultaFutura: true }, /consulta marcada/i, "1d. quem já tem consulta"],
+    [{ jaReaquecidoEm: HA_TRES_DIAS }, /Já foi reaquecido/, "1e. quem já foi reaquecido"],
+    [{ ultimaAtividade: HA_DUAS_HORAS }, /menos de um dia/, "1f. conversa de hoje"],
+    [{ respondeuAlgumaVez: false }, /nunca respondeu[\s\S]*denunciado/, "1g. quem nunca respondeu, com o risco explicado"],
   ];
   for (const [extra, regex, nome] of casos) {
-    const v = Reaquecimento.podeReaquecer({ ...OK, ...extra }, AGORA);
-    ok(!v.pode, `${nome} é recusado`);
-    ok(regex.test(v.motivo || ""), `${nome}: o motivo explica (veio "${v.motivo}")`);
+    const r = Reaquecimento.podeReaquecer({ ...OK, ...extra }, AGORA);
+    ok(r.pode, `${nome}: o botão funciona mesmo assim, quem decide é ele`);
+    ok(r.avisos.some((a) => regex.test(a)), `${nome}: e aparece como aviso (veio ${JSON.stringify(r.avisos)})`);
   }
 }
 
-// ------------------------------------------------- 4. conversa de hoje não é lead frio
+// ------------------------------------------------- 2. a conversa entra na sugestão
 {
-  // Reaquecer alguém que falou há duas horas é atropelar conversa viva, e é o jeito mais
-  // rápido de irritar quem ainda estava decidindo.
-  eq(Reaquecimento.ESFRIA_EM_MS, 24 * 60 * 60 * 1000, "4. o corte é de um dia");
-  const quase = new Date(new Date(AGORA).getTime() - 23 * 60 * 60 * 1000).toISOString();
-  ok(!Reaquecimento.podeReaquecer({ ...OK, ultimaAtividade: quase }, AGORA).pode,
-    "4b. 23 horas ainda é cedo");
-  const passou24 = new Date(new Date(AGORA).getTime() - 25 * 60 * 60 * 1000).toISOString();
-  ok(Reaquecimento.podeReaquecer({ ...OK, ultimaAtividade: passou24 }, AGORA).pode,
-    "4c. 25 horas já pode");
+  const historico = [
+    { role: "user", content: "Oi, quanto custa a consulta?" },
+    { role: "assistant", content: [{ type: "text", text: "A consulta de puericultura é R$ 600." }, { type: "tool_use", id: "x", name: "y", input: {} }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "x", content: "segredo da ferramenta" }] },
+    null,
+    { role: "system", content: "nota interna que não é fala de ninguém" },
+    { role: "user", content: "Vocês atendem sábado?" },
+  ];
+  const t = Reaquecimento.trechoDaConversa(historico);
+  ok(/Família: Oi, quanto custa a consulta\?/.test(t), "2. a fala da família entra");
+  ok(/Carla: A consulta de puericultura é R\$ 600\./.test(t), "2b. e a da Carla, mesmo quando veio junto com ferramenta");
+  ok(!/nota interna/.test(t), "2c0. só fala da família e da Carla entra; outro papel não vira 'Carla:'");
+  ok(!/segredo da ferramenta/.test(t), "2c. resultado de ferramenta não entra: não é conversa");
+  ok(/Família: Vocês atendem sábado\?$/.test(t), "2d. e a última pergunta sem resposta fica por último, que é o que a sugestão precisa ver");
+  const longa = Array.from({ length: 40 }, (_, i) => ({ role: "user", content: "fala " + i }));
+  const corte = Reaquecimento.trechoDaConversa(longa).split("\n");
+  ok(corte.length === 20 && corte[19] === "Família: fala 39", "2e. conversa longa: ficam as 20 últimas falas");
+
+  const pedido = Reaquecimento.montarPedidoDaSugestao({ fatos: "Esta família falou com você há 3 dias.", conversa: t });
+  ok(pedido.includes(t) && /há 3 dias/.test(pedido), "2f. o pedido leva os fatos E a conversa");
+  ok(/não há conversa guardada/.test(Reaquecimento.montarPedidoDaSugestao({ fatos: "x" })), "2g. sem conversa, diz isso em vez de mandar vazio");
+
+  const i = Reaquecimento.montarInstrucaoDaSugestao();
+  ok(/Leve a conversa em conta/.test(i) && /pergunta da família sem resposta, responda direito/.test(i),
+    "2h. a instrução manda responder o que ficou pendente");
+  ok(/NUNCA invente valor, horário, endereço/.test(i), "2i. sem inventar o que não está na conversa");
+  ok(/Deixe fácil dizer que não/.test(i), "2j. com saída fácil, que é o que evita denúncia");
+  ok(!/—/.test(i + pedido), "2k. sem travessão no que vai pro modelo");
+  eq(Reaquecimento.limparSugestao("\"Oi — tudo bem?\""), "Oi, tudo bem?", "2l. travessão e aspas da resposta saem antes de chegar à caixa");
 }
 
-// ------------------------------------------------- 5. os fatos, não a conversa
+// ------------------------------------------------- 3. a sugestão não faz nada sozinha
 {
-  const fatos = Reaquecimento.montarContexto({
-    ultimaAtividade: HA_TRES_DIAS, primeiraPergunta: "preco",
-    recebeuPreco: true, recebeuHorario: true, crianca: "Felipe",
-  }, AGORA);
-  ok(/há 3 dias/.test(fatos), "5. diz quanto tempo faz");
-  ok(/A criança é Felipe/.test(fatos), "5b. e o nome da criança quando o sistema sabe");
-  ok(/perguntou o valor da consulta/.test(fatos), "5c. e por que ela chegou");
-  ok(/Você já informou o valor/.test(fatos), "5d. e o que a Carla já disse");
-  ok(/Você já ofereceu horário/.test(fatos), "5e. e o que já ofereceu");
-  ok(/não respondeu depois disso e nenhuma consulta foi marcada/.test(fatos),
-    "5f. e como aquilo terminou, que é a informação que decide o tom");
-
-  // Sem o nome da criança o texto não pode ter buraco nem dizer "null".
-  const magro = Reaquecimento.montarContexto({ ultimaAtividade: HA_TRES_DIAS }, AGORA);
-  ok(!/null|undefined/.test(magro), "5g. sem dado, o texto não vaza null");
-  ok(/há 3 dias/.test(magro), "5h. e continua dizendo o essencial");
+  const sugestao = CEREBRO.slice(CEREBRO.indexOf("async function sugerirReaquecimento("), CEREBRO.indexOf("module.exports = {"));
+  ok(sugestao.length > 0, "3. a chamada da sugestão existe");
+  ok(!/tools:/.test(sugestao), "3b. SEM ferramentas: não marca, não cancela, não consulta agenda");
+  ok(/model: MODELO/.test(sugestao), "3c. mesmo modelo da conversa");
+  const noBot = SERVER.slice(SERVER.indexOf("async function sugerirReaquecimento("), SERVER.indexOf("// MENSAGEM DO DR. BRUNO PRA FAMÍLIA"));
+  ok(noBot.length > 0 && !/enviarResposta\(|salvarSessao\(|Eventos\.registrar\(/.test(noBot),
+    "3d. e o bot não envia, não grava sessão nem conta no funil ao sugerir");
+  ok(/trechoDaConversa\(historico\)/.test(noBot), "3e. a conversa guardada vai junto");
+  ok(/avisos: veredito\.avisos/.test(noBot), "3f. e os avisos voltam pro painel");
+  ok(/const r = await sugerirReaquecimento\(dados\.telefone\);/.test(SERVER), "3g. a rota /interno/reaquecer agora sugere");
 }
 
-// ------------------------------------------------- 6. ontem é "ontem"
+// ------------------------------------------------- 4. quem envia é ele, pela mensagem manual
 {
-  const ontem = new Date("2026-08-19T12:00:00Z").toISOString();
-  ok(/falou com você ontem/.test(Reaquecimento.montarContexto({ ultimaAtividade: ontem }, AGORA)),
-    "6. um dia vira 'ontem', não 'há 1 dias'");
+  const bloco = SERVER.slice(SERVER.indexOf("async function mensagemManualNaFila"), SERVER.indexOf("async function processarMensagem"));
+  ok(/if \(reaquecimento\) sessao\.reaquecidoEm = agora\.toISOString\(\);/.test(bloco), "4. o envio marca o contato como reaquecido");
+  ok(/Eventos\.registrar\(reaquecimento \? "reaquecido" : "mensagem_manual"/.test(bloco), "4b. e o funil conta como reaquecimento");
+  ok(/caixa\.querySelector\("\.input-carla-continua"\)\.checked = true;/.test(TELA), "4c. com a Carla continuando se a pessoa responder");
 }
 
-// ------------------------------------------------- 7. a instrução protege a família
+// ------------------------------------------------- 5. a tela: o botão em toda ficha, e ele só preenche a caixa
 {
-  const i = Reaquecimento.montarInstrucao();
-  ok(/a família não pediu isso/.test(i), "7. deixa claro que quem puxou o assunto foi o consultório");
-  ok(/UMA mensagem curta/.test(i), "7b. uma mensagem, não uma sequência");
-  ok(/NÃO repita o valor/.test(i) && /NÃO liste horário/.test(i),
-    "7c. sem despejar preço e horário em quem não pediu de volta");
-  ok(/NÃO chame nenhuma ferramenta agora/.test(i),
-    "7d. e sem consultar agenda: ela ainda não disse que quer seguir");
-  ok(/deixando fácil dizer que não/.test(i), "7e. com saída fácil, que é o que evita denúncia");
-  ok(/aceite na hora/.test(i), "7f. e recusa é aceita na hora");
-  ok(/NÃO peça desculpa por sumir/.test(i),
-    "7g. sem culpar a família por não ter respondido: quem parou foi a conversa");
+  ok(!/podeMostrarReaquecer/.test(TELA), "5. não existe mais regra escondendo o botão");
+  ok(/<button class="btn-reaquecer-contato" data-telefone="\$\{escapeHtml\(c\.telefone\)\}"/.test(TELA), "5b. o botão está na ficha de todo contato");
+
+  const ini = TELA.indexOf("  async function reaquecerContato(botao, telefone) {");
+  const fim = TELA.indexOf("\n  }\n", ini) + 4;
+  const fonte = TELA.slice(ini, fim);
+  ok(!/mensagem-manual|confirm\(/.test(fonte), "5c. o clique não envia nada");
+
+  const campo = { value: "", focus() {} };
+  const aviso = { textContent: "" };
+  const continua = { checked: false };
+  const caixa = { hidden: true, dataset: {}, querySelector: (s) => (s === "textarea" ? campo : s === ".msg-manual-aviso" ? aviso : continua) };
+  const pedidos = [];
+  const sandbox = {
+    postJSON: async (rota, corpo) => { pedidos.push({ rota, corpo }); return { json: async () => ({ ok: true, texto: "Oi Ana! Sobre o sábado: ...", avisos: ["Já tem consulta marcada."] }) }; },
+    document: { querySelector: () => caixa }, CSS: { escape: (s) => s }, alert: () => { throw new Error("não devia avisar"); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(fonte + "\nthis.f = reaquecerContato;", sandbox);
+  const botao = { disabled: false, textContent: "Reaquecer" };
+  return_ = sandbox.f(botao, "+5531999990000").then(() => {
+    eq(pedidos.length, 1, "5d. pede uma sugestão");
+    eq(pedidos[0] && pedidos[0].rota, "/api/reaquecer", "5e. pela rota do reaquecer");
+    eq(campo.value, "Oi Ana! Sobre o sábado: ...", "5f. e a sugestão cai na caixa");
+    ok(!caixa.hidden && caixa.dataset.reaquecimento === "1" && continua.checked, "5g. caixa aberta, marcada como reaquecimento e com a Carla continuando");
+    ok(/leia, ajuste/.test(aviso.textContent) && /Já tem consulta marcada/.test(aviso.textContent), "5h. com o aviso pra ele decidir");
+    ok(!botao.disabled && botao.textContent === "Reaquecer", "5i. e o botão volta a funcionar (pode pedir outra)");
+  });
+}
+var return_;
+
+// ------------------------------------------------- 6. nunca em lote
+{
+  ok(/NÃO existe versão em lote aqui, de propósito/.test(PAINEL), "6. a ausência de lote está documentada como decisão");
+  ok(!/reaquecer-todos|reaquecerTodos|reaquecer-lote/.test(PAINEL + SERVER + TELA), "6b. e não existe rota nem botão de lote");
+  ok(/encaminharAoBot\("\/interno\/reaquecer"/.test(PAINEL), "6c. o painel encaminha pro bot");
 }
 
-// ------------------------------------------------- 8. o contexto vai pelo PROMPT, não pelo histórico
+// ------------------------------------------------- 7. o que já funcionava não mudou
 {
-  // Se entrasse como turno, a Carla trataria os fatos como coisa que a família disse, e o
-  // anti-spoof do canal cairia junto. É a mesma decisão do recado do Dr. Bruno.
-  ok(/VOCÊ ESTÁ REABRINDO ESTA CONVERSA/.test(CEREBRO), "8. o bloco existe no prompt");
-  ok(/NÃO são mensagens dela e você NÃO tem os turnos/.test(CEREBRO),
-    "8b. dizendo que não são turnos, senão ela responde os fatos como se fossem fala da mãe");
-  ok(/nunca como assunto pendente pra retomar do meio/.test(CEREBRO),
-    "8c. e proibindo retomar do meio, que é o defeito que a limpeza das 4h conserta");
-  ok(/historico: \[\],\s*\n?\s*now: agora/.test(SERVER.replace(/\s+/g, " ").replace(/historico: \[\], now: agora/, "historico: [],\n now: agora"))
-    || /historico: \[\]/.test(SERVER),
-    "8d. e a chamada manda histórico VAZIO: os turnos velhos não voltam");
+  ok(/RECADO DO DR\. BRUNO/.test(CEREBRO), "7. o recado do Dr. Bruno continua");
+  ok(/historicoExpirou\(sessao, now\)/.test(SERVER), "7b. a limpeza das 4h continua de pé");
 }
 
-// ------------------------------------------------- 9. o contexto não pode sujar o cache
-{
-  // O prompt é cacheado por prefixo: um byte diferente no bloco estável invalida tudo. O
-  // reaquecimento muda de conversa pra conversa, então tem que morar no bloco volátil.
-  const estavel = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"),
-    CEREBRO.indexOf("function montarContextoDoAtendimento("));
-  ok(!/REABRINDO ESTA CONVERSA/.test(estavel),
-    "9. o bloco de reaquecimento NÃO pode estar no prompt estável, senão quebra o cache");
-  const contexto = CEREBRO.slice(CEREBRO.indexOf("function montarContextoDoAtendimento("),
-    CEREBRO.indexOf("function montarSystemPrompt("));
-  ok(/REABRINDO ESTA CONVERSA/.test(contexto), "9b. ele mora no bloco de contexto, que é o volátil");
-}
-
-// ------------------------------------------------- 10. marca ANTES de enviar
-{
-  // Duplo clique é o erro caro aqui: manda duas mensagens não solicitadas pra mesma pessoa.
-  // A mensagem entra primeiro na caixa durável; imediatamente depois, antes da tentativa de
-  // rede, aposPersistir marca a sessão. A chave também deduplica uma retomada após queda.
-  const bloco = SERVER.slice(SERVER.indexOf("async function reaquecerLead"),
-                             SERVER.indexOf("async function processarMensagem"));
-  ok(/chaveIdempotencia: `reaquecimento:/.test(bloco)
-    && /efeitoAposEnvio: \{ tipo: "marcar_reaquecimento"/.test(bloco)
-    && /aposPersistir: \(\) => \{[\s\S]*Storage\.salvarSessao/.test(bloco),
-    "10. reaquecimento é deduplicado e a sessão só avança depois da persistência durável");
-  ok(/depois que a mensagem já existe na caixa durável/.test(bloco), "10b. e o porquê está escrito no código");
-  ok(/Eventos\.registrar\("reaquecido"/.test(bloco), "10c. e o funil registra o reaquecimento");
-}
-
-// ------------------------------------------------- 11. não existe disparo em lote
-{
-  // A decisão mais importante do arquivo inteiro. Um botão por vez, com o dedo dele no
-  // gatilho, é o que mantém isso longe do banimento enquanto ninguém sabe se funciona.
-  ok(/NÃO existe versão em lote aqui, de propósito/.test(PAINEL),
-    "11. a ausência de lote está documentada como decisão, não como esquecimento");
-  ok(/cliente NÃO OFICIAL do\n?\s*\/\/ WhatsApp|cliente NÃO OFICIAL do/.test(PAINEL), "11b. com o motivo: o cliente não é oficial");
-  ok(!/reaquecer-todos|reaquecerTodos|reaquecer-lote/.test(PAINEL + SERVER + TELA),
-    "11c. e não existe rota nem botão de lote em lugar nenhum");
-}
-
-// ------------------------------------------------- 12. o painel só encaminha
-{
-  ok(/encaminharAoBot\("\/interno\/reaquecer"/.test(PAINEL),
-    "12. o painel encaminha pro bot, que é quem tem a conexão do WhatsApp");
-  ok(/req\.url === "\/interno\/reaquecer"/.test(SERVER), "12b. e o bot atende nessa rota");
-}
-
-// ------------------------------------------------- 13. a tela pede confirmação
-{
-  // Regex frouxo aqui deixa passar `if (false && !confirm(...))`, que é a confirmação
-  // desligada sem sumir do código. A trava é a linha INTEIRA: confirmar ou sair.
-  ok(/^\s*if \(!confirm\(`[^`]+`\)\) return;$/m.test(TELA),
-    "13. o clique só segue se o confirm() disser sim, e nada pode vir antes dessa condição");
-  ok(/só pode ser feito uma vez por contato/.test(TELA),
-    "13b. e a confirmação avisa que é uma vez só");
-  ok(/botao\.disabled = true/.test(TELA), "13c. o botão trava enquanto envia, contra duplo clique");
-  ok(/function podeMostrarReaquecer/.test(TELA), "13d. e só aparece pra quem faz sentido");
-  ok(/esconder botão não é segurança/.test(TELA),
-    "13e. com o comentário dizendo que a trava de verdade está no servidor");
-}
-
-// ------------------------------------------------- 14. o que já funcionava não mudou
-{
-  ok(/RECADO DO DR\. BRUNO/.test(CEREBRO), "14. o recado do Dr. Bruno continua");
-  ok(/historicoExpirou\(sessao, now\)/.test(SERVER), "14b. a limpeza das 4h continua de pé");
-  ok(/req\.url === "\/interno\/resposta-do-doutor"/.test(SERVER), "14c. e a resposta pelo painel também");
-}
-
-console.log(`\nreaquecer-lead: ${passou} passaram, ${falhou} falharam`);
-if (falhou) { erros.forEach((e) => console.log("  FALHOU: " + e)); process.exit(1); }
+return_.then(() => {
+  console.log(`\nreaquecer-lead: ${passou} passaram, ${falhou} falharam`);
+  if (falhou) { erros.forEach((e) => console.log("  FALHOU: " + e)); process.exit(1); }
+}).catch((e) => { console.error(e); process.exit(1); });
