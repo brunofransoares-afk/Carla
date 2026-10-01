@@ -21,6 +21,7 @@ const AgendaNaoSePergunta = require(path.join(__dirname, "agenda-nao-se-pergunta
 const Prazo = require(path.join(__dirname, "prazo-de-pagamento.js"));
 const Preco = require(path.join(__dirname, "preco-da-consulta.js"));
 const EstadoAtendimento = require(path.join(__dirname, "estado-atendimento.js"));
+const OpcoesEscalonamento = require(path.join(__dirname, "opcoes-do-escalonamento.js"));
 const LinksPagamento = require(path.join(__dirname, "link-de-pagamento.js"));
 const TriagemEmergencia = require(path.join(__dirname, "triagem-emergencia.js"));
 const LimiteIA = require(path.join(__dirname, "limite-ia.js"));
@@ -204,11 +205,11 @@ QUANDO O RELATO NÃO DEIXA DÚVIDA, VOCÊ MESMA ENCAIXA. Diga qual foi, com natu
 
 E A FAMÍLIA PODE TE CORRIGIR. Se ela disser que é outro tipo logo depois de você encaixar, vale o que ELA disse: o encaixe era seu palpite, a escolha é dela. Siga com o tipo novo e diga o valor dele antes de reservar. Isso NÃO é trocar o tipo escolhido, porque ela ainda não tinha escolhido nada.
 
-QUANDO FICA QUALQUER DÚVIDA, VOCÊ NÃO CHUTA. Relato que cabe em dois tipos ("não dorme direito", "está muito agitado", "está estranho"), relato vago ("preciso levar meu filho no pediatra", "não sei"), queixas de tipos diferentes na mesma mensagem, ou qualquer coisa que você não reconheça: acolha, diga que vai confirmar com o Dr. Bruno qual é a consulta certa e que você já retorna, e chame escalar_humano com a pergunta pronta ("A mãe do Théo, 3 anos, diz que ele não dorme direito e está agitado. Qual consulta marcar?") e com opcoes trazendo os três tipos: rótulos "Urgência", "Puericultura" e "Neurodesenvolvimento", valores urgencia, puericultura e tnd. No painel isso vira três botões; ele clica num, a resposta chega a você como o valor daquela opção, e VOCÊ CONTINUA DALI: diz o tipo e o valor e segue o fluxo normal, sem remandar o menu e sem recomeçar a conversa.
+QUANDO FICA QUALQUER DÚVIDA, VOCÊ NÃO CHUTA. Relato que cabe em dois tipos ("não dorme direito", "está muito agitado", "está estranho"), relato vago ("preciso levar meu filho no pediatra", "não sei"), queixas de tipos diferentes na mesma mensagem, ou qualquer coisa que você não reconheça: acolha, diga que vai confirmar com o Dr. Bruno qual é a consulta certa e que você já retorna, e chame escalar_humano com assunto "tipo" e com a pergunta pronta ("A mãe do Théo, 3 anos, diz que ele não dorme direito e está agitado. Qual consulta marcar?"). O assunto "tipo" faz o painel mostrar os três tipos como botões; ele clica num, a resposta chega a você como urgencia, puericultura ou tnd, e VOCÊ CONTINUA DALI: diz o tipo e o valor e segue o fluxo normal, sem remandar o menu e sem recomeçar a conversa.
 
 ERRAR O TIPO É PIOR DO QUE PERGUNTAR: tipo errado leva a família pra consulta errada, e a ferramenta ainda recusa a reserva porque o valor informado não bate. Certeza absoluta encaixa; qualquer sombra de dúvida escala. Não existe meio-termo, e não existe "acho que é".
 
-O TIPO NÃO MUDA DEPOIS DE ESCOLHIDO. Isto vale a partir da ESCOLHA DELA (o número, o nome do tipo, ou a correção de um encaixe seu), nunca a partir de um encaixe seu que ela ainda não confirmou: corrigir o seu palpite é ela escolhendo pela primeira vez, e ali você segue o que ela disse. Se a família escolheu um tipo e depois disser algo que aponte pra outro (escolheu rotina e fala de febre; escolheu urgência e fala de acompanhar o desenvolvimento), ou questionar o tipo, você NÃO troca e NÃO discute: diz que vai confirmar com o Dr. Bruno e já retorna, e chama escalar_humano com a pergunta pronta ("A família escolheu puericultura pro Levi e agora diz que ele está com febre. Qual consulta marcar?") e com opcoes com os três tipos: rótulos "Urgência", "Puericultura" e "Neurodesenvolvimento", valores urgencia, puericultura e tnd. No painel isso vira três botões; ele clica num e você continua com aquele tipo. A conversa pausa até ele responder. Nunca repita o bloco de valor com outro tipo: isso é a Carla trocando o tipo sozinha, e a ferramenta recusa a reserva de um tipo diferente do primeiro valor informado.
+O TIPO NÃO MUDA DEPOIS DE ESCOLHIDO. Isto vale a partir da ESCOLHA DELA (o número, o nome do tipo, ou a correção de um encaixe seu), nunca a partir de um encaixe seu que ela ainda não confirmou: corrigir o seu palpite é ela escolhendo pela primeira vez, e ali você segue o que ela disse. Se a família escolheu um tipo e depois disser algo que aponte pra outro (escolheu rotina e fala de febre; escolheu urgência e fala de acompanhar o desenvolvimento), ou questionar o tipo, você NÃO troca e NÃO discute: diz que vai confirmar com o Dr. Bruno e já retorna, e chama escalar_humano com assunto "tipo" e a pergunta pronta ("A família escolheu puericultura pro Levi e agora diz que ele está com febre. Qual consulta marcar?"). No painel isso vira os três tipos como botões; ele clica num e você continua com aquele tipo. A conversa pausa até ele responder. Nunca repita o bloco de valor com outro tipo: isso é a Carla trocando o tipo sozinha, e a ferramenta recusa a reserva de um tipo diferente do primeiro valor informado.
 
 Acolher não é só "entendi": é mostrar que você ouviu e que aquele caso está em boas mãos. Numa rotina, pode ser que o Dr. Bruno aproveita a consulta pra ver crescimento, vacinas e desenvolvimento com calma. Numa febre, que ele examina a criança e já orienta o que fazer em casa. Nunca prometa dia nem rapidez nesse acolhimento: quem diz o que existe de horário é a ferramenta, não você. Duas frases, no que encaixa naquele caso específico, não um texto pronto igual pra todo mundo, e não a lista completa do que o consultório tem.
 
@@ -363,7 +364,7 @@ ATENDIMENTO DE FIM DE SEMANA: se perguntarem se o Dr. Bruno atende sábado ou do
 "O atendimento de fim de semana tem valor diferenciado e depende da disponibilidade do Dr. Bruno. No fim de semana só existe consulta de urgência, e ela fica em R$ 600. Vou anotar seus dados e confirmar com ele, e já te retorno por aqui."
 Não basta anotar isso só no motivo do escalar_humano. A família precisa ler isso na mensagem. Depois dessa frase, colete o nome do responsável e o nome da criança (o telefone você já tem, é o desta conversa, não precisa perguntar de novo). Só depois de ter os dois nomes, use escalar_humano incluindo esses dados no motivo. Não prometa horário nem tente fechar nada sozinha, só sinaliza pro Dr. Bruno decidir. Você nunca confirma nem oferece horário de fim de semana sozinha (consultar_horarios só sabe da agenda de segunda a sexta).
 
-SEMPRE QUE A DECISÃO COUBER EM SIM OU NÃO, preencha o campo pergunta do escalar_humano. Ela vira um botão no painel do Dr. Bruno, ele responde num toque e VOCÊ continua a conversa com a resposta dele, sem ele precisar assumir e digitar. Escreva a pergunta completa, de forma que ele entenda sem abrir a conversa: quem é, o que quer, e a data e hora quando houver. QUANDO A DECISÃO É ENTRE ALTERNATIVAS (qual tipo de consulta, por exemplo), preencha a pergunta E o campo opcoes, com até 4 opções de rótulo curto e valor: cada uma vira um botão no painel, ele clica numa e a resposta dele chega a você como o valor daquela opção. Quando a decisão não couber em sim ou não nem em alternativas (uma reclamação grave, um caso confuso), deixe a pergunta vazia e explique tudo no motivo: ali ele vai mesmo precisar ler e responder ele mesmo.
+SEMPRE QUE A DECISÃO COUBER EM SIM OU NÃO, preencha o campo pergunta do escalar_humano. Ela vira um botão no painel do Dr. Bruno, ele responde num toque e VOCÊ continua a conversa com a resposta dele, sem ele precisar assumir e digitar. Escreva a pergunta completa, de forma que ele entenda sem abrir a conversa: quem é, o que quer, e a data e hora quando houver. OS BOTÕES VOCÊ NÃO ESCREVE: eles saem do ASSUNTO que você escolher, e cada assunto tem os três botões que fazem sentido pra ele (ver o campo assunto). Sua parte é escolher o assunto certo e escrever a pergunta; a do sistema é desenhar as alternativas. Quando a decisão não couber em pergunta nenhuma (uma reclamação grave, um caso confuso), deixe a pergunta vazia e explique tudo no motivo: sem pergunta não aparece botão, e ali ele vai mesmo precisar ler e responder ele mesmo.
 
 COMO FALAR DE ESCALONAMENTO: toda vez que usar escalar_humano, diga que vai confirmar com o Dr. Bruno e que VOCÊ retorna, por exemplo "vou confirmar isso com o Dr. Bruno e já te retorno por aqui" (ou variação natural parecida). Quem decide é ele; quem volta com a resposta é você. NÃO prometa que ele vai falar com a família, porque não é assim que funciona, e NÃO fale em "equipe": quem resolve o que você não resolve é o Dr. Bruno. NUNCA use as palavras "transferir" ou "atendimento humano" na mensagem pra família. Isso soa burocrático e frio. Vale pra fim de semana e pra qualquer outro handoff.
 
@@ -629,8 +630,9 @@ const FERRAMENTAS = [
         pergunta: { type: ["string", "null"], description: "Só quando a decisão do Dr. Bruno couber em SIM ou NÃO. Escreva a pergunta que ele vai ler no painel, curta e completa, sem precisar abrir a conversa pra entender (ex: \"Liberar sexta (14/08) às 17h pro Arthur?\"). Ele responde num toque e você continua a conversa. Se a decisão não couber em sim ou não, deixe null e explique no motivo." },
         dataPedida: { type: ["string", "null"], description: "Só quando a família DISSE o dia e você tem certeza da data. NUNCA deduza nem escolha um dia por conta própria: esta data abre um horário de verdade na agenda do Dr. Bruno quando ele aperta SIM, e chutar aqui abre no dia errado. Formato AAAA-MM-DD. Sem o dia confirmado, deixe null e pergunte o dia à família antes de escalar." },
         horaPedida: { type: ["string", "null"], description: "A hora do horário pedido, formato HH:MM (ex: \"17:00\"). Vai junto com dataPedida." },
-        opcoes: { type: ["array", "null"], description: "Só quando a decisão do Dr. Bruno é ENTRE ALTERNATIVAS (qual tipo de consulta, por exemplo). Cada opção vira um botão no painel; ele clica numa e você continua com ela. Até 4 opções, rótulo curto (o que ele lê no botão) e valor (o que volta pra você). Pra tipo de consulta, os valores são urgencia, puericultura e tnd. Vai junto da pergunta.", items: { type: "object", properties: { rotulo: { type: "string" }, valor: { type: "string" } }, required: ["rotulo", "valor"] } },
-        assunto: { type: "string", enum: ["pagamento", "encaixe", "outro"], description: "\"pagamento\" quando a família disse que pagou e você está avisando o Dr. Bruno: o sistema anexa ao alerta a reserva certa dessa família, e o Sim dele confirma só ela. \"encaixe\" quando ela pediu atendimento PRA HOJE: o painel mostra um campo de horário, e o que ele responder ali abre o horário na agenda. Qualquer outro assunto (prazo, desconto, dúvida, horário fora da grade em outro dia) é \"outro\", mesmo que fale em pagamento ou em pressa." },
+        // AS OPÇÕES NÃO VÊM MAIS DA IA. Elas são montadas pelo MOTIVO, em
+        // opcoes-do-escalonamento.js: lista fechada o modelo acerta, redação de botão não.
+        assunto: { type: "string", enum: ["pagamento", "encaixe", "horario", "tipo", "valor", "fim_de_semana", "outro"], description: "O MOTIVO do escalonamento, e é ele que decide os botões que o Dr. Bruno vê no painel. \"pagamento\": a família disse que pagou (o sistema anexa a reserva certa, e o Sim dele confirma só ela). \"encaixe\": ela pediu atendimento PRA HOJE (o painel mostra um campo de horário). \"horario\": ela quer um horário que não existe na grade, em outro dia. \"tipo\": você não tem certeza de qual dos tipos de consulta é o caso dela. \"valor\": preço, desconto, dificuldade de pagar, parcelamento. \"fim_de_semana\": atendimento de sábado ou domingo. \"outro\": o resto. Escolha pelo motivo de verdade, não pelo que a família falou de passagem." },
         tipo: { type: "string", enum: ["atendimento", "comercial"], description: "\"comercial\" quando for representante de laboratório, convite pra palestra/evento, proposta de parceria ou qualquer contato comercial/profissional (não família de paciente). Deixe \"atendimento\" (ou omita) pros outros casos de escalonamento." },
       },
       required: ["motivo"],
@@ -932,7 +934,7 @@ async function executarFerramenta(nome, input, ctx) {
         sucesso: false,
         tipoTravado,
         nomeDoTipoTravado: Preco.TIPOS[tipoTravado].nome,
-        motivo: `O tipo desta conversa já está escolhido: ${Preco.TIPOS[tipoTravado].nome} (foi o primeiro valor informado). Trocar pra ${preco.nome} não é decisão sua. Não reserve. Diga à família que vai confirmar com o Dr. Bruno e já retorna, e chame escalar_humano com a pergunta pronta (ex: "A família escolheu ${Preco.TIPOS[tipoTravado].nome} e agora fala em ${preco.nome}. Qual consulta marcar?") e com opcoes com os três tipos (valores urgencia, puericultura e tnd), que viram botões no painel. A conversa pausa até ele clicar.`,
+        motivo: `O tipo desta conversa já está escolhido: ${Preco.TIPOS[tipoTravado].nome} (foi o primeiro valor informado). Trocar pra ${preco.nome} não é decisão sua. Não reserve. Diga à família que vai confirmar com o Dr. Bruno e já retorna, e chame escalar_humano com assunto "tipo" e a pergunta pronta (ex: "A família escolheu ${Preco.TIPOS[tipoTravado].nome} e agora fala em ${preco.nome}. Qual consulta marcar?"). Os três tipos viram botões no painel. A conversa pausa até ele clicar.`,
       };
     }
     const formasPagamento = LinksPagamento.formasParaPreco(preco.centavos);
@@ -1246,19 +1248,15 @@ if (nome === "escalar_humano") {
     ctx.escalarTipo = input.tipo === "comercial" ? "comercial" : "atendimento";
     // "pagamento" é o único assunto com efeito de máquina: o servidor anexa a reserva ao
     // alerta e o Sim do Dr. Bruno marca SÓ ela como paga. O texto da pergunta não decide.
-    ctx.escalarAssunto = ["pagamento", "encaixe"].includes(input.assunto) ? input.assunto : "outro";
+    ctx.escalarAssunto = OpcoesEscalonamento.normalizarMotivo(input.assunto);
     // A pergunta é o que vira botão de SIM/NÃO no painel. Data e hora só existem quando o
     // pedido é de horário fora da grade, e são elas que deixam o SIM abrir o horário junto.
     ctx.escalarPergunta = pergunta;
     ctx.escalarData = temData ? input.dataPedida : null;
     ctx.escalarHora = temHora ? input.horaPedida : null;
-    // As opções viram botões no painel: uma por alternativa. Rótulo e valor curtos, no
-    // máximo 4, e só junto de uma pergunta (sem pergunta o painel não tem o que perguntar).
-    const opcoes = Array.isArray(input.opcoes) ? input.opcoes
-      .map((o) => ({ rotulo: textoOperacional(o && o.rotulo, 60), valor: textoOperacional(o && o.valor, 40) }))
-      .filter((o) => o.rotulo && o.valor)
-      .slice(0, 4) : [];
-    ctx.escalarOpcoes = pergunta && opcoes.length >= 2 ? opcoes : null;
+    // Os botões saem do MOTIVO, não do que a IA escreveu. Sem pergunta não há botão: alerta
+    // sem pergunta é o caso em que ele precisa ler e responder com as palavras dele.
+    ctx.escalarOpcoes = OpcoesEscalonamento.opcoesDoEscalonamento(ctx.escalarAssunto, { temPergunta: !!pergunta });
     return { ok: true };
   }
 

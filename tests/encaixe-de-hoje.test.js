@@ -70,8 +70,9 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
 
 // ------------------------------------------------- 2. o assunto atravessa as quatro camadas
 {
-  ok(/enum: \["pagamento", "encaixe", "outro"\]/.test(CEREBRO), "4. a ferramenta aceita o assunto");
-  ok(/ctx\.escalarAssunto = \["pagamento", "encaixe"\]\.includes\(input\.assunto\) \? input\.assunto : "outro";/.test(CEREBRO),
+  ok(/enum: \["pagamento", "encaixe", "horario", "tipo", "valor", "fim_de_semana", "outro"\]/.test(CEREBRO),
+    "4. a ferramenta aceita o assunto, na lista dos motivos");
+  ok(/ctx\.escalarAssunto = OpcoesEscalonamento\.normalizarMotivo\(input\.assunto\);/.test(CEREBRO),
     "4b. assunto inventado pelo modelo cai em 'outro', que é o caminho sem poder nenhum");
   ok(/assunto: resultado\.escalarAssunto === "encaixe" \? "encaixe" : null,/.test(SERVER),
     "4c. o bot repassa pro alerta");
