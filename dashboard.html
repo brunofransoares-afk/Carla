@@ -416,6 +416,7 @@
   .chip { font-size: 14px; font-weight: 600; padding: 3px 10px; border-radius: 10px; background: rgba(255,255,255,0.08); color: var(--texto-fraco); white-space: nowrap; }
   .chip.bom { background: rgba(143,186,203,0.16); color: var(--sucesso); }
   .chip.atencao { background: rgba(250,221,124,0.18); color: var(--atencao); }
+  .aviso-pausa { margin: 12px 0 0; padding: 12px 14px; border-radius: 12px; background: rgba(255,143,143,0.12); border: 1px solid rgba(255,143,143,0.35); color: #ffd6d6; font-size: 15px; line-height: 1.4; }
   .chip.perda { background: rgba(255,143,143,0.16); color: var(--perda); }
   .chip.info { background: rgba(143,186,203,0.16); color: var(--info); }
   .chip.neutro { background: rgba(255,255,255,0.08); color: var(--texto-fraco); }
@@ -1700,6 +1701,10 @@
       `<button data-modelo="${escapeHtml(m.id)}" ${m.disponivel ? "" : "disabled"} title="${escapeHtml(m.disponivel ? (m.carlaContinua ? "Depois dessa a Carla continua a conversa" : "Depois dessa a Carla fica quieta até você retomar") : m.motivo)}">${escapeHtml(m.nome)}<small>${escapeHtml(m.quando)}</small></button>`
     ).join("")}${atalhoPortal}</div></div>`;
 
+    // Pausa porque o Dr. Bruno escreveu pelo celular: aviso claro no topo da ficha.
+    const avisoPausa = (c.situacoes || []).includes("pausada_por_voce")
+      ? `<div class="aviso-pausa" role="status"><b>Carla pausada nesta conversa.</b> Você escreveu pelo celular, então ela não responde mais aqui até você tocar em <b>Retomar atendimento automático</b>.</div>`
+      : "";
     const acoes = `<div class="ficha-secao"><h3>Ações</h3><div class="contato-botoes acoes-grandes">
       <button class="btn-mensagem-contato" data-telefone="${escapeHtml(c.telefone)}">Mensagem</button>
       <button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}" title="A Carla escreve uma mensagem de retomada levando a conversa em conta. Você lê, ajusta e envia.">Reaquecer</button>
@@ -1770,7 +1775,7 @@
         <button class="btn-fechar-ficha" title="Fechar ficha" aria-label="Fechar ficha">✕</button>
       </div>
       <div class="ficha-chips"><span class="chip estagio">${escapeHtml(c.estagio.rotulo)}</span>${chipsDe(c)}</div>
-      ${acoes}${caixa}${dados}${acomp}${criancas}${consultas}${portal}${retornos}${modelos}${historico}${notas}${etiquetas}${linha}`;
+      ${avisoPausa}${acoes}${caixa}${dados}${acomp}${criancas}${consultas}${portal}${retornos}${modelos}${historico}${notas}${etiquetas}${linha}`;
 
     const formPortal = alvo.querySelector("#form-portal-manual");
     if (formPortal) {

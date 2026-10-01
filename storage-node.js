@@ -1215,6 +1215,7 @@ function listarContatosRecentes(limite = 20) {
       ultimaMensagem: s.ultimaMensagem || "",
       fechou: !!s.ultimoAgendamento,
       aguardandoHumano: !!s.aguardandoHumano,
+      pausadaPeloDoutor: !!(s.aguardandoHumano && s.pausadaPeloDoutor),
     }))
     .sort((a, b) => new Date(b.ultimaAtividade) - new Date(a.ultimaAtividade))
     .slice(0, limite);
@@ -1373,6 +1374,8 @@ function listarTodosContatos() {
       ultimaMensagem: (sessao && sessao.ultimaMensagem) || "",
       fechou: !!(sessao && sessao.ultimoAgendamento),
       aguardandoHumano: !!(sessao && sessao.aguardandoHumano),
+      // Pausa porque o Dr. Bruno escreveu pelo celular (#147): o painel mostra como "Pausada".
+      pausadaPeloDoutor: !!(sessao && sessao.aguardandoHumano && sessao.pausadaPeloDoutor),
       silenciado: silenciados.has(telefone),
     };
   });

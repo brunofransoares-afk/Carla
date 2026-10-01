@@ -16,7 +16,8 @@ function ok(cond, nome) { if (typeof nome !== "string") throw new Error("ok(cond
 
 const TELA = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8");
 
-const montagem = (TELA.match(/\n\s*\$\{acoes\}[^\n]*`;/) || [""])[0].trim();
+// O aviso de "Carla pausada" (só aparece quando ele escreveu pelo celular) pode vir antes.
+const montagem = (TELA.match(/\n\s*(?:\$\{avisoPausa\})?\$\{acoes\}[^\n]*`;/) || [""])[0].trim().replace(/^\$\{avisoPausa\}/, "");
 ok(/^\$\{acoes\}\$\{caixa\}\$\{dados\}/.test(montagem), "1. a ficha começa pelas Ações, com a caixa de mensagem logo embaixo");
 ok(montagem.indexOf("${acoes}") < montagem.indexOf("${consultas}") && montagem.indexOf("${acoes}") < montagem.indexOf("${historico}"),
   "1b. antes das consultas e do histórico");

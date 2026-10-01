@@ -141,7 +141,12 @@ function pendenciasDoDia({ contatos = [], eventos = [], agora = new Date() } = {
 
   for (const c of contatos) {
     if (c.situacoes.includes("aguardando_humano")) {
-      itens.push({ ...base(c, "responder"), motivo: "A Carla está quieta, esperando você.", trecho: c.ultimaMensagem || "" });
+      const pausada = c.situacoes.includes("pausada_por_voce");
+      itens.push({ ...base(c, "responder"),
+        motivo: pausada
+          ? "Carla pausada: você escreveu nesta conversa. Ela só volta quando você tocar em Retomar na ficha."
+          : "A Carla está quieta, esperando você.",
+        trecho: c.ultimaMensagem || "" });
     }
     if (c.situacoes.includes("aguardando_pagamento") && c.proximaConsulta) {
       const k = c.proximaConsulta;
