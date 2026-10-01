@@ -210,10 +210,15 @@ const SSO_SEGREDO = String(process.env.CARLA_SSO_SECRET || "").trim() || null;
 // js/config.js do SPI, que é público). O e-mail do dono é o único autorizado: a sessão de
 // qualquer outro assinante do SPI é válida no mesmo Supabase e NÃO pode abrir este painel,
 // que tem conversa e dado de paciente. Tudo sobrescrevível pelo .env, sem precisar.
+// OS E-MAILS DO DONO NO SPI (2026-10-01). A primeira versão aceitava só o Gmail dele, e o
+// login do SPI é o Hotmail (é o ADMIN_EMAILS das funções do SPI). Resultado: logado no SPI,
+// o painel conferia a sessão, achava o e-mail fora da lista e caía na senha. "Você não fez
+// aquilo lá que eu pedi." Os dois ficam, porque os dois são dele.
+const EMAILS_DO_DONO = "bruno.f.soares@hotmail.com,brunofransoares@gmail.com";
 const SPI_SUPABASE = {
   url: String(process.env.SPI_SUPABASE_URL || "https://zjvhvwfufhdbnligxugk.supabase.co").trim(),
   chavePublica: String(process.env.SPI_SUPABASE_ANON_KEY || "sb_publishable_KIo9zw2UI27YnQxSrxdfBg_eo8PdkDR").trim(),
-  emailsPermitidos: SsoSupabase.listaDeEmails(process.env.CARLA_SSO_EMAILS || "brunofransoares@gmail.com"),
+  emailsPermitidos: SsoSupabase.listaDeEmails(process.env.CARLA_SSO_EMAILS || EMAILS_DO_DONO),
 };
 const nonces = Sso.criarNonces();
 const ARQUIVO_FONTE = path.join(__dirname, "fontes", "montserrat.woff2");

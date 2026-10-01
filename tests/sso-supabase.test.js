@@ -98,8 +98,14 @@ async function main() {
       "6d. e o destino passa pela mesma trava do ticket: nunca redireciona pra fora do painel");
     ok(/res\.end\(JSON\.stringify\(\{ ok: false \}\)\);/.test(rota) && /console\.warn\(`\[SSO SPI\] Recusado/.test(rota),
       "6e. a recusa não diz o motivo pra quem tenta; o log diz");
-    ok(/emailsPermitidos: SsoSupabase\.listaDeEmails\(process\.env\.CARLA_SSO_EMAILS \|\| "brunofransoares@gmail\.com"\)/.test(PAINEL),
+    ok(/emailsPermitidos: SsoSupabase\.listaDeEmails\(process\.env\.CARLA_SSO_EMAILS \|\| EMAILS_DO_DONO\)/.test(PAINEL),
       "6f. só o dono, por padrão, sem precisar configurar nada");
+    // O login do SPI dele é o Hotmail. A primeira versão só tinha o Gmail, e ele, logado no
+    // SPI, continuou vendo a tela de senha.
+    const donos = (PAINEL.match(/const EMAILS_DO_DONO = "([^"]+)";/) || [])[1] || "";
+    const lista = S.listaDeEmails(donos);
+    ok(lista.includes("bruno.f.soares@hotmail.com"), "6f2. o e-mail com que ele entra no SPI está na lista");
+    ok(lista.includes("brunofransoares@gmail.com") && lista.length === 2, "6f3. e o Gmail dele também, e mais ninguém");
 
     // A página fica ANTES da checagem de senha: ela é justamente o caminho de quem ainda não
     // tem sessão. E depois da fonte, que é a outra coisa que precisa vir antes.
