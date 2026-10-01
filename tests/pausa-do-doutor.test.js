@@ -26,7 +26,9 @@ const TELA = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8
 const DUAS_HORAS = 2 * 60 * 60 * 1000;
 
 // A decisão do passo 2 de processarMensagem, recortada e executada: fica quieta ou volta?
-const bloco = SERVER.slice(SERVER.indexOf("  if (sessao.aguardandoHumano) {"), SERVER.indexOf("  // Antes de a IA rodar"));
+// Termina onde começa o "digite 9" (2026-10-01), que vem logo depois e não faz parte da pausa.
+const bloco = SERVER.slice(SERVER.indexOf("  if (sessao.aguardandoHumano) {"), SERVER.indexOf("  // 2.5) \"QUALQUER DIFICULDADE, DIGITE 9\""));
+if (!bloco || bloco.length > 2000) throw new Error("recorte da pausa saiu errado");
 function ficaQuieta(sessao, minutosDepois) {
   const now = new Date(Date.parse(sessao.aguardandoHumanoDesde || "2026-09-10T12:00:00.000Z") + minutosDepois * 60000);
   const corpo = bloco.replace(/console\.log\([^\n]*\);/g, "").replace("return;", "return true;");

@@ -32,6 +32,7 @@ const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"))
 const PedidoDeDados = require(path.join(__dirname, "pedido-de-dados.js"));
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
+const PedidoDeAjuda = require(path.join(__dirname, "pedido-de-ajuda.js"));
 const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
 const IdentidadeWhatsapp = require(path.join(__dirname, "identidade-whatsapp.js"));
 const { criarMemoriaMensagens } = require(path.join(__dirname, "memoria-mensagens-whatsapp.js"));
@@ -1475,6 +1476,32 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     sessao.aguardandoHumanoDesde = null;
   }
 
+  // 2.5) "QUALQUER DIFICULDADE, DIGITE 9" (2026-10-01). O atalho prometido na abertura: a
+  // mensagem inteira é o 9 (e não "dia 9", "9h", nem o 9 respondendo uma pergunta de dia ou
+  // horário, ver pedido-de-ajuda.js). Escala, avisa o Dr. Bruno e silencia, sem passar pela IA.
+  if (PedidoDeAjuda.pediuAjuda(texto, { historico: sessao.historico, horariosOferecidos: sessao.horariosOferecidos })) {
+    const motivo = "A família digitou 9: pediu pra falar com o consultório.";
+    sessao.aguardandoHumano = true;
+    sessao.aguardandoHumanoDesde = now.toISOString();
+    sessao.historico = [...(sessao.historico || []),
+      { role: "user", content: texto }, { role: "assistant", content: PedidoDeAjuda.MENSAGEM }].slice(-24);
+    sessao.ultimaAtividade = now.toISOString();
+    sessao.ultimaMensagem = texto.slice(0, 140);
+    Storage.salvarSessao(telefone, sessao);
+    Eventos.registrar("escalou", telefone, { motivo }, now);
+    Storage.registrarAlertaUrgencia({ telefone, tipo: "nao_entendida", mensagem: motivo });
+    console.log(`[ALERTA: DIGITOU 9] ${telefone}`);
+    notificarAtencao(sock, {
+      tipo: "escalonamento",
+      telefoneFamilia: telefone,
+      texto: motivo,
+      crianca: sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca,
+      pergunta: null,
+    });
+    await enviarResposta(sock, jid, telefone, PedidoDeAjuda.MENSAGEM, semAtraso);
+    return;
+  }
+
   // Antes de a IA rodar, porque ela vai escrever no histórico e aí não dá mais pra saber.
   const ehPrimeiraMensagemDaConversa = (sessao.historico || []).length === 0;
 
@@ -1632,6 +1659,11 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
       // WhatsApp cair, o efeito acompanha a mensagem e roda no reenvio — nunca antes.
       registrarPreco: true,
     });
+  // O PEDIDO DO NASCIMENTO E DO E-MAIL, logo depois da mensagem da reserva (2026-10-01). O
+  // dono marcou uma consulta de teste e "ela não perguntou a data de nascimento e o e-mail".
+  // Esta chamada só existia no caminho da resposta do Dr. Bruno pelo painel; a reserva da
+  // conversa normal, que é quase todas, nunca pedia. Sem reserva neste turno, não faz nada.
+  await pedirDadosDoPortal(resultado.acoes, telefone, jid);
 }
 
 // Lembretes automáticos: aviso 1 semana antes e confirmação no dia da consulta. Só manda

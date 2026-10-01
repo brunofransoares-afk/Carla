@@ -87,6 +87,15 @@ const COMPLETO = { ...SEM_NADA, responsavelEmail: "ana@exemplo.com", criancaData
   const posPedido = SERVER.indexOf("await pedirDadosDoPortal(");
   ok(posResposta > 0 && posPedido > posResposta,
     "5b. e DEPOIS da mensagem da Carla, senão ele atravessa o texto do pagamento");
+  // O CAMINHO QUE IMPORTA É A CONVERSA NORMAL. Até 01/10/2026 a chamada só existia na
+  // resposta do Dr. Bruno pelo painel, e as duas checagens acima passavam assim mesmo: o
+  // dono marcou uma consulta de teste e não recebeu o pedido. Agora a conferência é DENTRO
+  // de processarMensagem, depois da resposta dela.
+  const conversa = SERVER.slice(SERVER.indexOf("async function processarMensagem("), SERVER.indexOf("async function enviarLembretes("));
+  const respostaNaConversa = conversa.indexOf("await enviarResposta(sock, jid, telefone, resultado.resposta");
+  const pedidoNaConversa = conversa.indexOf("await pedirDadosDoPortal(resultado.acoes, telefone, jid);");
+  ok(respostaNaConversa > 0 && pedidoNaConversa > respostaNaConversa,
+    "5b2. na conversa normal, o pedido sai logo depois da mensagem da reserva");
   // A confirmação do pagamento foi retirada inteira em 01/10/2026, horas depois desta
   // mudança, a pedido do dono. O pedido ficou só onde ele já estava: logo depois da reserva.
   // O trechoNaConfirmacao continua existindo e testado, pro dia em que a mensagem voltar.

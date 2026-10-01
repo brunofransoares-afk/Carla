@@ -148,7 +148,9 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
   // falsa sobre ELA por uma afirmação falsa sobre uma organização. "Consultório" resolve o
   // que a "equipe" queria resolver (não parecer que tudo depende de uma pessoa só) sem
   // inventar ninguém: o consultório existe e é dele.
-  ok(/O que eu não resolver, eu encaminho no consultório e te retorno/.test(SEM_COMENTARIO),
+  // Desde 01/10/2026 o caminho até o humano é o atalho que o dono escreveu na abertura:
+  // "Qualquer dificuldade, digite 9." O 9 sozinho escala e silencia (pedido-de-ajuda.js).
+  ok(/Qualquer dificuldade, digite 9\./.test(SEM_COMENTARIO),
     "3c. diz que existe um humano atrás. É a frase mais importante logo depois de assumir que é automática");
   // A apresentação vive no prompt, mas nem toda frase que a família lê vive lá: a resposta de
   // emergência (quando a IA não sobe) mora no CÓDIGO, e foi por ali que "Em breve alguém da
@@ -169,7 +171,7 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
   // Dois dos três últimos contatos reais chegaram com pergunta pronta (o Sávio perguntou de
   // convênio, o Almir mandou três perguntas). Pra esses, listar o que ela faz é barreira
   // entre a pergunta e a resposta.
-  ok(/NESSE CASO a parte 3 inteira some e a parte 2 fica só nas boas-vindas e em quem você é/.test(SEM_COMENTARIO),
+  ok(/NESSE CASO a parte 3 e a parte 5 somem e a parte 2 fica só nas boas-vindas e em quem você é/.test(SEM_COMENTARIO),
     "4. quem chegou perguntando recebe a apresentação sem a lista do que ela resolve");
   ok(/sem a lista do que você resolve/.test(SEM_COMENTARIO), "4b. a regra diz explicitamente pra cortar a lista");
 }

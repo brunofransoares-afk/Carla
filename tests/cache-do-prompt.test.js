@@ -134,7 +134,7 @@ for (const pac of [false, true])
 {
   const novo = montarNovo(AGORA, false, false, false, null).volatil;
   const conhecido = montarNovo(AGORA, true, false, false, null).volatil;
-  ok(/você não recita um texto pronto/.test(novo), "5. família nova recebe a estrutura de apresentação");
+  ok(/o texto é o do Dr\. Bruno/.test(novo), "5. família nova recebe a estrutura de apresentação");
   ok(/NÃO use a apresentação padrão do consultório/.test(conhecido), "5b. família conhecida NÃO recebe a apresentação padrão");
   ok(!/NÃO use a apresentação padrão do consultório/.test(novo), "5c. a versão de conhecido não pode vazar pra família nova");
 }
