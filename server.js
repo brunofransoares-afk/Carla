@@ -1968,6 +1968,38 @@ async function iniciar() {
 
       const texto = TextoDaMensagem.textoDe(conteudo);
 
+      /*
+       * COMPROVANTE EM IMAGEM OU PDF: SILÊNCIO, com ou sem legenda.
+       *
+       * Vem antes de tudo que responde mídia porque é a mesma regra que já vale pro
+       * comprovante em link (ver o passo 1 de processarMensagem): quem confirma pagamento é o
+       * Dr. Bruno, apertando "Pago" no painel, e esse botão já manda a mensagem certa. Uma
+       * resposta da Carla aqui é, na melhor das hipóteses, ruído em cima de um pagamento; na
+       * pior, ela pede o e-mail e a data de nascimento que o botão vai pedir de novo.
+       *
+       * O print que originou isto: comprovante de Pix do PagBank às 09:36, e a Carla
+       * respondendo "Recebi a mídia, mas preciso que você me diga por escrito o que quer que
+       * eu observe ou resolva".
+       *
+       * Fica no servidor e não no prompt porque a mensagem nem chega na IA: regra de prompt
+       * ela contorna quando outra regra puxa pro outro lado, e isto não pode ter exceção.
+       */
+      if (Comprovante.midiaEhComprovante({
+        ehImagemOuDocumento: TextoDaMensagem.ehImagemOuDocumento(conteudo),
+        esperandoPagamento: Comprovante.reservaEsperandoPagamento(Storage.lerAgendamentos(), telefone),
+      })) {
+        console.log(`[COMPROVANTE] ${telefone}: mídia com reserva não paga, silêncio — quem confirma é o botão do painel`);
+        filaMensagens.enfileirar(telefone, async () => {
+          // O painel precisa ver que chegou alguma coisa, senão o pagamento some. É o mesmo
+          // que o comprovante em link faz: silêncio pra família, registro pra ele.
+          const sessao = Storage.obterSessao(telefone) || {};
+          sessao.ultimaAtividade = new Date().toISOString();
+          sessao.ultimaMensagem = (texto || "📎 comprovante (imagem ou PDF)").slice(0, 140);
+          Storage.salvarSessao(telefone, sessao);
+        }).then(concluir).catch(falhar);
+        return;
+      }
+
       // NADA MAIS SOME EM SILÊNCIO. Antes era `if (!texto.trim()) continue;` e pronto: no
       // pm2 logs não aparecia nem que a mensagem tinha chegado, então uma família invisível
       // era indistinguível de uma família que nunca escreveu.
