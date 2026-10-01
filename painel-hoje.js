@@ -26,8 +26,9 @@ const TIPOS_DE_PENDENCIA = [
   { tipo: "pagamento", rotulo: "Pagamento pendente", ordem: 2 },
   { tipo: "retorno", rotulo: "Retorno a avisar", ordem: 3 },
   { tipo: "pos_consulta", rotulo: "Pós-consulta", ordem: 4 },
-  { tipo: "followup7", rotulo: "Follow-up de 7 dias", ordem: 5 },
-  { tipo: "followup30", rotulo: "Follow-up de 30 dias", ordem: 6 },
+  { tipo: "parou_valor", rotulo: "Parou depois do valor", ordem: 5 },
+  { tipo: "followup7", rotulo: "Follow-up de 7 dias", ordem: 6 },
+  { tipo: "followup30", rotulo: "Follow-up de 30 dias", ordem: 7 },
 ];
 
 // ---------------------------------------------------------------- datas
@@ -156,6 +157,10 @@ function pendenciasDoDia({ contatos = [], eventos = [], agora = new Date() } = {
       if (!jaFalou) {
         itens.push({ ...base(c, "pos_consulta"), motivo: `Consulta${c.posConsulta.crianca ? ` de ${c.posConsulta.crianca}` : ""} há ${c.posConsulta.diasDesde} dia${c.posConsulta.diasDesde === 1 ? "" : "s"}. Perguntar como está.`, quando: c.ultimaConsulta.data });
       }
+    }
+    // Soube o valor e sumiu, nos primeiros 7 dias: é a janela quente, antes do follow-up de 7.
+    if (c.situacoes.includes("parou_no_preco") && !c.silenciado && !c.perda && c.ultimaAtividade && dias(c.ultimaAtividade, agora) < 7) {
+      itens.push({ ...base(c, "parou_valor"), motivo: "Soube o valor e parou de responder." });
     }
     if (ehLeadParaFollowup(c)) {
       const d = dias(c.ultimaAtividade, agora);

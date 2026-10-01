@@ -28,7 +28,11 @@ const fonte = Number((regra.match(/font-size:\s*(\d+)px/) || [])[1]);
 const altura = Number((regra.match(/min-height:\s*(\d+)px/) || [])[1]);
 ok(fonte >= 14, "2b. letra de 14px pra cima (era 10.5px)");
 ok(altura >= 44, "2c. pelo menos 44px de altura, o tamanho de um dedo");
-ok(/\.btn-mini \{[^}]*font-size: 10\.5px/.test(TELA), "2d. o botão pequeno da lista continua pequeno: só a ficha mudou");
+// REPAGINADA (outubro de 2026): o botão pequeno da lista também ganhou tamanho de dedo. O que o 2d
+// guardava ("só a ficha mudou") deixou de valer de propósito; agora ele confere o contrário, e mais forte.
+const miniRegra = (TELA.match(/\.btn-mini \{[^}]*\}/) || [""])[0];
+ok(Number((miniRegra.match(/font-size:\s*(\d+)px/) || [])[1]) >= 14, "2d. o botão pequeno da lista também tem letra de 14px pra cima");
+ok(/button \{[^}]*min-height: var\(--alvo\)/.test(TELA) && /--alvo: 44px/.test(TELA), "2e. e todo botão tem 44px de altura mínima");
 
 ok(/\.msg-manual\[hidden\] \{ display: none; \}/.test(TELA), "3. a caixa de mensagem só aparece quando aberta, senão ocupa o topo à toa");
 

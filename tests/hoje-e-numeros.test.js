@@ -102,6 +102,17 @@ const tipos = (p) => p.itens.map((i) => i.tipo);
   eq(pendencias({ contatos: [] }).total, 0, "2n. sem contato, sem pendência");
 }
 
+// ------------------------------------------------- 2b. parou depois do valor (janela quente, antes dos 7 dias)
+{
+  const flags = [{ telefone: "+5519000000001", recebeuPreco: true, primeiraPergunta: "preco" }];
+  const quente = pendencias({ contatos: [contato({ ultimaAtividade: diasAtras(1) })], flags });
+  eq(tipos(quente).join(), "parou_valor", "2o. soube o valor ontem e sumiu: aparece em 'parou depois do valor'");
+  const recente = pendencias({ contatos: [contato({ ultimaAtividade: diasAtras(0.1) })], flags });
+  eq(tipos(recente).length, 0, "2p. falou há poucas horas: ainda pode estar conferindo o extrato");
+  const jaFollow = pendencias({ contatos: [contato({ ultimaAtividade: diasAtras(8) })], flags });
+  eq(tipos(jaFollow).join(), "followup7", "2q. a partir de 7 dias a pessoa passa pra follow-up, sem aparecer duas vezes");
+}
+
 // ------------------------------------------------- 3. follow-up de 7 e 30 dias
 {
   const lead = (dias, extra = {}) => contato({ ultimaAtividade: diasAtras(dias), ...extra });
