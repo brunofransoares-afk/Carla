@@ -149,15 +149,25 @@ const em = (data, hora) => {
   ok(/está confirmada para/.test(bot),
     "10. e a mensagem confirma a consulta, o único momento em que essa palavra vale");
 
-  // O e-mail e a data saíram da mensagem da reserva e vieram pra confirmação do pagamento,
-  // que é o melhor momento pra pedir: a família acabou de pagar. Cada um só é pedido se
-  // ainda faltar — como isto é código, a conferência é certa.
-  ok(/if \(!a\.responsavelEmail\) falta\.push/.test(bot),
-    "10. a confirmação pede o e-mail, e só se ainda faltar");
-  ok(/if \(!a\.criancaDataNascimento\) falta\.push/.test(bot),
-    "10. e a data de nascimento, também só se faltar");
-  ok(!/(^|\s)(da|do) \$\{|\bdela\b/m.test(bot.slice(bot.indexOf("function primeiroNome"), bot.indexOf("async function avisarPortalLiberado"))),
-    "10. e não chuta o sexo da criança por artigo: a primeira versão escrevia \"do Isis\"");
+  /*
+   * O E-MAIL E A DATA MUDARAM DE LUGAR DUAS VEZES, e as duas por motivo real.
+   *
+   * Iam na mensagem da reserva, que ficava com cinco assuntos, e a família respondia um e
+   * esquecia o resto. Foram pra confirmação do pagamento, onde ela acabou de pagar. Só que
+   * ali chegam tarde: quem paga três dias depois só é perguntado três dias depois, e quem
+   * nunca paga nunca é perguntado. O dono, em 01/10/2026: "isso tem que ser perguntado depois
+   * que ela fechou a consulta, já escolheu um horário... mas não precisa ter feito o pagamento".
+   *
+   * Agora são os dois momentos, e nenhum deles empilha: o pedido sai sozinho logo depois da
+   * reserva, e a confirmação pede o que AINDA faltar. O texto é um só (pedido-de-dados.js),
+   * senão as duas frases divergem na primeira vez que alguém mexer numa delas.
+   */
+  ok(/const pedido = PedidoDeDados\.trechoNaConfirmacao\(a\);/.test(bot),
+    "10. a confirmação continua pedindo o que faltar, pelo texto compartilhado");
+  ok(/await pedirDadosDoPortal\(resultado\.acoes, telefone, jid\);/.test(bot),
+    "10b. e o pedido sai logo depois da reserva, sem esperar o pagamento");
+  ok(/chaveIdempotencia: `dados-do-portal:\$\{acao\.slotId\}`/.test(bot),
+    "10c. uma vez por reserva, senão um reenvio pergunta duas vezes a mesma coisa");
 
   const prompt = fs.readFileSync(path.join(__dirname, "..", "cerebro-ia.js"), "utf8").replace(/\r\n/g, "\n");
   ok(/NESSA MENSAGEM VOCÊ NÃO PEDE E-MAIL NEM DATA DE NASCIMENTO/.test(prompt),
