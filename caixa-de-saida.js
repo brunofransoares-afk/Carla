@@ -1,11 +1,17 @@
 "use strict";
 
-function criarCaixaDeSaida({ storage, prepararMensagem, aplicarEfeito, logger = console }) {
+// aoEnviar recebe o id de cada mensagem que a Carla mandou. É como o bot reconhece, no eco,
+// que uma mensagem "enviada pelo número do consultório" foi dela e não do Dr. Bruno digitando
+// no celular (ver pausa-pelo-celular.js).
+function criarCaixaDeSaida({ storage, prepararMensagem, aplicarEfeito, logger = console, aoEnviar = null }) {
   async function tentarEnviar(sock, pendente, reenvio = false) {
     try {
       let atual = pendente;
       if (!atual.enviadaEm) {
-        await sock.sendMessage(atual.jid, prepararMensagem(atual.texto));
+        const enviada = await sock.sendMessage(atual.jid, prepararMensagem(atual.texto));
+        if (aoEnviar && enviada && enviada.key && enviada.key.id) {
+          try { aoEnviar(enviada.key.id); } catch { /* registro é ajuda, nunca derruba o envio */ }
+        }
         atual = storage.marcarMensagemPendenteEnviada(atual.id)
           || { ...atual, enviadaEm: new Date().toISOString() };
         logger.log(`[${reenvio ? "REENVIADA" : "ENVIADA"}] ${atual.telefone}: ${atual.texto}`);

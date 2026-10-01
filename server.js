@@ -33,6 +33,7 @@ const PedidoDeDados = require(path.join(__dirname, "pedido-de-dados.js"));
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
 const PedidoDeAjuda = require(path.join(__dirname, "pedido-de-ajuda.js"));
+const PausaPeloCelular = require(path.join(__dirname, "pausa-pelo-celular.js"));
 const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
 const IdentidadeWhatsapp = require(path.join(__dirname, "identidade-whatsapp.js"));
 const { criarMemoriaMensagens } = require(path.join(__dirname, "memoria-mensagens-whatsapp.js"));
@@ -656,7 +657,13 @@ const caixaDeSaida = criarCaixaDeSaida({
   storage: Storage,
   prepararMensagem: Previa.mensagemDeTexto,
   aplicarEfeito: aplicarEfeitoAposEnvio,
+  aoEnviar: (id) => registroDeEnviosDaCarla.registrar(id),
 });
+// Os ids do que a Carla enviou, pra o eco dela nunca ser lido como o Dr. Bruno digitando.
+const registroDeEnviosDaCarla = PausaPeloCelular.criarRegistroDeEnvios();
+// Quando o Dr. Bruno escreveu pelo celular em cada conversa. Marcado na chegada, FORA da fila
+// do telefone, pra a resposta que a Carla já estava montando enxergar (processarMensagem).
+const doutorEscreveuEm = new Map();
 
 // CONFIRMAÇÃO DE PAGAMENTO VELHA NÃO SAI MAIS (2026-10-01). O dono marcou Pago depois da
 // mudança que tirou a mensagem e a família recebeu a confirmação mesmo assim. O botão já não
@@ -1357,12 +1364,32 @@ async function mensagemManualNaFila(telefone, limpo, carlaContinua, reaqueciment
   }
 }
 
+// Ele escreveu pelo celular: a Carla para naquela conversa até o "Retomar" do painel. Roda na
+// fila do telefone, a mesma da Carla, pra não gravar por cima de uma resposta dela em curso.
+// O que ele escreveu entra no histórico como fala do consultório: quando ele retomar, ela
+// sabe o que já foi dito.
+function pausarPelaMensagemDoDoutor(telefone, texto) {
+  const agora = new Date();
+  const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
+  const jaPausada = sessao.aguardandoHumano && sessao.pausadaPeloDoutor;
+  sessao.aguardandoHumano = true;
+  sessao.aguardandoHumanoDesde = jaPausada ? sessao.aguardandoHumanoDesde : agora.toISOString();
+  sessao.pausadaPeloDoutor = true;
+  const limpo = String(texto || "").trim();
+  if (limpo) sessao.historico = [...(sessao.historico || []), { role: "assistant", content: limpo }].slice(-24);
+  sessao.ultimaAtividade = agora.toISOString();
+  Storage.salvarSessao(telefone, sessao);
+  Eventos.registrar("mensagem_manual", telefone, { trecho: Eventos.trecho(limpo || "(mídia)"), origem: "celular" }, agora);
+  if (!jaPausada) console.log(`[PAUSA PELO CELULAR] ${telefone}: o Dr. Bruno escreveu, a Carla parou nessa conversa`);
+}
+
 async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false } = {}) {
   // Lido ANTES de qualquer coisa criar sessão: é o que diz se este número já falou com a
   // Carla alguma vez. Vira o topo do funil, e só pode ser contado uma vez por número.
   const jaTeveSessao = !!Storage.obterSessao(telefone);
   const sessao = normalizarSessao(telefone, Storage.obterSessao(telefone));
   const now = new Date();
+  const inicioDoTurno = Date.now();
 
   // Depois de horas de silêncio, o que a família disser é assunto novo. Sem isso a Carla
   // continuava a conversa da tarde à noite: retomou um "Pix ou cartão?" de outra consulta
@@ -1637,9 +1664,22 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     });
   }
 
+  // ELE ESCREVEU ENQUANTO ELA PENSAVA. A pausa pelo celular entra na fila depois deste
+  // turno, então a resposta que a Carla já estava montando sairia por cima da dele. Se ele
+  // escreveu depois que este turno começou, a resposta dela não sai, e também não fica no
+  // histórico como se tivesse sido dita.
+  const doutorEscreveuNoMeio = (doutorEscreveuEm.get(telefone) || 0) >= inicioDoTurno;
+  if (doutorEscreveuNoMeio && resultado.resposta) {
+    const ultima = (sessao.historico || [])[sessao.historico.length - 1];
+    if (ultima && ultima.role === "assistant") sessao.historico = sessao.historico.slice(0, -1);
+    console.log(`[PAUSA PELO CELULAR] ${telefone}: o Dr. Bruno escreveu enquanto a Carla respondia; a resposta dela não sai`);
+  }
+
   sessao.ultimaAtividade = now.toISOString();
   sessao.ultimaMensagem = texto.slice(0, 140);
   Storage.salvarSessao(telefone, sessao);
+
+  if (doutorEscreveuNoMeio) return;
 
   if (!resultado.resposta) {
     console.log(`[SILÊNCIO PROPOSITAL] ${telefone} — sem necessidade de responder agora.`);
@@ -1924,12 +1964,12 @@ async function iniciar() {
 
     for (const msg of messages || []) {
       if (!msg.message || !msg.key || !msg.key.id) continue;
-      try { await receberUmaMensagem(msg); }
+      try { await receberUmaMensagem(msg, type); }
       catch (erro) { console.error("[ENTRADAS] Falha ao receber mensagem; será retomada se persistida:", erro.message); }
     }
   }
 
-  async function receberUmaMensagem(msg) {
+  async function receberUmaMensagem(msg, tipoDoLote = "notify") {
       const jid = msg.key.remoteJid || "";
       // O WhatsApp mais recente pode identificar o contato por "@lid" (id interno) em vez
       // do número de telefone tradicional ("@s.whatsapp.net"). Aceita os dois; ignora só
@@ -1952,8 +1992,23 @@ async function iniciar() {
       // Mensagem enviada pelo próprio Dr. Bruno (do celular dele) — a Carla nunca responde
       // isso, mas ainda vale registrar o contato na lista do painel (sem nome, já que o
       // pushName aqui seria o dele mesmo, não de quem ele está falando).
+      //
+      // E, desde 01/10/2026, ELA PARA: ele escrever pelo celular naquela conversa é ele
+      // assumindo. Mesma pausa da mensagem manual do painel; só o "Retomar atendimento
+      // automático" da ficha desfaz (ver pausa-pelo-celular.js).
       if (msg.key.fromMe) {
         Storage.registrarContatoWhatsapp(telefone, {});
+        if (PausaPeloCelular.ehMensagemDoDoutor({
+          fromMe: true, tipoDoLote, sistema, id: msg.key.id, timestamp: msg.messageTimestamp,
+          telefone, telefoneDoDoutor: (process.env.DR_BRUNO_TELEFONE || "").trim() || null,
+          registro: registroDeEnviosDaCarla,
+        })) {
+          const conteudoDele = (typeof normalizeMessageContent === "function"
+            ? normalizeMessageContent(msg.message) : msg.message) || msg.message;
+          const textoDele = TextoDaMensagem.textoDe(conteudoDele) || "";
+          doutorEscreveuEm.set(telefone, Date.now());
+          await filaMensagens.enfileirar(telefone, () => pausarPelaMensagemDoDoutor(telefone, textoDele));
+        }
         return;
       }
 
