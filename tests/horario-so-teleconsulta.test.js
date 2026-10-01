@@ -195,7 +195,7 @@ const DIA = "2026-09-14";                           // segunda
 
 // ------------------------------------------------- 11. os três caminhos de busca usam o filtro
 {
-  ok(/const slotsGrade = Storage\.semHorarioDeVideo\(\s*\n\s*Agenda\.oferecerSlots\(ctx\.now, ctx\.idsOcupados, \{ \.\.\.filtros, periodo: periodoDaAgenda, count: 6 \}\),\s*\n\s*modalidade, ctx\.now\);/.test(CEREBRO), "11. a busca normal filtra a grade");
+  ok(/const slotsGrade = Storage\.semHorarioDeVideo\(\s*\n\s*Agenda\.oferecerSlots\(ctx\.now, ctx\.idsOcupados, \{ \.\.\.filtros, periodo: periodoDaAgenda, count: continuar \? 60 : 6 \}\),\s*\n\s*modalidade, ctx\.now\);/.test(CEREBRO), "11. a busca normal filtra a grade");
   ok(/Storage\.semHorarioDeVideo\(Agenda\.disponiveis\(ctx\.now, ctx\.idsOcupados\), modalidadeUrgente, ctx\.now\)/.test(CEREBRO), "11b. a busca urgente também");
   ok(/if \(Storage\.semHorarioDeVideo\(candidato, null, ctx\.now\)\.length < 2\) \{/.test(CEREBRO), "11c. e o par de horários seguidos, que é sempre presencial, descarta o par e continua procurando");
 }

@@ -92,6 +92,21 @@ const CARLA_CONFIG = {
    * encaixe: quando ele autoriza, o horário existe e a Carla marca normalmente.
    */
   grade: { nuncaHoje: true },
+
+  /*
+   * A FOLGA DA ROTINA (2026-10-01). Puericultura e neurodesenvolvimento, quando a família não
+   * pediu dia, começam a ser oferecidos a partir de daqui a 2 dias. O dono: "sempre pra uns
+   * 2-3 dias de intervalo do dia atual.. ou na proxima semana, pra de certa forma tentar
+   * montar a agenda desse tipo de consulta com 1 semana de distancia no inicio, quando
+   * comecar enxer, 2 semanas e assim vai".
+   *
+   * A progressão de uma pra duas semanas não precisa de conta nenhuma: com a folga fixa, o
+   * primeiro horário livre anda pra frente sozinho conforme a agenda enche.
+   *
+   * É ordem, não proibição. Se a família pede amanhã, ela recebe amanhã. E a urgência nem
+   * passa por aqui: ela é oferecida a partir de amanhã, em ordem de tempo.
+   */
+  diasDeFolgaRotina: 2,
   intervaloMin: 30,
   horizonteDias: 30,
 };

@@ -77,6 +77,76 @@ function bate(slot, { diaPreferido = null, periodo = null, dataPreferida = null 
   return true;
 }
 
+/*
+ * A AGENDA CONTÍNUA (2026-10-01). O dono: "a partir do momento que a carla agendou por
+ * exemplo um determinado dia e determinado horario pra uma familia, ex. ela marcou um
+ * paciente numa quinta feira as 8h, pros outros pacientes que mandarem conversa, ela deve
+ * tentar oferecer o horario das 10h com prioridade... nao eh pra forcar a familia, eh so pra
+ * colocar no escopo essa inteligencia de ver onde ja tem horario marcado... tentando agendar
+ * as consultas de puericultura e atendimento de transtornos, sempre pra uns 2-3 dias de
+ * intervalo do dia atual.. ou na proxima semana".
+ *
+ * DUAS REGRAS DE ORDEM, nenhuma de exclusão (ele foi claro: "não é pra forçar"):
+ *
+ *   1. FOLGA. A rotina começa a partir de alguns dias depois de hoje. Com a agenda vazia
+ *      isso empurra as consultas pra perto de uma semana; quando ela enche, o primeiro livre
+ *      anda sozinho pra duas semanas, que é a progressão que ele descreveu, sem fórmula de
+ *      ocupação nenhuma. O que fica antes da folga não some: vai pro fim da fila, pra quando
+ *      não houver mais nada.
+ *   2. VIZINHANÇA. Dentro da folga, primeiro o horário que encosta numa consulta já marcada
+ *      no mesmo dia (o anterior ou o seguinte na grade daquele dia). É o que junta as
+ *      consultas e deixa o dia dele contínuo, em vez de 8h, buraco, 16h30.
+ *
+ * A URGÊNCIA NÃO PASSA POR AQUI: ela tem caminho próprio (urgente=true, em cerebro-ia.js),
+ * cronológico a partir de amanhã, porque pra quem está com febre a vizinhança não importa.
+ *
+ * horariosDoDia vem de fora (é o Agenda.horariosDoDia) pra este arquivo continuar sem
+ * depender da agenda e rodar em teste sozinho.
+ */
+function ordenarPraAgendaContinua(lista = [], { ocupados = new Set(), agora = new Date(), diasDeFolga = 0, horariosDoDia = null } = {}) {
+  const p2 = (n) => String(n).padStart(2, "0");
+  const limite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + diasDeFolga);
+  const limiteStr = `${limite.getFullYear()}-${p2(limite.getMonth() + 1)}-${p2(limite.getDate())}`;
+
+  const encostaEmConsulta = (slot) => {
+    if (typeof horariosDoDia !== "function" || !slot.date || !slot.time) return false;
+    const [ano, mes, dia] = slot.date.split("-").map(Number);
+    const doDia = horariosDoDia(new Date(ano, mes - 1, dia)) || [];
+    const i = doDia.indexOf(slot.time);
+    if (i < 0) return false;
+    const vizinhos = [doDia[i - 1], doDia[i + 1]].filter(Boolean);
+    return vizinhos.some((hhmm) => ocupados.has(`${slot.date}T${hhmm}`));
+  };
+
+  const ordenados = [...lista].sort(porTempo);
+  const depoisDaFolga = ordenados.filter((s) => s.date >= limiteStr);
+  const antesDaFolga = ordenados.filter((s) => s.date < limiteStr);
+  const encostados = depoisDaFolga.filter(encostaEmConsulta);
+  const soltos = depoisDaFolga.filter((s) => !encostados.includes(s));
+  return [...encostados, ...soltos, ...antesDaFolga];
+}
+
+/*
+ * A SEGUNDA OPÇÃO EM OUTRO DIA, quando a primeira é a da agenda contínua.
+ *
+ * A vizinhança junta as consultas no mesmo dia, e é por isso mesmo que a segunda opção não
+ * pode ser do mesmo dia: se quinta não serve pra família, duas opções na quinta são uma
+ * opção só. "Não é pra forçar a família" quer dizer isto na prática: a primeira opção é a
+ * que ajuda a agenda, a segunda é a que dá escolha de verdade.
+ *
+ * O espalhamento por período (espalhar, acima) continua valendo no caminho sem continuidade.
+ * Aqui ele trocaria um dia diferente por um período diferente no mesmo dia, que é o
+ * contrário do que a família precisa quando a primeira opção não serve.
+ */
+function comAlternativaEmOutroDia(lista = []) {
+  if (lista.length < 2) return [...lista];
+  const [primeira, ...resto] = lista;
+  const i = resto.findIndex((s) => s.date !== primeira.date);
+  if (i <= 0) return [...lista];
+  const outroDia = resto.splice(i, 1)[0];
+  return [primeira, outroDia, ...resto];
+}
+
 // grade: o que Agenda.oferecerSlots devolveu (pode conter horário que não bate)
 // extras: o que Storage.extrasDisponiveis devolveu (já vem só o que bate)
 // filtros: { diaPreferido, periodo, dataPreferida }
@@ -88,7 +158,14 @@ function ordenarCandidatos(grade = [], extras = [], filtros = {}) {
     // Sem pedido: grade e extras se misturam por tempo, pra um horário aberto pra amanhã
     // não ficar atrás de um da grade de semana que vem. Depois o espalhamento escolhe a
     // segunda opção num período diferente da primeira.
-    return espalhar([...grade, ...extras].sort(porTempo));
+    //
+    // Com a continuidade ligada (é o caso da rotina, sem pedido de dia), a ordem por tempo dá
+    // lugar à folga e à vizinhança. O espalhamento continua depois dela, e é ele que garante
+    // a escolha pra família: a primeira opção é a que junta a agenda, a segunda é de outro
+    // período. Ninguém recebe duas opções iguais pra aceitar ou recusar em bloco.
+    const juntos = [...grade, ...extras];
+    if (filtros.continuidade) return comAlternativaEmOutroDia(ordenarPraAgendaContinua(juntos, filtros.continuidade));
+    return espalhar(juntos.sort(porTempo));
   }
 
   const gradeQueBate = grade.filter((s) => bate(s, filtros));
@@ -134,4 +211,4 @@ function separar(livres = [], idsQueBatemSet = new Set(), pediuAlgo = false) {
   };
 }
 
-module.exports = { ordenarCandidatos, bate, espalhar, idsQueBatem, separar };
+module.exports = { ordenarCandidatos, ordenarPraAgendaContinua, comAlternativaEmOutroDia, bate, espalhar, idsQueBatem, separar };

@@ -134,7 +134,7 @@ const QUARTA_10H = new Date(2026, 8, 9, 10, 0); // quarta-feira 09/09/2026 às 1
   ok(/\["manha", "tarde", "comercial", "noite"\]\.includes\(input\.periodo\)/.test(CEREBRO), "8d. e a validação aceita os quatro");
   ok(/const periodoDaAgenda = periodo === "manha" \|\| periodo === "tarde" \? periodo : null;/.test(CEREBRO),
     "8e. pra agenda.js vai só manhã/tarde, que é o que ela entende");
-  ok(/Agenda\.oferecerSlots\(ctx\.now, ctx\.idsOcupados, \{ \.\.\.filtros, periodo: periodoDaAgenda, count: 6 \}\)/.test(CEREBRO),
+  ok(/Agenda\.oferecerSlots\(ctx\.now, ctx\.idsOcupados, \{ \.\.\.filtros, periodo: periodoDaAgenda, count: continuar \? 60 : 6 \}\)/.test(CEREBRO),
     "8f. e é isso que a busca da grade recebe");
 }
 

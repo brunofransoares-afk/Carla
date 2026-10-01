@@ -765,11 +765,26 @@ async function executarFerramenta(nome, input, ctx) {
     const pediuAlgo = diaPreferido !== null || periodo !== null || dataPreferida !== null;
     // A grade não conhece a marca "só teleconsulta", que é aberta no painel. Quem vai ao
     // consultório não pode receber um horário desses, nem quando ele coincide com a grade.
+    // A AGENDA CONTÍNUA vale quando a família não pediu nada: aí a ordem é do consultório.
+    // Pra isso a lista de candidatos precisa ser a agenda inteira, e não os 6 mais próximos:
+    // com 6, o horário encostado numa consulta da semana que vem nem entrava na disputa.
+    // Mais candidatos não custam nada, porque a conferência no Google para nos 2 primeiros.
+    const continuar = !pediuAlgo;
     const slotsGrade = Storage.semHorarioDeVideo(
-      Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { ...filtros, periodo: periodoDaAgenda, count: 6 }),
+      Agenda.oferecerSlots(ctx.now, ctx.idsOcupados, { ...filtros, periodo: periodoDaAgenda, count: continuar ? 60 : 6 }),
       modalidade, ctx.now);
     const slotsExtras = Storage.extrasDisponiveis(ctx.now, ctx.idsOcupados, filtros);
-    const candidatos = Ordem.ordenarCandidatos(slotsGrade, slotsExtras, filtros);
+    const candidatos = Ordem.ordenarCandidatos(slotsGrade, slotsExtras, continuar
+      ? {
+        ...filtros,
+        continuidade: {
+          ocupados: ctx.idsOcupados,
+          agora: ctx.now,
+          diasDeFolga: (global.CARLA_CONFIG && global.CARLA_CONFIG.diasDeFolgaRotina) || 0,
+          horariosDoDia: Agenda.horariosDoDia,
+        },
+      }
+      : filtros);
 
     // QUEM BATE COM O PEDIDO E QUEM É SÓ ALTERNATIVA. A grade não filtra de verdade: ela põe
     // na frente o que bate e COMPLETA com o resto até o total pedido (ver ordem-dos-horarios.js).
