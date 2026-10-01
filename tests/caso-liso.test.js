@@ -67,7 +67,8 @@ const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREB
   ok(/const tipoTravado = primeiroValor \? Preco\.tipoDoValor\(primeiroValor\) : null;/.test(ferramenta), "3b. e converte em tipo");
   ok(/if \(tipoTravado && tipoTravado !== tipoConsulta\) \{\s*\n\s*return \{\s*\n\s*sucesso: false,\s*\n\s*tipoTravado,/.test(ferramenta), "3c. reservar em outro tipo é recusado");
   ok(/Trocar pra \$\{preco\.nome\} não é decisão sua\. Não reserve\./.test(ferramenta), "3d. dizendo que não é decisão dela");
-  ok(/chame escalar_humano com a pergunta pronta \(ex: [^)]*Qual consulta marcar\?"\) e com opcoes com os três tipos \(valores urgencia, puericultura e tnd\), que viram botões no painel/.test(ferramenta), "3e. e mandando escalar com pergunta e os três tipos como opções");
+  ok(/chame escalar_humano com assunto "tipo" e a pergunta pronta \(ex: [^)]*Qual consulta marcar\?"\)\. Os três tipos viram botões no painel/.test(ferramenta),
+    "3e. e mandando escalar com o assunto 'tipo', que é o que desenha os três botões");
   ok(/A conversa pausa até ele clicar\./.test(ferramenta), "3f. e pausar");
   // A trava vem ANTES da checagem do preço: senão a "dica" de trocar o tipo falaria primeiro.
   ok(ferramenta.indexOf("const tipoTravado =") < ferramenta.indexOf("EstadoAtendimento.precoFoiInformado(ctx.estadoAtendimento, preco.centavos)"), "3g. a trava vem antes da checagem do preço, senão a dica de trocar o tipo fala primeiro");
@@ -118,7 +119,8 @@ const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREB
   ok(/corrigir o seu palpite é ela escolhendo pela primeira vez, e ali você segue o que ela disse/.test(ESTAVEL),
     "4d2. mas corrigir o encaixe da Carla não é trocar de tipo: é a família escolhendo");
   ok(/"A família escolheu puericultura pro Levi e agora diz que ele está com febre\. Qual consulta marcar\?"/.test(ESTAVEL), "4e. com o exemplo do print virando pergunta pro painel");
-  ok(/com opcoes com os três tipos: rótulos "Urgência", "Puericultura" e "Neurodesenvolvimento", valores urgencia, puericultura e tnd\. No painel isso vira três botões/.test(ESTAVEL), "4i. e os três tipos vão como opções, que viram botões");
+  ok(/chama escalar_humano com assunto "tipo" e a pergunta pronta/.test(ESTAVEL) && /No painel isso vira os três tipos como botões/.test(ESTAVEL),
+    "4i. e os três tipos vão como botões, pelo assunto");
   ok(/Nunca repita o bloco de valor com outro tipo: isso é a Carla trocando o tipo sozinha, e a ferramenta recusa/.test(ESTAVEL), "4f. e o bloco de valor não se repete com outro tipo");
   ok(!/"Entendo a preocupação 😊 Isso é bem melhor de avaliar na consulta\."/.test(ESTAVEL), "4g. a frase pronta de acolhimento (que saía copiada na tela) virou orientação");
   ok(/acolha com empatia em UMA frase, com as suas palavras daquela vez/.test(ESTAVEL), "4h. de acolher com as próprias palavras");
@@ -129,18 +131,46 @@ const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREB
   const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
   const STORAGE = fs.readFileSync(path.join(__dirname, "..", "storage-node.js"), "utf8");
   const TELA = fs.readFileSync(path.join(__dirname, "..", "dashboard.html"), "utf8");
-  ok(/opcoes: \{ type: \["array", "null"\], description: "Só quando a decisão do Dr\. Bruno é ENTRE ALTERNATIVAS/.test(CEREBRO), "5. a ferramenta tem o campo opcoes");
-  ok(/required: \["rotulo", "valor"\]/.test(CEREBRO), "5b. cada opção tem rótulo (o botão) e valor (o que volta)");
+  /*
+   * OS BOTÕES DEIXARAM DE VIR DA IA EM 01/10/2026. O dono: "para todos os outros motivos no
+   * qual eu sou escalonado... deixasse sempre três opções pertinentes referente àquele
+   * escalonamento". A IA podia mandar opções e o resultado era irregular: às vezes três, às
+   * vezes duas, às vezes nenhuma, às vezes rótulo comprido demais pra caber na tela.
+   *
+   * Agora ela escolhe só o MOTIVO, de uma lista fechada, e o motivo decide os botões
+   * (opcoes-do-escalonamento.js). Lista fechada o modelo acerta; redação de botão, não.
+   */
+  const Opcoes = require("../opcoes-do-escalonamento.js");
+  ok(!/opcoes: \{ type: \["array", "null"\]/.test(CEREBRO),
+    "5. a ferramenta NÃO tem mais o campo opcoes: botão não é coisa que o modelo escreve");
+  ok(/ctx\.escalarOpcoes = OpcoesEscalonamento\.opcoesDoEscalonamento\(ctx\.escalarAssunto, \{ temPergunta: !!pergunta \}\);/.test(CEREBRO),
+    "5b. os botões saem do motivo, no handler");
 
-  // O filtro do handler, executado: até 4, só com pergunta, sem lixo.
-  const handler = CEREBRO.slice(CEREBRO.indexOf("const opcoes = Array.isArray(input.opcoes)"), CEREBRO.indexOf("ctx.escalarOpcoes = pergunta && opcoes.length >= 2 ? opcoes : null;") + "ctx.escalarOpcoes = pergunta && opcoes.length >= 2 ? opcoes : null;".length);
-  const filtra = (input, pergunta) => { const ctx = {}; new Function("input", "pergunta", "ctx", "textoOperacional", handler)(input, pergunta, ctx, (v, n) => String(v || "").trim().slice(0, n)); return ctx.escalarOpcoes; };
-  const tres = [{ rotulo: "Urgência", valor: "urgencia" }, { rotulo: "Puericultura", valor: "puericultura" }, { rotulo: "Neurodesenvolvimento", valor: "tnd" }];
-  eq(JSON.stringify(filtra({ opcoes: tres }, "Qual?")), JSON.stringify(tres), "5c. três opções com pergunta passam inteiras");
-  eq(filtra({ opcoes: tres }, null), null, "5d. sem pergunta não tem botão: o painel não teria o que perguntar");
-  eq(filtra({ opcoes: [tres[0]] }, "Qual?"), null, "5e. uma opção só não é escolha");
-  eq(filtra({ opcoes: [...tres, ...tres] }, "Qual?").length, 4, "5f. no máximo 4");
-  eq(filtra({ opcoes: [{ rotulo: "", valor: "x" }, ...tres] }, "Qual?").length, 3, "5g. opção sem rótulo é descartada");
+  for (const motivo of ["horario", "tipo", "valor", "fim_de_semana", "outro"]) {
+    const botoes = Opcoes.opcoesDoEscalonamento(motivo);
+    eq(botoes.length, 3, "5c. " + motivo + ": três opções, nem duas nem quatro");
+    ok(botoes.every((o) => o.rotulo && o.valor && o.rotulo.length <= 30),
+      "5c2. " + motivo + ": rótulos curtos o bastante pra caber no botão");
+    eq(new Set(botoes.map((o) => o.valor)).size, 3, "5c3. " + motivo + ": três respostas diferentes");
+  }
+  eq(Opcoes.opcoesDoEscalonamento("outro", { temPergunta: false }), null,
+    "5d. sem pergunta não tem botão: alerta sem pergunta é o que ele precisa ler e responder com as palavras dele");
+  eq(Opcoes.opcoesDoEscalonamento("pagamento"), null,
+    "5e. pagamento tem caminho próprio: os botões saem das reservas abertas daquele telefone");
+  eq(Opcoes.opcoesDoEscalonamento("encaixe"), null,
+    "5e2. e encaixe também: ali o painel desenha um campo de horário");
+  eq(Opcoes.normalizarMotivo("inventado_pelo_modelo"), "outro",
+    "5f. motivo que o modelo invente cai em 'outro', que é o caminho sem poder nenhum");
+
+  // O primeiro botão de "horario" vale "sim" porque é esse valor que faz o painel abrir o
+  // horário pedido na agenda. Mudar esse texto desligaria a abertura sem erro nenhum.
+  eq(Opcoes.opcoesDoEscalonamento("horario")[0].valor, "sim",
+    "5g. e o 'consigo nesse horário' continua valendo 'sim', que é o que abre o horário na agenda");
+  eq(Opcoes.opcoesDoEscalonamento("fim_de_semana")[0].valor, "sim",
+    "5g2. o mesmo no fim de semana");
+  eq(JSON.stringify(Opcoes.opcoesDoEscalonamento("tipo").map((o) => o.valor)),
+    JSON.stringify(["urgencia", "puericultura", "tnd"]),
+    "5g3. e os três tipos voltam com as chaves que a ferramenta de reserva entende");
 
   ok(/escalarOpcoes: ctx\.escalarOpcoes \|\| null,/.test(CEREBRO), "5h. sai no resultado da IA");
   ok(/opcoes: pagamento \? \(pagamento\.opcoes \|\| null\) : resultado\.escalarOpcoes,/.test(SERVER), "5i. o bot grava no alerta (fora do assunto pagamento, que tem as opções da máquina)");
@@ -153,7 +183,7 @@ const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREB
   ok(/sessao\.recadoDoDoutor\.resposta = opcaoEscolhida\.rotulo;/.test(bloco), "5m. a Carla lê o rótulo, não o valor interno");
   ok(/estado\.primeiroPrecoInformado = Preco\.TIPOS\[opcaoEscolhida\.valor\]\.centavos;/.test(bloco), "5n. e o tipo da conversa é destravado pro que ele escolheu: a trava passa a aceitar esse tipo");
   const aplica = (alerta, resposta, estadoInicial) => { const sessao = { recadoDoDoutor: { pergunta: alerta.pergunta, resposta }, estadoAtendimento: estadoInicial }; new Function("alerta", "respostaNormalizada", "sessao", "Preco", "EstadoAtendimento", bloco)(alerta, resposta, sessao, Preco, Estado); return sessao; };
-  const alertaTipo = { pergunta: "Qual consulta marcar?", opcoes: tres };
+  const alertaTipo = { pergunta: "Qual consulta marcar?", opcoes: Opcoes.opcoesDoEscalonamento("tipo") };
   const s1 = aplica(alertaTipo, "urgencia", Estado.registrarPreco(Estado.reiniciarConversa(), 45000));
   eq(s1.recadoDoDoutor.resposta, "Urgência", "5o. clicou em Urgência: o recado diz 'Urgência'");
   eq(Estado.primeiroPrecoInformado(s1.estadoAtendimento), 35000, "5p. e o tipo travado virou urgência (R$ 350): a reserva nesse tipo passa a ser aceita");
@@ -161,7 +191,10 @@ const ESTAVEL = CEREBRO.slice(CEREBRO.indexOf("const PROMPT_ESTAVEL = `"), CEREB
   eq(Estado.primeiroPrecoInformado(s2.estadoAtendimento), 45000, "5q. resposta que não é uma das opções não mexe em nada");
   const s3 = aplica({ pergunta: "Liberar 17h?", opcoes: [{ rotulo: "Hoje", valor: "hoje" }, { rotulo: "Amanhã", valor: "amanha" }] }, "hoje", Estado.registrarPreco(Estado.reiniciarConversa(), 45000));
   eq(s3.recadoDoDoutor.resposta + "|" + Estado.primeiroPrecoInformado(s3.estadoAtendimento), "Hoje|45000", "5r. opção que não é tipo de consulta só vira recado, sem mexer no tipo");
-  ok(/QUANDO A DECISÃO É ENTRE ALTERNATIVAS \(qual tipo de consulta, por exemplo\), preencha a pergunta E o campo opcoes/.test(ESTAVEL), "5s. o prompt ensina quando usar opções");
+  ok(/OS BOTÕES VOCÊ NÃO ESCREVE: eles saem do ASSUNTO que você escolher/.test(ESTAVEL),
+    "5s. o prompt diz que os botões não são dela, pra ela não tentar escrevê-los no motivo");
+  ok(/sem pergunta não aparece botão/.test(ESTAVEL),
+    "5s2. e que sem pergunta não há botão, que é o caso de ele ler e responder ele mesmo");
   ok(/Se ele escolheu uma das opções que você mandou, siga com ela: se for um tipo de consulta, aquele passa a ser o tipo desta conversa \(o sistema já destravou\)/.test(CEREBRO), "5t. e o que fazer quando a resposta é uma opção: seguir com ela, sem menu de novo");
 }
 
