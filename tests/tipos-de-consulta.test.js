@@ -92,8 +92,44 @@ const lerPreco = extrairLeitorDePreco();
 {
   ok(/TRÊS TIPOS DE CONSULTA, TRÊS VALORES/.test(SEM_COMENTARIO), "5. os três tipos estão nos FATOS");
   ok(/CONSULTA DE URGÊNCIA[\s\S]{0,120}R\$ 350/.test(SEM_COMENTARIO), "5b. urgência R$ 350");
-  ok(/CONSULTA DE PUERICULTURA[\s\S]{0,120}R\$ 450/.test(SEM_COMENTARIO), "5c. puericultura R$ 450");
-  ok(/TRANSTORNOS DO NEURODESENVOLVIMENTO \(autismo, TDAH, TOD\)[\s\S]{0,80}R\$ 550/.test(SEM_COMENTARIO), "5d. neurodesenvolvimento R$ 550");
+  ok(/CONSULTA DE PUERICULTURA[\s\S]{0,160}R\$ 450/.test(SEM_COMENTARIO), "5c. puericultura R$ 450");
+  ok(/CONSULTA DE INVESTIGAÇÃO OU ACOMPANHAMENTO DE NEURODESENVOLVIMENTO E SAÚDE MENTAL: R\$ 550/.test(SEM_COMENTARIO), "5d. neurodesenvolvimento R$ 550");
+
+  /*
+   * A FRONTEIRA ENTRE A 2 E A 3 (01/10/2026). O dono: "do jeito que tá a descrição das
+   * consultas, dá a entender que a consulta de puericultura faz também o que a consulta de
+   * neurodesenvolvimento faz. Não é que eu atendo só autista na consulta 3. Eu atendo crianças
+   * que têm alguma suspeita de algum atraso. Ou de qualquer tipo."
+   *
+   * A 2 dizia "desenvolvimento normal" e a 3 dizia "(autismo, TDAH, TOD)". Lido de fora: a
+   * rotina cobre desenvolvimento, e a 3 é só pra quem já tem diagnóstico. As duas leituras
+   * mandam a criança com suspeita de atraso pra consulta errada.
+   */
+  ok(/a 2 é acompanhar a criança que está DENTRO do esperado, a 3 é investigar o que parece FORA dele/.test(SEM_COMENTARIO),
+    "5e. a fronteira entre as duas está escrita, e não deduzida da lista de diagnósticos");
+  ok(/NÃO é só pra criança já diagnosticada, e NÃO é só autismo/.test(SEM_COMENTARIO),
+    "5e2. e a 3 não é a consulta do autismo: é a de qualquer suspeita");
+  ok(/suspeita de atraso é 3 mesmo que ninguém tenha falado em autismo/.test(SEM_COMENTARIO),
+    "5e3. dito também pelo lado que ela erra na prática");
+  ok(/QUEIXA CRÔNICA É DELA: o que vem de longe \(alergia de sempre, intestino, peso, sono\) é puericultura; o que começou agora é urgência/.test(SEM_COMENTARIO),
+    "5f. e a queixa crônica tem dono: separa a 2 da 1 pelo tempo, não pelo sintoma");
+
+  // O sono aparece na 2 e na 3 de propósito (as duas coisas existem), então ele precisa estar
+  // nomeado como caso de escalar. Sem isso é o relato que ela mais vai classificar errado.
+  ok(/O SONO CAI NOS DOIS[\s\S]{0,260}dúvida escala/.test(SEM_COMENTARIO),
+    "5g. o sono está marcado como dúvida, que é o que ele é");
+
+  // E A MENSAGEM DO VALOR PRECISA DESCREVER AS DUAS SEPARADAS. Antes elas dividiam um texto
+  // só ("Puericultura ou neurodesenvolvimento: ..."), e era exatamente ali que a diferença
+  // entre as duas sumia: a família ouvia a mesma coisa escolhendo qualquer uma das duas.
+  ok(/Puericultura: comece por "É a consulta de rotina da criança/.test(SEM_COMENTARIO),
+    "5h. a puericultura tem a descrição dela na mensagem do valor");
+  ok(/Neurodesenvolvimento: comece por "É a consulta de quando alguma coisa parece fora do esperado/.test(SEM_COMENTARIO),
+    "5h2. e a 3 tem a dela, diferente: é no que elas diferem que a família se perde");
+  ok(!/Puericultura ou neurodesenvolvimento: "/.test(SEM_COMENTARIO),
+    "5h3. e o texto compartilhado que apagava a diferença saiu");
+  ok(/O formato, igual nas duas: "Tem duração média de 1 hora/.test(SEM_COMENTARIO),
+    "5h4. o que é igual nas duas continua dito uma vez só, senão a mensagem dobra de tamanho");
   ok(/direcionada à queixa do momento: não vira consulta de puericultura nem investigação/.test(SEM_COMENTARIO), "5e. urgência não vira outra coisa");
   ok(/No fim de semana é a ÚNICA que existe, e custa R\$ 600/.test(SEM_COMENTARIO), "5f. fim de semana: só urgência, R$ 600");
   ok(/Não existe preço de irmãos: cada criança é uma consulta do seu tipo/.test(SEM_COMENTARIO), "5g. sem preço de irmãos");
