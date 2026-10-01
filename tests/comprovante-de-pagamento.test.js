@@ -126,12 +126,15 @@ const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
 
 // ------------------------------------------------- 6. a mensagem do painel continua intacta
 {
-  // O Dr. Bruno pediu explicitamente que a mensagem do botão "Pago" ficasse igualzinha.
-  // Ela é o único lugar que pede e-mail e data de nascimento agora.
+  // O Dr. Bruno pediu explicitamente que a mensagem do botão "Pago" ficasse igualzinha. Ela
+  // deixou de ser o ÚNICO lugar que pede e-mail e data de nascimento em 01/10/2026 (o pedido
+  // sai também logo depois da reserva), mas continua pedindo o que ainda faltar.
   ok(SERVER.includes("Pagamento recebido! 😊"), "6. a abertura da mensagem do painel não mudou");
   ok(SERVER.includes("está confirmada para "), "6b. a confirmação da consulta continua lá");
-  ok(/if \(!a\.responsavelEmail\) falta\.push\("seu \*e-mail\*"\);/.test(SERVER), "6c. o pedido de e-mail continua lá");
-  ok(/if \(!a\.criancaDataNascimento\) falta\.push/.test(SERVER), "6d. o pedido de data de nascimento continua lá");
+  ok(/const pedido = PedidoDeDados\.trechoNaConfirmacao\(a\);/.test(SERVER),
+    "6c. o pedido do que faltar continua lá, agora pelo texto compartilhado");
+  ok(/\$\{Instrucoes\.blocoDoQueLevar\(a\)\}\$\{pedido\}/.test(SERVER),
+    "6d. e ele continua emendado no fim da mensagem, onde sempre esteve");
   ok(/if \(a\.pagamentoAvisadoEm\) return \{ ok: true, jaAvisado: true \};/.test(SERVER), "6e. a trava de clique repetido continua lá");
 }
 

@@ -29,6 +29,7 @@ const CerebroIA = require(path.join(__dirname, "cerebro-ia.js"));
 const Avisos = require(path.join(__dirname, "avisos-texto.js"));
 const Previa = require(path.join(__dirname, "previa-de-link.js"));
 const Comprovante = require(path.join(__dirname, "comprovante-de-pagamento.js"));
+const PedidoDeDados = require(path.join(__dirname, "pedido-de-dados.js"));
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
 const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
@@ -151,23 +152,10 @@ async function avisarPagamentoConfirmadoNaFila(slotId) {
 
   const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
 
-  // O e-mail e a data de nascimento são pedidos AQUI, e não junto da reserva, porque este é
-  // o melhor momento da conversa inteira pra pedir: a família acabou de pagar, está
-  // comprometida e satisfeita. Antes, isso ia na mensagem da reserva, que ficava com cinco
-  // assuntos — e a família respondia um e esquecia o resto, quase sempre o e-mail.
-  //
-  // Cada dado só é pedido se ainda faltar. O e-mail é do responsável e serve pra qualquer
-  // filho; a data é da criança e nunca serve pra outra. Como isto é código e não IA, a
-  // conferência é certa: ela não pergunta de novo o que já está guardado.
-  const falta = [];
-  if (!a.responsavelEmail) falta.push("seu *e-mail*");
-  if (!a.criancaDataNascimento) falta.push(`a data de nascimento de ${primeiroNome(a.crianca)}`);
-
-  const pedido = falta.length === 0 ? "" : `\n\nMe manda ${falta.join(" e ")}?\n\n${
-    a.responsavelEmail && !a.criancaDataNascimento
-      ? `É pra montar a curva de crescimento de ${primeiroNome(a.crianca)} no portal.`
-      : `É pra criar o portal de ${primeiroNome(a.crianca)}: um espaço só de vocês, onde você guarda os exames, a carteira de vacinação e o peso e altura, e compara os exames antigos com os novos. As receitas e os documentos que o Dr. Bruno passar também ficam lá, junto com o crescimento e as vacinas que ainda faltam.`
-  }`;
+  // REDE DE SEGURANÇA, não primeiro pedido. Desde 01/10/2026 o e-mail e o nascimento são
+  // pedidos logo depois de a reserva existir, em mensagem própria (ver pedido-de-dados.js).
+  // Aqui sobra quem não respondeu aquele pedido, e por isso o texto continua existindo.
+  const pedido = PedidoDeDados.trechoNaConfirmacao(a);
 
   // Endereço e "o que levar" só pra quem vem ao consultório; por vídeo, a mensagem diz que
   // é por vídeo e como chega o link (auditoria de 10/09, problema 11).
@@ -774,6 +762,33 @@ async function processarFormatoNaoEntendido(sock, jid, telefone, tipo = "desconh
 // Avisa o Dr. Bruno por WhatsApp (mensagem de verdade, não notificação de navegador — mais
 // confiável) toda vez que a Carla confirma um agendamento novo. Inerte sem DR_BRUNO_TELEFONE
 // configurado no .env. Nunca é aguardada por quem chama — não pode atrasar a resposta pra família.
+/*
+ * O PEDIDO DO E-MAIL E DO NASCIMENTO, logo depois de o horário ficar separado.
+ *
+ * Sai como mensagem SOZINHA, depois da mensagem da Carla, e só quando algum dos dois ainda
+ * falta de verdade no agendamento que acabou de ser gravado. Quem adiantou os dados junto com
+ * os nomes não é perguntado de novo, e essa conferência é código justamente por isso: uma
+ * regra de prompt erraria, e perguntar de novo o que a família já mandou é o tipo de coisa que
+ * faz ela achar que ninguém está lendo.
+ */
+async function pedirDadosDoPortal(acoes, telefone, jid) {
+  if (!Array.isArray(acoes) || !acoes.length) return;
+  for (const acao of acoes) {
+    const a = acao && acao.slotId ? Storage.acharAgendamentoPorSlot(acao.slotId) : null;
+    if (!a) continue;
+    const texto = PedidoDeDados.mensagemDepoisDaReserva(a);
+    if (!texto) continue;
+    try {
+      await enviarResposta(sockAtivo, jid, telefone, texto, true, {
+        chaveIdempotencia: `dados-do-portal:${acao.slotId}`,
+        registrarNoHistorico: true,
+      });
+    } catch (erro) {
+      console.error("[DADOS DO PORTAL] Não consegui pedir:", erro.message);
+    }
+  }
+}
+
 async function notificarNovoAgendamento(sock, acao, telefoneFamilia) {
   const telefoneDrBruno = (process.env.DR_BRUNO_TELEFONE || "").trim();
   if (!telefoneDrBruno) return;
@@ -1172,6 +1187,10 @@ async function responderEscaladaNaFila(alertaId, resposta) {
 
     if (!resultado.resposta) return { ok: false, motivo: "A Carla não produziu a resposta da família." };
     await enviarResposta(sockAtivo, jid, telefone, resultado.resposta, true, { registrarPreco: true });
+    // E, se uma reserva nasceu neste turno, o pedido do e-mail e do nascimento sai LOGO
+    // DEPOIS, em mensagem própria. Própria e não emendada: foi empilhar isso na mensagem da
+    // reserva que fez a família responder um assunto e esquecer o resto (ver pedido-de-dados.js).
+    await pedirDadosDoPortal(resultado.acoes, telefone, jid);
     // Só agora o alerta vira respondido: antes disso a resposta ainda não estava sequer na
     // caixa de saída, e uma queda criava um alerta fechado sem mensagem para a família.
     const gravado = Storage.responderAlerta(alertaId, respostaNormalizada);
