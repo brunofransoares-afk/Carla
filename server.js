@@ -138,6 +138,23 @@ async function avisarPagamentoConfirmado(slotId) {
   );
 }
 
+/*
+ * O BOTÃO "PAGO" NÃO MANDA MAIS MENSAGEM NENHUMA (2026-10-01). O dono: "quando eu marco Pago
+ * na carla, atualmente manda aquela msg de confirmacao, pode retirar aquela funcao, nao
+ * precisa mais enviar nada quando aperta PAgo".
+ *
+ * O QUE A MENSAGEM FAZIA, E ONDE CADA PEDAÇO FOI PARAR, porque isto não é só apagar um texto:
+ *
+ *   - Dizia que o pagamento chegou e a consulta estava confirmada. Isso deixa de ser dito.
+ *   - Mandava endereço e o que levar. A família já recebe os dois na mensagem da reserva.
+ *   - Pedia o e-mail e a data de nascimento que faltassem. Desde a mudança de hoje mais cedo
+ *     isso é pedido logo depois de a reserva existir, em mensagem própria (pedido-de-dados.js),
+ *     então deixou de depender do pagamento pra acontecer.
+ *
+ * O QUE CONTINUA ACONTECENDO, e é por isso que a função não sumiu: a sessão precisa saber que
+ * a consulta foi paga. Sem isso a próxima conversa trata a consulta como reserva esperando
+ * Pix, e a Carla fala de pagamento com quem já pagou. O registro continua; só o envio saiu.
+ */
 async function avisarPagamentoConfirmadoNaFila(slotId) {
   if (!slotId) return { ok: false, motivo: "Sem slotId." };
   const a = Storage.acharAgendamentoPorSlot(slotId);
@@ -145,34 +162,14 @@ async function avisarPagamentoConfirmadoNaFila(slotId) {
   if (a.estado !== "pago" || !a.pago) {
     return { ok: false, motivo: "Esse agendamento não está marcado como pago." };
   }
-  // O botão do painel é um interruptor, e clique repetido acontece. Sem esta trava a
-  // família receberia a mesma confirmação duas vezes.
   if (a.pagamentoAvisadoEm) return { ok: true, jaAvisado: true };
-  if (!String(a.telefone || "").startsWith("+")) return { ok: false, motivo: "Sem telefone de WhatsApp." };
 
-  const jid = a.telefone.replace("+", "") + "@s.whatsapp.net";
-
-  // REDE DE SEGURANÇA, não primeiro pedido. Desde 01/10/2026 o e-mail e o nascimento são
-  // pedidos logo depois de a reserva existir, em mensagem própria (ver pedido-de-dados.js).
-  // Aqui sobra quem não respondeu aquele pedido, e por isso o texto continua existindo.
-  const pedido = PedidoDeDados.trechoNaConfirmacao(a);
-
-  // Endereço e "o que levar" só pra quem vem ao consultório; por vídeo, a mensagem diz que
-  // é por vídeo e como chega o link (auditoria de 10/09, problema 11).
-  const texto = `Pagamento recebido! 😊\n\nA ${Instrucoes.nomeDaConsulta(a)} de ${primeiroNome(a.crianca)} está confirmada para ${a.diaLabel}.\n\n${Instrucoes.blocoDoLocal(a, { endereco: ENDERECO_CONSULTORIO, linkMapa: LINK_MAPA, linkTeleconsulta: LINK_TELECONSULTA })}\n\n${Instrucoes.blocoDoQueLevar(a)}${pedido}\n\n${Instrucoes.avisoDeAtraso(a, "confirmacao")}`;
-
-  // O fato do pagamento vem do painel e vale mesmo se o WhatsApp estiver reconectando.
-  // A mensagem fica na caixa de saída, mas a próxima conversa já não pode tratar a consulta
-  // como uma mera reserva aguardando Pix.
   registrarPagamentoNaSessao(a.telefone, a);
-
-  await enviarResposta(sockAtivo, jid, a.telefone, texto, true, {
-    chaveIdempotencia: `pagamento:${slotId}`,
-    efeitoAposEnvio: { tipo: "marcar_pagamento", slotId },
-    registrarNoHistorico: true,
-  });
-  console.log(`[PAGAMENTO] Avisei ${a.telefone} que a consulta de ${a.crianca} está confirmada`);
-  return { ok: true };
+  // Marcado aqui mesmo, e não como efeito de um envio que não existe mais: é o que impede a
+  // reconciliação de ficar reprocessando a mesma consulta a cada reinício do processo.
+  Storage.marcarPagamentoAvisado(slotId);
+  console.log(`[PAGAMENTO] ${a.telefone}: consulta de ${a.crianca} marcada como paga, sem mensagem pra família`);
+  return { ok: true, semMensagem: true };
 }
 
 async function avisarPortalManual(dados) {
@@ -836,11 +833,16 @@ async function notificarAtencao(sock, { tipo, telefoneFamilia, texto, crianca, p
   if (!telefoneDrBruno) return;
   try {
     const jid = telefoneDrBruno.replace("+", "") + "@s.whatsapp.net";
+    // O cabeçalho é o que ele lê na notificação do celular, sem abrir. Por isso o encaixe
+    // tem o dele: "precisa de você" não diz que tem uma família esperando resposta HOJE, e é
+    // justamente esse o escalonamento que não pode esperar as duas horas dos outros.
     const cabecalho = tipo === "emergencia"
       ? "🚨 EMERGÊNCIA"
       : tipo === "comercial"
         ? "📩 Contato comercial"
-        : "⚠️ Precisa de você";
+        : tipo === "encaixe"
+          ? "⏱️ Encaixe pra HOJE"
+          : "⚠️ Precisa de você";
     const linhas = [cabecalho, ""];
     if (crianca) linhas.push(`Criança: ${crianca}`);
     linhas.push(`Telefone: ${telefoneFamilia}`);
@@ -849,10 +851,15 @@ async function notificarAtencao(sock, { tipo, telefoneFamilia, texto, crianca, p
     // A emergência NÃO silencia a conversa (a Carla continua respondendo, de propósito), o
     // escalonamento silencia por 2h. Dizer qual é o caso evita ele achar que tem tempo.
     if (tipo !== "emergencia") {
-      linhas.push("", pergunta
-        // Com pergunta, ele resolve num toque e a Carla segue. Sem, ele vai ter que assumir.
-        ? "Responda Sim ou Não no painel que a Carla continua a conversa sozinha."
-        : "A Carla parou de responder essa conversa. Ela volta sozinha em 2h se ninguém retornar.");
+      linhas.push("", tipo === "encaixe"
+        // No encaixe os botões não são Sim/Não: tem um campo de horário, e o que ele digitar
+        // ali abre o horário na agenda. Dizer isso aqui evita ele abrir o painel procurando
+        // um Sim que não existe.
+        ? "No painel, escolha o horário e toque em \"Consigo encaixar hoje\" que o horário é aberto na agenda e a Carla continua a conversa."
+        : pergunta
+          // Com pergunta, ele resolve num toque e a Carla segue. Sem, ele vai ter que assumir.
+          ? "Responda Sim ou Não no painel que a Carla continua a conversa sozinha."
+          : "A Carla parou de responder essa conversa. Ela volta sozinha em 2h se ninguém retornar.");
     }
     await enviarResposta(sock, jid, telefoneDrBruno, linhas.join("\n"), true);
   } catch (erro) {
@@ -1626,7 +1633,8 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     });
     console.log(`[ALERTA: ESCALADO PELA IA] ${telefone}: "${resultado.escalar}"`);
     notificarAtencao(sock, {
-      tipo: resultado.escalarTipo === "comercial" ? "comercial" : "escalonamento",
+      tipo: resultado.escalarTipo === "comercial" ? "comercial"
+        : resultado.escalarAssunto === "encaixe" ? "encaixe" : "escalonamento",
       telefoneFamilia: telefone,
       texto: resultado.escalar,
       crianca: sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca,

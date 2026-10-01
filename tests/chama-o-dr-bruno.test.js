@@ -37,8 +37,11 @@ const TRIAGEM = fs.readFileSync(path.join(__dirname, "..", "triagem-emergencia.j
   ok(/async function notificarAtencao\(sock, \{ tipo, telefoneFamilia, texto, crianca, pergunta \}\)/.test(SERVER),
     "1. a função existe");
   ok(/notificarAtencao\(sock, \{ tipo: "emergencia"/.test(SERVER), "1b. emergência chama o Dr. Bruno");
-  ok(/tipo: resultado\.escalarTipo === "comercial" \? "comercial" : "escalonamento"/.test(SERVER),
-    "1c. escalonamento também, separando o comercial do resto");
+  ok(/tipo: resultado\.escalarTipo === "comercial" \? "comercial"\s*\n\s*: resultado\.escalarAssunto === "encaixe" \? "encaixe" : "escalonamento"/.test(SERVER),
+    "1c. escalonamento também, separando o comercial e o encaixe do resto");
+  // O encaixe tem cabeçalho próprio porque é o que ele lê na notificação do celular sem
+  // abrir: "precisa de você" não diz que tem uma família esperando resposta HOJE.
+  ok(/\? "⏱️ Encaixe pra HOJE"/.test(SERVER), "1c2. e o encaixe diz, no cabeçalho, que é pra hoje");
   // "tipo:" com dois-pontos só aparece nas CHAMADAS; a definição da função usa "{ tipo," sem
   // valor. Contar sem isso pegava a própria definição e dava 3.
   eq((SERVER.match(/notificarAtencao\(sock, \{\s*\n?\s*tipo:/g) || []).length, 2,

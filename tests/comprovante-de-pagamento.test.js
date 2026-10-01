@@ -129,12 +129,23 @@ const SERVER = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
   // O Dr. Bruno pediu explicitamente que a mensagem do botão "Pago" ficasse igualzinha. Ela
   // deixou de ser o ÚNICO lugar que pede e-mail e data de nascimento em 01/10/2026 (o pedido
   // sai também logo depois da reserva), mas continua pedindo o que ainda faltar.
-  ok(SERVER.includes("Pagamento recebido! 😊"), "6. a abertura da mensagem do painel não mudou");
-  ok(SERVER.includes("está confirmada para "), "6b. a confirmação da consulta continua lá");
-  ok(/const pedido = PedidoDeDados\.trechoNaConfirmacao\(a\);/.test(SERVER),
-    "6c. o pedido do que faltar continua lá, agora pelo texto compartilhado");
-  ok(/\$\{Instrucoes\.blocoDoQueLevar\(a\)\}\$\{pedido\}/.test(SERVER),
-    "6d. e ele continua emendado no fim da mensagem, onde sempre esteve");
+  /*
+   * O BOTÃO "PAGO" DEIXOU DE MANDAR MENSAGEM (2026-10-01). O dono: "pode retirar aquela
+   * funcao, nao precisa mais enviar nada quando aperta PAgo".
+   *
+   * O que a mensagem levava não se perdeu: endereço e o que levar a família já recebe na
+   * mensagem da reserva, e os dois voltam nos lembretes (uma semana antes e no dia, que
+   * continuam com blocoDoLocal, blocoDoQueLevar e avisoDeAtraso, incluindo o link do vídeo).
+   * O e-mail e o nascimento passaram a ser pedidos logo depois da reserva. O que some é o
+   * aviso de "pagamento recebido", e isso foi escolha dele.
+   */
+  ok(!SERVER.includes("Pagamento recebido! 😊"), "6. a mensagem do botão não existe mais");
+  ok(/return \{ ok: true, semMensagem: true \};/.test(SERVER),
+    "6b. e o caminho do botão diz, no retorno, que não mandou nada");
+  ok(/registrarPagamentoNaSessao\(a\.telefone, a\);/.test(SERVER),
+    "6c. mas a sessão continua sabendo que foi pago, senão a Carla fala de Pix com quem já pagou");
+  ok(/Storage\.marcarPagamentoAvisado\(slotId\);/.test(SERVER),
+    "6d. e fica marcado, senão a reconciliação reprocessa a mesma consulta a cada reinício");
   ok(/if \(a\.pagamentoAvisadoEm\) return \{ ok: true, jaAvisado: true \};/.test(SERVER), "6e. a trava de clique repetido continua lá");
 }
 

@@ -122,6 +122,19 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
     "6g. e o recado diz à Carla o que fazer, em vez de deixá-la adivinhar");
 }
 
+// ------------------------------------------------- 4b. o aviso no WhatsApp dele
+{
+  // O dono pediu "com avisos no meu whatsap tbm, igual os avisos de quando marca consulta".
+  // O aviso de escalonamento já existia; o que faltava era ele dizer, no cabeçalho, que é
+  // pra HOJE. É o que ele lê na notificação do celular sem abrir nada.
+  ok(/tipo === "encaixe"\s*\n\s*\? "⏱️ Encaixe pra HOJE"/.test(SERVER),
+    "4e. o aviso tem cabeçalho próprio: 'precisa de você' não diz que é pra hoje");
+  ok(/resultado\.escalarAssunto === "encaixe" \? "encaixe" : "escalonamento"/.test(SERVER),
+    "4f. e é disparado pelo assunto do escalonamento");
+  ok(/Consigo encaixar hoje.{0,4} que o horário é aberto na agenda/.test(SERVER),
+    "4g. e o rodapé diz o que fazer no painel, que ali não é Sim nem Não");
+}
+
 // ------------------------------------------------- 5. de ponta a ponta, na agenda de verdade
 {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "carla-encaixe-"));
