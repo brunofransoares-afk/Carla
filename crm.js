@@ -63,6 +63,10 @@ const ESTAGIOS = [
 // As situações que viram filtro na tela. A ordem aqui é a ordem dos botões.
 const SITUACOES = [
   { chave: "aguardando_humano", rotulo: "Aguardando você", tom: "atencao" },
+  // A Carla parou porque o Dr. Bruno escreveu na conversa pelo celular. Ele pediu (2026-10-01)
+  // que isso aparecesse no painel: "seria interessante que isso aparecesse no painel, a pessoa
+  // silenciada". Só o "Retomar atendimento automático" desfaz.
+  { chave: "pausada_por_voce", rotulo: "Carla pausada: você escreveu", tom: "perda" },
   { chave: "aguardando_pagamento", rotulo: "Aguardando pagamento", tom: "atencao" },
   { chave: "consulta_marcada", rotulo: "Consulta marcada", tom: "bom" },
   { chave: "fechou_com_voce", rotulo: "Fechou com você", tom: "bom" },
@@ -318,6 +322,7 @@ function situacoesDe({ contato, consultas, flags, agora, retornosAvisados = {} }
   const detalhes = {};
 
   if (contato.aguardandoHumano) lista.push("aguardando_humano");
+  if (contato.aguardandoHumano && contato.pausadaPeloDoutor) lista.push("pausada_por_voce");
   if (futuras.some((c) => !c.pago)) lista.push("aguardando_pagamento");
   if (futuras.length) lista.push("consulta_marcada");
   if (flags && flags.fechouComDoutor) lista.push("fechou_com_voce");
