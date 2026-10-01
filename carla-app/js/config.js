@@ -10,17 +10,50 @@ const CARLA_CONFIG = {
   clinica: "Clínica Rueda",
   pix: "brunofransoares@gmail.com",
 
-  // 0=domingo ... 6=sábado. Uma consulta dura 1h e há 30min entre inícios.
-  janelasSemanais: {
-    1: [{ inicio: "08:00", fim: "12:00" }, { inicio: "14:00", fim: "16:30" }],
-    2: [{ inicio: "08:00", fim: "12:00" }, { inicio: "14:00", fim: "15:00" }],
+  /*
+   * OS HORÁRIOS DO CONSULTÓRIO, um por um (2026-10-01).
+   *
+   * Antes isto eram JANELAS ("das 8 às 12") e os horários saíam de uma conta: duração mais
+   * intervalo, do começo ao fim da janela. A grade nova do Dr. Bruno não cabe nisso: ela tem
+   * buracos de propósito (10h e depois 14h30, sem nada no meio) e horas que não caem em
+   * nenhum passo regular. Horário de consultório é escolha, não progressão aritmética, então
+   * agora cada dia tem a LISTA do que existe nele.
+   *
+   * 0=domingo ... 6=sábado. Sábado e domingo continuam vazios: fim de semana não tem horário
+   * fixo aberto, é atendimento de urgência com valor diferenciado e passa por ele (ver
+   * ATENDIMENTO DE FIM DE SEMANA, no prompt).
+   */
+  horariosSemanais: {
+    1: ["10:00", "14:30", "16:30"],
+    2: ["10:00", "14:30"],
     3: [],
-    4: [{ inicio: "08:00", fim: "12:00" }, { inicio: "14:00", fim: "16:00" }],
-    5: [{ inicio: "08:00", fim: "12:00" }],
+    4: ["08:00", "10:00", "14:30", "16:30"],
+    5: ["10:00", "14:30", "16:30", "18:00"],
     6: [],
     0: [],
   },
 
+  /*
+   * OS HORÁRIOS QUE SÓ EXISTEM EM ALGUMAS SEMANAS DO MÊS.
+   *
+   * O dono: o 16h30 da quinta só nas SEGUNDAS E QUARTAS quintas do mês; e na sexta, a tarde
+   * inteira (14h30, 16h30 e 18h) só nas PRIMEIRAS, TERCEIRAS E QUINTAS sextas.
+   *
+   * A ocorrência é contada pelo dia do mês, não por semana do calendário: a primeira
+   * quinta-feira do mês é a ocorrência 1, a seguinte é a 2, e assim por diante. É a mesma
+   * conta que a pessoa faz olhando o calendário, e não depende de o mês começar no meio da
+   * semana.
+   */
+  excecoesPorOcorrencia: [
+    { diaSemana: 4, horarios: ["16:30"], apenasNasOcorrencias: [2, 4] },
+    { diaSemana: 5, horarios: ["14:30", "16:30", "18:00"], apenasNasOcorrencias: [1, 3, 5] },
+  ],
+
+  /*
+   * A PREFERÊNCIA PADRÃO do consultório: com que horários a Carla começa a oferecer quando a
+   * família não pediu nada. Segunda de manhã e terça à tarde continuam sendo a escolha dele.
+   * Com a grade nova, "manhã" na segunda é o 10h, e "tarde" na terça é o 14h30.
+   */
   preferenciaPadrao: (slot) =>
     (slot.weekday === 1 && slot.time < "12:00") ||
     (slot.weekday === 2 && slot.time >= "12:00"),

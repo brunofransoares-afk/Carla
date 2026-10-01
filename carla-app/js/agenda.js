@@ -49,17 +49,37 @@ const Agenda = (() => {
     return toDateStr(dataObj) !== toDateStr(now);
   }
 
-  // Dentro de uma janela de atendimento (ex: 08:00-12:00), calcula os horários de início
-  // possíveis, sempre com 1h de consulta + 30min de intervalo, sem passar do fim da janela.
-  function horariosDaJanela(janela) {
-    const duracao = CARLA_CONFIG.duracaoConsultaMin;
-    const passo = duracao + CARLA_CONFIG.intervaloMin;
-    const fimMin = paraMinutos(janela.fim);
-    const horarios = [];
-    for (let atual = paraMinutos(janela.inicio); atual + duracao <= fimMin; atual += passo) {
-      horarios.push(paraHHMM(atual));
-    }
-    return horarios;
+  /*
+   * A QUANTA OCORRÊNCIA DAQUELE DIA DA SEMANA ESTE DIA CORRESPONDE NO MÊS.
+   *
+   * Dia 1 a 7 é a primeira quinta (ou segunda, ou sexta) do mês; 8 a 14 é a segunda, e assim
+   * por diante. É a conta que a pessoa faz olhando o calendário, e não depende de o mês
+   * começar no meio da semana, que é onde "semana do mês" erra.
+   */
+  function ocorrenciaNoMes(date) {
+    return Math.floor((date.getDate() - 1) / 7) + 1;
+  }
+
+  /*
+   * Os horários que existem NAQUELE dia, já com as exceções de ocorrência aplicadas.
+   *
+   * Uma exceção não acrescenta horário: ela RESTRINGE um horário que já está na lista do dia
+   * a algumas ocorrências do mês. É por isso que ela é escrita como "este horário só nas 2ª e
+   * 4ª quintas", e não como "nas 2ª e 4ª quintas também tem isso": se fosse acrescentar, um
+   * erro de digitação criaria horário onde não existe atendimento, que é o pior lado pra
+   * errar. Restringindo, o pior caso é oferecer menos.
+   */
+  function horariosDoDia(date) {
+    const diaSemana = date.getDay();
+    const todos = CARLA_CONFIG.horariosSemanais[diaSemana] || [];
+    const excecoes = (CARLA_CONFIG.excecoesPorOcorrencia || []).filter((e) => e.diaSemana === diaSemana);
+    if (!excecoes.length) return todos.slice();
+    const qual = ocorrenciaNoMes(date);
+    return todos.filter((hhmm) => {
+      const regra = excecoes.find((e) => (e.horarios || []).includes(hhmm));
+      if (!regra) return true;
+      return (regra.apenasNasOcorrencias || []).includes(qual);
+    });
   }
 
   // Gera todos os horários de início possíveis dentro do horizonte configurado,
@@ -68,8 +88,7 @@ const Agenda = (() => {
     const slots = [];
     for (let i = 0; i < CARLA_CONFIG.horizonteDias; i++) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
-      const janelas = CARLA_CONFIG.janelasSemanais[d.getDay()] || [];
-      const horarios = janelas.flatMap(horariosDaJanela);
+      const horarios = horariosDoDia(d);
       const dateStr = toDateStr(d);
       for (const hhmm of horarios) {
         // Não oferece horário que já passou, nem horário que começa antes da antecedência
@@ -182,21 +201,24 @@ const Agenda = (() => {
     for (let i = 0; i < CARLA_CONFIG.horizonteDias; i++) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
       const dateStr = toDateStr(d);
-      const janelas = CARLA_CONFIG.janelasSemanais[d.getDay()] || [];
-      for (const janela of janelas) {
-        const horarios = horariosDaJanela(janela);
-        for (let j = 0; j < horarios.length - 1; j++) {
-          const idA = slotId(dateStr, horarios[j]);
-          const idB = slotId(dateStr, horarios[j + 1]);
-          if (idsOcupados.has(idA) || idsOcupados.has(idB)) continue;
-          const [hA, mA] = horarios[j].split(":").map(Number);
-          if (!ehDiaOferecivelPelaGrade(new Date(d.getFullYear(), d.getMonth(), d.getDate(), hA, mA), now)) continue;
-          const rotular = (hhmm) => `${CARLA_CONFIG.nomesDiaSemana[d.getDay()]} (${toDateLabel(d)}) às ${formatHora(hhmm)}`;
-          return [
-            { id: idA, date: dateStr, time: horarios[j], weekday: d.getDay(), label: rotular(horarios[j]) },
-            { id: idB, date: dateStr, time: horarios[j + 1], weekday: d.getDay(), label: rotular(horarios[j + 1]) },
-          ];
-        }
+      const horarios = horariosDoDia(d);
+      for (let j = 0; j < horarios.length - 1; j++) {
+        // SEGUIDOS DE VERDADE, E NÃO SÓ VIZINHOS NA LISTA. Com horários explícitos a lista
+        // tem buracos de propósito (10h e depois 14h30), e dois horários com quatro horas de
+        // distância não servem pra mãe que veio com dois filhos: ela esperaria a manhã toda.
+        // Seguido é o próximo que começa quando o anterior acaba, mais o intervalo.
+        const distancia = paraMinutos(horarios[j + 1]) - paraMinutos(horarios[j]);
+        if (distancia > CARLA_CONFIG.duracaoConsultaMin + CARLA_CONFIG.intervaloMin) continue;
+        const idA = slotId(dateStr, horarios[j]);
+        const idB = slotId(dateStr, horarios[j + 1]);
+        if (idsOcupados.has(idA) || idsOcupados.has(idB)) continue;
+        const [hA, mA] = horarios[j].split(":").map(Number);
+        if (!ehDiaOferecivelPelaGrade(new Date(d.getFullYear(), d.getMonth(), d.getDate(), hA, mA), now)) continue;
+        const rotular = (hhmm) => `${CARLA_CONFIG.nomesDiaSemana[d.getDay()]} (${toDateLabel(d)}) às ${formatHora(hhmm)}`;
+        return [
+          { id: idA, date: dateStr, time: horarios[j], weekday: d.getDay(), label: rotular(horarios[j]) },
+          { id: idB, date: dateStr, time: horarios[j + 1], weekday: d.getDay(), label: rotular(horarios[j + 1]) },
+        ];
       }
     }
     return null;
@@ -215,14 +237,23 @@ const Agenda = (() => {
 
     const [ano, mes, dia] = slotBase.date.split("-").map(Number);
     const d = new Date(ano, mes - 1, dia);
-    const janelas = CARLA_CONFIG.janelasSemanais[slotBase.weekday] || [];
     const duracao = CARLA_CONFIG.duracaoConsultaMin;
     const inicioNovoMin = paraMinutos(horarioDesejado);
 
-    const dentroDeAlgumaJanela = janelas.some(
-      (j) => inicioNovoMin >= paraMinutos(j.inicio) && inicioNovoMin + duracao <= paraMinutos(j.fim)
-    );
-    if (!dentroDeAlgumaJanela) {
+    /*
+     * O AJUSTE CABE NO EXPEDIENTE DAQUELE DIA, e o expediente é o que a lista do dia desenha:
+     * do primeiro horário ao fim do último. Com janelas isso era uma pergunta sobre blocos;
+     * com horários explícitos é uma pergunta sobre os extremos, e o que fica entre eles (o
+     * intervalo do almoço, por exemplo) é resolvido pelo conflito com consultas marcadas e
+     * pelo teto de 30 minutos do próprio ajuste.
+     */
+    const horariosDoDiaBase = horariosDoDia(d);
+    if (!horariosDoDiaBase.length) {
+      return { ok: false, motivo: "Esse dia não tem atendimento." };
+    }
+    const abre = paraMinutos(horariosDoDiaBase[0]);
+    const fecha = paraMinutos(horariosDoDiaBase[horariosDoDiaBase.length - 1]) + duracao;
+    if (inicioNovoMin < abre || inicioNovoMin + duracao > fecha) {
       return { ok: false, motivo: "Esse horário ajustado ficaria fora do período de atendimento desse dia." };
     }
 
@@ -258,7 +289,7 @@ const Agenda = (() => {
     };
   }
 
-  return { gerarSlotsPossiveis, disponiveis, oferecerSlots, doisSeguidos, ajustarHorario, temAntecedencia, ehDiaOferecivelPelaGrade, formatHora, toDateLabel, toDateStr };
+  return { gerarSlotsPossiveis, disponiveis, oferecerSlots, doisSeguidos, ajustarHorario, temAntecedencia, ehDiaOferecivelPelaGrade, horariosDoDia, ocorrenciaNoMes, formatHora, toDateLabel, toDateStr };
 })();
 
 // Compatibilidade com Node (require) — ver explicação em config.js.
