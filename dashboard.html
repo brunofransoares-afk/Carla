@@ -311,6 +311,12 @@
   /* Mensagem manual e reaquecer mandam mensagem pra fora e nao tem desfazer: dourado (peso). */
   .btn-mensagem-contato, .btn-reaquecer-contato { border: none; background: rgba(250,221,124,0.16); color: var(--ouro-claro); border-radius: 8px; padding: 3px 9px; font-size: 10.5px; cursor: pointer; font-family: inherit; }
   .btn-mensagem-contato:hover, .btn-reaquecer-contato:hover:not(:disabled) { background: rgba(250,221,124,0.3); }
+  /* AÇÕES DA FICHA, GRANDES E NO TOPO (2026-10-01). O dono: "o botão das ações tá lá embaixo,
+     joga mais pra cima, e coloca botões grandes, fica aquele botãozinho pequenininho".
+     Só dentro da ficha: as mesmas classes aparecem pequenas na lista e nos retornos, onde
+     o tamanho é outro de propósito. Grade de duas colunas, que no celular é o dedo inteiro. */
+  .acoes-grandes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 6px; }
+  .acoes-grandes button { font-size: 14px; font-weight: 600; padding: 12px 14px; border-radius: 12px; min-height: 46px; text-align: center; }
   .btn-reaquecer-contato:disabled { background: rgba(255,255,255,0.05); color: var(--texto-fraco); cursor: default; }
 
   .silenciar-form { display: flex; gap: 8px; margin-bottom: 10px; }
@@ -375,6 +381,9 @@
   .registrar-form button { border: none; background: rgba(250,221,124,0.18); color: var(--ouro-claro); border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap; }
   .estado-consulta.realizada { background: rgba(143,186,203,0.16); color: var(--sucesso); }
   .msg-manual { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  /* O display:flex acima vencia o atributo hidden, e a caixa ficava sempre aberta. Com as
+     Ações no topo da ficha, ela empurrava tudo pra baixo. Abre no Mensagem ou no Reaquecer. */
+  .msg-manual[hidden] { display: none; }
   .msg-manual textarea { width: 100%; resize: vertical; min-height: 84px; background: rgba(255,255,255,0.05); border: 1px solid var(--vidro-borda); border-radius: 10px; padding: 9px 11px; font-size: 13px; color: var(--texto); font-family: inherit; line-height: 1.45; }
   .msg-manual textarea:focus { outline: none; border-color: var(--ouro); }
   .msg-manual textarea::placeholder { color: var(--texto-apagado); }
@@ -1415,7 +1424,7 @@
       `<button data-modelo="${escapeHtml(m.id)}" ${m.disponivel ? "" : "disabled"} title="${escapeHtml(m.disponivel ? (m.carlaContinua ? "Depois dessa a Carla continua a conversa" : "Depois dessa a Carla fica quieta até você retomar") : m.motivo)}">${escapeHtml(m.nome)}<small>${escapeHtml(m.quando)}</small></button>`
     ).join("")}${atalhoPortal}</div></div>`;
 
-    const acoes = `<div class="ficha-secao"><h3>Ações</h3><div class="contato-botoes">
+    const acoes = `<div class="ficha-secao"><h3>Ações</h3><div class="contato-botoes acoes-grandes">
       <button class="btn-mensagem-contato" data-telefone="${escapeHtml(c.telefone)}">Mensagem</button>
       <button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}" title="A Carla escreve uma mensagem de retomada levando a conversa em conta. Você lê, ajusta e envia.">Reaquecer</button>
       ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
@@ -1463,7 +1472,7 @@
         <button class="btn-fechar-ficha" title="Fechar ficha">✕</button>
       </div>
       <div class="ficha-chips"><span class="chip estagio">${escapeHtml(c.estagio.rotulo)}</span>${chipsDe(c)}</div>
-      ${dados}${criancas}${consultas}${portal}${retornos}${modelos}${acoes}${caixa}${historico}${notas}${etiquetas}${linha}`;
+      ${acoes}${caixa}${dados}${criancas}${consultas}${portal}${retornos}${modelos}${historico}${notas}${etiquetas}${linha}`;
 
     const formPortal = alvo.querySelector("#form-portal-manual");
     if (formPortal) {
