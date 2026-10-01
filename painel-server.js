@@ -607,12 +607,11 @@ async function atenderRequisicao(req, res) {
   // devolve cada família já com a situação escrita. O cruzamento é aqui, não no navegador,
   // pelo mesmo motivo do funil: a lista de eventos cresce sem teto.
   if (caminhoPedido === "/api/crm" && req.method === "GET") {
-    const dadosCrm = Crm.lerCrm(ARQ_CRM);
     const crm = Crm.montarCrm({
       contatos: Storage.listarTodosContatos(),
       agendamentos: Storage.lerTodosAgendamentos(),
       funilContatos: Eventos.funil({}).contatos,
-      dadosCrm,
+      dadosCrm: Crm.lerCrm(ARQ_CRM),
     });
     // A tela Hoje: as pendências do dia, já ordenadas. Calculadas aqui, junto do CRM, porque
     // dependem do mesmo cruzamento e da lista de eventos, que não vai inteira pro navegador.
@@ -620,7 +619,7 @@ async function atenderRequisicao(req, res) {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({
       ...crm, temLinkAvaliacao: !!LINK_AVALIACAO, pendencias,
-      listaOrigens: Crm.listaDeOrigens(dadosCrm), motivosPerda: Crm.MOTIVOS_PERDA,
+      listaOrigens: Crm.listaDeOrigens(Crm.lerCrm(ARQ_CRM)), motivosPerda: Crm.MOTIVOS_PERDA,
     }));
     return;
   }
