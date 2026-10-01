@@ -622,6 +622,12 @@
       <h2>
         <span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>Agendamentos</span>
       </h2>
+      <!-- Próximos por padrão, histórico só quando ele pede. A lista existe pra ele saber o
+           que vem; o que já passou é consulta, não agenda. -->
+      <div class="funil-periodo" id="filtro-agendamentos" role="group" aria-label="Quais agendamentos mostrar" style="margin-bottom:10px">
+        <button type="button" data-filtro="proximos" aria-pressed="true">Próximos</button>
+        <button type="button" data-filtro="historico" aria-pressed="false">Histórico</button>
+      </div>
       <div id="tabela-agendamentos" class="rolagem-x"></div>
     </div>
 
@@ -2065,6 +2071,32 @@
     atualizarFunil();
   });
 
+  // Qual lista a aba Agenda mostra. Começa sempre em "próximos": é a pergunta de toda vez.
+  let filtroAgendamentos = "proximos";
+
+  // Uma consulta acabou quando passou do início mais a duração. Sem horário, vale o dia
+  // inteiro: some no dia seguinte, e não no meio do dia em que ela pode estar acontecendo.
+  function agendamentoJaAcabou(a, agora = new Date()) {
+    if (!a || !a.data) return false;
+    const [ano, mes, dia] = String(a.data).split("-").map(Number);
+    if (!ano || !mes || !dia) return false;
+    if (!a.horario) return new Date(ano, mes - 1, dia + 1) <= agora;
+    const [h, m] = String(a.horario).split(":").map(Number);
+    const fim = new Date(ano, mes - 1, dia, h || 0, m || 0);
+    fim.setMinutes(fim.getMinutes() + 60);
+    return fim <= agora;
+  }
+
+  document.getElementById("filtro-agendamentos").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-filtro]");
+    if (!b) return;
+    filtroAgendamentos = b.dataset.filtro;
+    for (const outro of ev.currentTarget.querySelectorAll("button")) {
+      outro.setAttribute("aria-pressed", String(outro === b));
+    }
+    atualizar();
+  });
+
   async function atualizar() {
     try {
       const resp = await fetch("/api/dados");
@@ -2075,11 +2107,27 @@
       document.getElementById("status-dot").className = "status ok";
       document.getElementById("status-texto").textContent = "Atualizado às " + new Date().toLocaleTimeString("pt-BR");
 
-      const agendamentos = dados.agendamentos.slice().sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario));
-      document.getElementById("contagem-agendamentos").textContent = agendamentos.length;
+      const todosAgendamentos = dados.agendamentos.slice().sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario));
+      /*
+       * SÓ OS PRÓXIMOS NA TELA DE ABERTURA (2026-10-01). O dono: "ali nos agendamentos fica
+       * marcando na tela os agendamentos que ja foram tbm, os passados, tem que mostrar ali
+       * somente os futuros. e ai uma abinha caso eu queira ver o historico ai mostra todos."
+       *
+       * "Futuro" é a consulta que ainda não ACABOU, e não a que ainda não começou: uma das 10h
+       * continua na lista às 10h30, porque é quando ele está atendendo e pode precisar abrir a
+       * ficha. O histórico mostra todos, o mais recente em cima, que é o que se procura nele.
+       *
+       * O contador da aba conta só os próximos: um número que cresce pra sempre com o que já
+       * passou deixa de dizer alguma coisa.
+       */
+      const proximos = todosAgendamentos.filter((a) => !agendamentoJaAcabou(a));
+      const agendamentos = filtroAgendamentos === "historico" ? todosAgendamentos.slice().reverse() : proximos;
+      document.getElementById("contagem-agendamentos").textContent = proximos.length;
       const tabela = document.getElementById("tabela-agendamentos");
       if (agendamentos.length === 0) {
-        tabela.innerHTML = "<div class='vazio'>Nenhum agendamento ainda.</div>";
+        tabela.innerHTML = filtroAgendamentos === "historico"
+          ? "<div class='vazio'>Nenhum agendamento ainda.</div>"
+          : "<div class='vazio'>Nenhuma consulta pela frente. O histórico tem as que já passaram.</div>";
       } else {
         tabela.innerHTML = `<table>
           <thead><tr><th>Data</th><th>Hora</th><th>Criança</th><th>Responsável</th><th>Tipo</th><th>Modalidade</th><th class="col-x">Pago</th><th class="col-x">Portal</th><th class="col-x">Guia</th><th></th><th class="col-x"></th></tr></thead>
@@ -2101,7 +2149,7 @@
         ligarBotoesDeConsulta(tabela);
         tabela.querySelectorAll("tr.clicavel").forEach((tr) => tr.addEventListener("click", () => abrirFicha(tr.dataset.telefone)));
       }
-      renderizarProximas(agendamentos);
+      renderizarProximas(proximos);
 
       const alertas = dados.alertas.slice().reverse();
       document.getElementById("contagem-alertas").textContent = alertas.length;
