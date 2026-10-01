@@ -144,6 +144,15 @@ function ehMidiaSemTexto(conteudo) {
   return !!(c.imageMessage || c.videoMessage || c.stickerMessage || c.documentMessage);
 }
 
+// Imagem ou PDF. É onde mora um comprovante de pagamento: Pix sai como print, e link de
+// cartão às vezes sai como PDF. Vídeo e figurinha ficam de fora de propósito, porque ninguém
+// manda comprovante em vídeo e um "silêncio" largo demais engole mensagem de gente.
+function ehImagemOuDocumento(conteudo) {
+  const c = desembrulhar(conteudo);
+  if (!c || typeof c !== "object") return false;
+  return !!(c.imageMessage || c.documentMessage);
+}
+
 // Uma classificação única evita que o servidor aplique os testes numa ordem diferente e
 // volte a silenciar um formato novo. `nao_suportado` é mensagem de gente que chegou, mas
 // cujo conteúdo ainda não sabemos ler; deve receber resposta fixa/alerta, nunca `continue`.
@@ -158,6 +167,7 @@ function classificar(conteudo) {
 
 module.exports = {
   textoDe,
+  ehImagemOuDocumento,
   tipoDe,
   desembrulhar,
   ehRecadoDeSistema,

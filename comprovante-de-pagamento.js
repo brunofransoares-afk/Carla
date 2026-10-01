@@ -20,10 +20,24 @@
  * quando outra regra puxa pro outro lado, e a semana inteira mostrou isso acontecendo. Aqui a
  * mensagem nem chega na IA.
  *
- * SÓ LINK, e isso é deliberado. Comprovante de Pix quase sempre vem como IMAGEM, e imagem já
- * passa em silêncio hoje (o server só lê texto). O que sobrava respondendo era o link, que é o
- * que a InfinitePay gera quando a família paga pelo link do cartão. Frase solta tipo "acabei de
- * pagar" NÃO entra aqui: aquilo é conversa, e conversa a Carla responde.
+ * SÃO DOIS CAMINHOS, e eles reconhecem o comprovante por coisas diferentes.
+ *
+ * 1. PELO LINK (pareceComprovante). É o que a InfinitePay gera quando a família paga pelo
+ *    link do cartão. Frase solta tipo "acabei de pagar" NÃO entra aqui: aquilo é conversa, e
+ *    conversa a Carla responde.
+ *
+ * 2. PELA MÍDIA MAIS O CONTEXTO (midiaEhComprovante), acrescentado em 01/10/2026. Comprovante
+ *    de Pix quase sempre vem como PRINT, e print não tem texto pra reconhecer. O comentário
+ *    antigo aqui dizia que imagem "já passa em silêncio hoje", e tinha deixado de ser verdade:
+ *    desde que o servidor passou a pedir "me diga por escrito o que quer que eu observe", toda
+ *    imagem virou essa frase. O dono mandou o print: comprovante de Pix do PagBank, e a Carla
+ *    respondendo que precisava que ele descrevesse.
+ *
+ *    NÃO LEMOS A IMAGEM. Lemos o contexto: imagem (ou PDF) chegando de um telefone que tem
+ *    consulta SEPARADA E NÃO PAGA é comprovante, e o sistema não precisa de mais nada pra
+ *    saber disso. É a mesma ideia determinística do resto: a certeza vem do estado, não de um
+ *    palpite sobre o conteúdo. Sem reserva esperando pagamento, a imagem segue o caminho
+ *    normal (foto de exame, carteira de vacinação), e ali o pedido de descrever faz sentido.
  */
 
 // O host que o link de pagamento do consultório gera quando a família paga.
@@ -62,4 +76,19 @@ function pareceComprovante(texto) {
   });
 }
 
-module.exports = { pareceComprovante, HOSTS_CONHECIDOS };
+// Este telefone tem alguma consulta separada esperando pagamento? É o contexto que
+// transforma uma imagem qualquer em comprovante. Recebe a lista inteira de agendamentos em
+// vez de ir buscar: assim a regra roda em teste sem banco, e quem chama já tem a lista.
+function reservaEsperandoPagamento(agendamentos, telefone) {
+  if (!Array.isArray(agendamentos) || !telefone) return false;
+  return agendamentos.some((a) => a && a.telefone === telefone && !a.pago);
+}
+
+// A decisão, com os dois sinais separados de propósito: um diz O QUE chegou, o outro diz DE
+// QUEM. Nenhum dos dois sozinho basta, e é por isso que a função existe em vez de um "&&"
+// solto no meio do servidor: é aqui que alguém vem ler por que uma foto passou em silêncio.
+function midiaEhComprovante({ ehImagemOuDocumento = false, esperandoPagamento = false } = {}) {
+  return ehImagemOuDocumento === true && esperandoPagamento === true;
+}
+
+module.exports = { pareceComprovante, reservaEsperandoPagamento, midiaEhComprovante, HOSTS_CONHECIDOS };

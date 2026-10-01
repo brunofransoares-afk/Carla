@@ -6,6 +6,7 @@ const path = require("path");
 const vm = require("vm");
 const Identidade = require("../identidade-whatsapp.js");
 const Texto = require("../texto-da-mensagem.js");
+const Comprovante = require("../comprovante-de-pagamento.js");
 const { criarMemoriaMensagens, timestampDaMensagem } = require("../memoria-mensagens-whatsapp.js");
 const { criarFilaPorChave } = require("../fila-por-chave.js");
 
@@ -87,7 +88,7 @@ async function main() {
     const fila = criarFilaPorChave();
     const ctx = vm.createContext({
       console: { log() {}, warn() {}, error(...v) { throw new Error(v.join(" ")); } },
-      IdentidadeWhatsapp: Identidade, TextoDaMensagem: Texto,
+      IdentidadeWhatsapp: Identidade, TextoDaMensagem: Texto, Comprovante,
       memoriaMensagens: memoria, Storage: storage, sock, sockAtivo: sock,
       geracao: 1, geracaoConexao: 1, encerrando: false,
       filaMensagens: fila, buffers: new Map(), DEBOUNCE_MS: 6000, LIMITE_TEXTO_ENTRADA: 8000,
