@@ -10,6 +10,7 @@ const http = require("http");
 const { exec } = require("child_process");
 const Seguranca = require(path.join(__dirname, "painel-seguranca.js"));
 const Sso = require(path.join(__dirname, "sso-do-spi.js"));
+const SsoSupabase = require(path.join(__dirname, "sso-supabase.js"));
 const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
 
 const PAINEL_SENHA = String(process.env.PAINEL_SENHA || "");
@@ -203,6 +204,16 @@ const PASTA_ICONES = path.join(__dirname, "icons");
 // Login único vindo do SPI. Sem o segredo, a porta responde 503 dizendo qual variável falta,
 // nunca 401: um 401 sem motivo já custou uma noite de investigação num login que estava certo.
 const SSO_SEGREDO = String(process.env.CARLA_SSO_SECRET || "").trim() || null;
+
+// O PROJETO DO SPI e quem pode entrar por ele. URL e chave pública não são segredo (estão no
+// js/config.js do SPI, que é público). O e-mail do dono é o único autorizado: a sessão de
+// qualquer outro assinante do SPI é válida no mesmo Supabase e NÃO pode abrir este painel,
+// que tem conversa e dado de paciente. Tudo sobrescrevível pelo .env, sem precisar.
+const SPI_SUPABASE = {
+  url: String(process.env.SPI_SUPABASE_URL || "https://zjvhvwfufhdbnligxugk.supabase.co").trim(),
+  chavePublica: String(process.env.SPI_SUPABASE_ANON_KEY || "sb_publishable_KIo9zw2UI27YnQxSrxdfBg_eo8PdkDR").trim(),
+  emailsPermitidos: SsoSupabase.listaDeEmails(process.env.CARLA_SSO_EMAILS || "brunofransoares@gmail.com"),
+};
 const nonces = Sso.criarNonces();
 const ARQUIVO_FONTE = path.join(__dirname, "fontes", "montserrat.woff2");
 
@@ -328,6 +339,46 @@ async function atenderRequisicao(req, res) {
 
   // LOGIN ÚNICO DO SPI. Fica ANTES da checagem de senha, porque a prova de identidade vem no
   // próprio ticket. É a metade que faltava do contrato escrito na Edge Function "carla-sso".
+  /*
+   * ENTRADA PELA SESSÃO DO SPI, sem segredo compartilhado (ver sso-supabase.js).
+   *
+   * GET /sso sem ticket devolve a página que lê o token do FRAGMENTO e posta pra cá. O
+   * fragmento não chega no servidor nem nos logs de acesso; o token só existe no corpo do POST.
+   */
+  if (caminhoPedido === "/sso" && req.method === "GET" && !new URL(req.url, "http://painel.local").searchParams.get("ticket")) {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(SsoSupabase.paginaDeEntrada());
+    return;
+  }
+  if (caminhoPedido === "/sso/spi" && req.method === "POST") {
+    // O mesmo limitador do login por senha: tentar entrar com token alheio tem que custar o
+    // mesmo que tentar adivinhar a senha.
+    const limite = limiteLogin.verificar(cliente);
+    if (!limite.permitido) {
+      res.writeHead(429, { "Content-Type": "application/json; charset=utf-8", "Retry-After": limite.tentarEm });
+      res.end(JSON.stringify({ ok: false }));
+      return;
+    }
+    let corpo = {};
+    try { corpo = await lerCorpoJSON(req); } catch { corpo = {}; }
+    const conferido = await SsoSupabase.verificarSessaoSupabase(corpo && corpo.token, SPI_SUPABASE);
+    if (!conferido.ok) {
+      // O motivo fica no log; pra quem está do outro lado, toda recusa é igual.
+      console.warn(`[SSO SPI] Recusado (${conferido.motivo}) de ${cliente}`);
+      res.writeHead(401, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: false }));
+      return;
+    }
+    limiteLogin.limpar(cliente);
+    const sessao = sessoes.abrir();
+    const destino = Sso.caminhoInternoSeguro(corpo && corpo.dest);
+    console.log(`[SSO SPI] Entrada de ${conferido.email} -> ${destino}`);
+    res.setHeader("Set-Cookie", Seguranca.cookieSeguro(NOME_COOKIE, sessao.token, SESSAO_SEGUNDOS));
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true, destino }));
+    return;
+  }
+
   if (caminhoPedido === "/sso" && req.method === "GET") {
     if (!SSO_SEGREDO) {
       res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
