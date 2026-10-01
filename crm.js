@@ -73,7 +73,28 @@ const SITUACOES = [
   { chave: "lead", rotulo: "Lead", tom: "neutro" },
   { chave: "paciente", rotulo: "Paciente", tom: "bom" },
   { chave: "silenciado", rotulo: "Silenciado", tom: "neutro" },
+  { chave: "perdido", rotulo: "Perdido", tom: "perda" },
 ];
+
+// De onde a família chegou. Lista inicial; o Dr. Bruno acrescenta e tira as que quiser
+// (campo listaOrigens do crm.json). Contato antigo não tem origem: aparece como "sem origem".
+const ORIGENS_PADRAO = ["Instagram", "Google", "Indicação de paciente", "Indicação médica", "Já era paciente", "Outros"];
+const LIMITE_ORIGENS = 20;
+const LIMITE_ORIGEM = 40;
+
+// Por que uma família não fechou. Lista fixa, de propósito: motivo digitado à mão vira dez
+// grafias da mesma coisa e a conta por motivo deixa de somar.
+const MOTIVOS_PERDA = [
+  { chave: "preco", rotulo: "Achou caro" },
+  { chave: "convenio", rotulo: "Queria convênio" },
+  { chave: "horario", rotulo: "Horário não serviu" },
+  { chave: "outro_medico", rotulo: "Foi com outro médico" },
+  { chave: "sem_retorno", rotulo: "Parou de responder" },
+  { chave: "outro", rotulo: "Outro motivo" },
+];
+
+// Os prazos de follow-up, em dias parados sem resposta do consultório.
+const FOLLOWUP_PRAZOS = [7, 30];
 
 // Modelos de mensagem pós-consulta. O botão preenche a caixa de mensagem; o Dr. Bruno
 // ainda lê, ajusta se quiser, e manda. Nada sai sem o dedo dele.
@@ -361,12 +382,16 @@ function recortarCrmDoTelefone(dadosCrm, telefone) {
     etiquetas: so(d.etiquetas, {}),
     consultasRealizadas: so(d.consultasRealizadas, {}),
     retornos: so(d.retornos, {}),
+    origens: so(d.origens, {}),
+    perdas: so(d.perdas, {}),
+    followups: so(d.followups, {}),
+    listaOrigens: d.listaOrigens || null,
   };
 }
 
 function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dadosCrm = null, agora = new Date() } = {}) {
   const flagsPorTelefone = new Map((funilContatos || []).map((f) => [f.telefone, f]));
-  const crm = dadosCrm || { notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {} };
+  const crm = { ...crmVazio(), ...(dadosCrm || {}) };
   const hoje = dataLocal(agora);
 
   // Quem marcou consulta mas nunca apareceu na lista de contatos (reserva antiga, número
@@ -392,6 +417,14 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
     const s = situacoesDe({ contato, consultas, flags, agora, retornosAvisados: (crm.retornos && crm.retornos[contato.telefone]) || {} });
     const notas = (crm.notas && crm.notas[contato.telefone]) || [];
     const etiquetas = (crm.etiquetas && crm.etiquetas[contato.telefone]) || [];
+    // Perdido vale até alguém reabrir, ou até a família marcar consulta: quem voltou e
+    // reservou não está mais perdido, e o motivo antigo não pode continuar à frente dela.
+    const perdaBruta = (crm.perdas && crm.perdas[contato.telefone]) || null;
+    const perda = perdaBruta && !s.futuras.length && MOTIVOS_PERDA.find((m) => m.chave === perdaBruta.motivo)
+      ? { motivo: perdaBruta.motivo, rotulo: MOTIVOS_PERDA.find((m) => m.chave === perdaBruta.motivo).rotulo, em: perdaBruta.em || null }
+      : null;
+    const situacoes = perda ? [...s.situacoes, "perdido"] : s.situacoes;
+    const followups = (crm.followups && crm.followups[contato.telefone]) || [];
     const criancas = [...new Set(consultas.map((c) => c.crianca).filter(Boolean))];
     const responsavel = consultas.map((c) => c.responsavel).find(Boolean) || null;
     return {
@@ -402,7 +435,10 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
       estagio: estagioDe(flags),
       primeiraPergunta: (flags && flags.primeiraPergunta) || null,
       primeiroContatoEm: (flags && flags.primeiroContatoEm) || null,
-      situacoes: s.situacoes,
+      situacoes,
+      origem: (crm.origens && crm.origens[contato.telefone]) || null,
+      perda,
+      followups,
       posConsulta: s.detalhes.posConsulta || null,
       retornos: s.retornos,
       retornoPendente: s.detalhes.retornoPendente || null,
@@ -563,10 +599,92 @@ function pacientesSemConversao({ pacientes = null, pacientesManuais = [], sessoe
 
 // ---------------------------------------------------------------- notas e etiquetas
 
+function crmVazio() {
+  return { notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {}, origens: {}, perdas: {}, followups: {}, listaOrigens: null };
+}
+
+// Lê o crm.json. Os campos novos (origens, perdas, followups, listaOrigens) podem não existir
+// num arquivo gravado antes da repaginada: voltam vazios, e quem grava devolve tudo junto,
+// então nenhuma escrita antiga apaga o que a nova guardou.
 function lerCrm(arquivo) {
   const dados = Atomico.lerJSONSeguro(arquivo, null);
-  if (!dados || typeof dados !== "object") return { notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {} };
-  return { notas: dados.notas || {}, etiquetas: dados.etiquetas || {}, consultasRealizadas: dados.consultasRealizadas || {}, retornos: dados.retornos || {} };
+  if (!dados || typeof dados !== "object") return crmVazio();
+  const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
+  return {
+    notas: dados.notas || {}, etiquetas: dados.etiquetas || {}, consultasRealizadas: dados.consultasRealizadas || {}, retornos: dados.retornos || {},
+    origens: obj(dados.origens), perdas: obj(dados.perdas), followups: obj(dados.followups),
+    listaOrigens: Array.isArray(dados.listaOrigens) ? dados.listaOrigens : null,
+  };
+}
+
+function listaDeOrigens(dadosCrm) {
+  const l = dadosCrm && Array.isArray(dadosCrm.listaOrigens) ? dadosCrm.listaOrigens : null;
+  return l && l.length ? l : ORIGENS_PADRAO.slice();
+}
+
+// Acrescenta uma origem à lista editável (ou tira). Tirar da lista não apaga a origem das
+// famílias que já a têm: o dado delas continua, só deixa de ser opção nova.
+function acrescentarOrigem(arquivo, nome) {
+  const limpo = limparTexto(nome, LIMITE_ORIGEM);
+  if (!limpo) return { ok: false, motivo: "Nome vazio." };
+  const dados = lerCrm(arquivo);
+  const lista = listaDeOrigens(dados);
+  if (lista.some((o) => o.toLocaleLowerCase("pt-BR") === limpo.toLocaleLowerCase("pt-BR"))) return { ok: false, motivo: "Essa origem já está na lista.", lista };
+  if (lista.length >= LIMITE_ORIGENS) return { ok: false, motivo: "A lista chegou ao limite.", lista };
+  dados.listaOrigens = [...lista, limpo];
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true, lista: dados.listaOrigens };
+}
+
+function retirarOrigem(arquivo, nome) {
+  const dados = lerCrm(arquivo);
+  const lista = listaDeOrigens(dados);
+  const restante = lista.filter((o) => o !== nome);
+  if (restante.length === lista.length) return { ok: false, motivo: "Origem não encontrada.", lista };
+  if (!restante.length) return { ok: false, motivo: "A lista precisa de pelo menos uma origem.", lista };
+  dados.listaOrigens = restante;
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true, lista: restante };
+}
+
+// Origem de uma família. Texto vazio tira a origem. Aceita uma origem que não está na lista
+// (veio de uma versão antiga da lista): o que já foi dito não pode ser recusado.
+function definirOrigem(arquivo, telefone, origem) {
+  if (!telefone) return { ok: false, motivo: "Sem telefone." };
+  const limpa = limparTexto(origem, LIMITE_ORIGEM);
+  const dados = lerCrm(arquivo);
+  if (limpa) dados.origens[telefone] = limpa;
+  else delete dados.origens[telefone];
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true, origem: limpa || null };
+}
+
+// Marca a família como perdida, com o motivo da lista. motivo vazio reabre.
+function definirPerda(arquivo, telefone, motivo, agora = new Date()) {
+  if (!telefone) return { ok: false, motivo: "Sem telefone." };
+  const dados = lerCrm(arquivo);
+  if (!motivo) {
+    delete dados.perdas[telefone];
+    Atomico.escreverJSONAtomico(arquivo, dados);
+    return { ok: true, perda: null };
+  }
+  const def = MOTIVOS_PERDA.find((m) => m.chave === motivo);
+  if (!def) return { ok: false, motivo: "Motivo desconhecido." };
+  dados.perdas[telefone] = { motivo: def.chave, em: agora.toISOString() };
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true, perda: { ...dados.perdas[telefone], rotulo: def.rotulo } };
+}
+
+// O Dr. Bruno fez o follow-up de 7 ou de 30 dias (por fora, ou pelo botão de mensagem).
+function registrarFollowup(arquivo, telefone, prazo, agora = new Date()) {
+  if (!telefone) return { ok: false, motivo: "Sem telefone." };
+  const dias = Number(prazo);
+  if (!FOLLOWUP_PRAZOS.includes(dias)) return { ok: false, motivo: "Prazo inválido." };
+  const dados = lerCrm(arquivo);
+  const lista = dados.followups[telefone] || [];
+  dados.followups[telefone] = [...lista, { prazo: dias, em: agora.toISOString() }].slice(-20);
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true, followups: dados.followups[telefone] };
 }
 
 // Consulta feita fora da Carla (o Dr. Bruno assumiu a conversa e marcou por fora, ou é
@@ -659,6 +777,8 @@ module.exports = {
   JANELA_POS_CONSULTA_DIAS, SEM_RESPOSTA_DIAS, PAROU_NO_PRECO_HORAS, LEAD_QUENTE_HORAS,
   MESES_RETORNO, AVISO_ANTES_DIAS, AVISO_DEPOIS_DIAS,
   SITUACOES, ESTAGIOS, MODELOS_POS_CONSULTA, TIPO_NOME,
+  ORIGENS_PADRAO, MOTIVOS_PERDA, FOLLOWUP_PRAZOS,
+  listaDeOrigens, acrescentarOrigem, retirarOrigem, definirOrigem, definirPerda, registrarFollowup,
   consultasDoTelefone, consultasManuaisDoTelefone, todasAsConsultas, estagioDe, situacoesDe, montarCrm, linhaDoTempo,
   somarMeses, marcosDeRetorno, ultimaPorCrianca,
   preencherModelo, modelosPara,

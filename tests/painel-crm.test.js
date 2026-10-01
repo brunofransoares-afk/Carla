@@ -226,7 +226,7 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(/caminhoPedido === "\/fontes\/montserrat\.woff2" && req\.method === "GET"/.test(PAINEL) && /"Content-Type": "font\/woff2"/.test(PAINEL) && PAINEL.indexOf('caminhoPedido === "/fontes/montserrat.woff2"') < PAINEL.indexOf('caminhoPedido.startsWith("/webhook/")'), "10e7. o painel serve a fonte antes da senha, pra tela de entrar tambem");
   ok(/src: url\(\/fontes\/montserrat\.woff2\)/.test(PAINEL) && /#0a2129 0%, #071921 45%, #020a0e 100%/.test(PAINEL) && /h1 \{[^}]*color: #fcf4e8/.test(PAINEL) && /label \{[^}]*color: #8fbacb/.test(PAINEL) && /content="#0a2129"/.test(PAINEL) && !/#102a5c|#d4b060|#efe3c2|#0b1a3f/.test(PAINEL), "10e8. a tela de entrar usa a mesma paleta e a mesma fonte");
   ok(/"theme_color": "#0a2129"/.test(fs.readFileSync(path.join(__dirname, "..", "manifest.json"), "utf8")) && /content="#0a2129"/.test(TELA), "10e9. a cor do app instalado acompanha");
-  for (const aba of ["visao", "familias", "agenda", "funil"]) ok(new RegExp(`data-aba="${aba}"`).test(TELA), `10f. aba ${aba}`);
+  for (const aba of ["hoje", "familias", "agenda", "numeros", "mais"]) ok(new RegExp(`data-aba="${aba}"`).test(TELA), `10f. aba ${aba}`);
   ok(/id="kpi-hoje"/.test(TELA) && /id="kpi-pagamento"/.test(TELA) && /id="kpi-pos"/.test(TELA) && /id="kpi-conversao"/.test(TELA), "10g. os números do topo");
   ok(/id="filtros"/.test(TELA) && /data-filtro="todos"/.test(JS), "10h. filtros por situação");
   ok(/id="ficha-contato"/.test(TELA) && /function renderizarFicha\(f\)/.test(JS), "10i. a ficha");
@@ -240,7 +240,7 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(/class="balao \$\{m\.role === "user" \? "user" : "assistant"\}"/.test(JS), "10q. últimas mensagens como balões, família de um lado e consultório do outro");
   ok(/https:\/\/wa\.me\/\$\{escapeHtml\(numeroLimpo\)\}/.test(JS), "10r. atalho pra abrir no WhatsApp");
   ok(/<th>Tipo<\/th><th>Modalidade<\/th>/.test(JS), "10s. a agenda mostra tipo e modalidade");
-  ok(/body\.ficha-aberta \.ficha \{ position: fixed; inset: 0;/.test(CSS), "10t. no celular a ficha vira folha por cima da lista");
+  ok(/body\.ficha-aberta \.ficha \{ position: fixed;[^}]*top: var\(--topo-h[^}]*bottom: calc\(var\(--altura-nav\)/.test(CSS), "10t. no celular a ficha vira folha por cima da lista, entre o topo (com a busca) e a barra de navegação");
   ok(/setInterval\(atualizarCrm, 12000\)/.test(JS), "10u. o CRM se atualiza sozinho");
 }
 
@@ -376,7 +376,9 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(/meses: contato\.retornoPendente \? contato\.retornoPendente\.meses : null/.test(PAINEL), "12ak. o recado já vem com o marco pendente");
   ok(/id="kpi-retornos"/.test(TELA) && /data-filtro="retorno_proximo"/.test(TELA), "12al. número no topo, que abre o filtro");
   ok(/data-retorno-recado=/.test(JS) && /data-retorno-avisado=/.test(JS) && /id="btn-registrar-realizada"/.test(JS), "12am. na ficha: preencher recado, marcar avisado, registrar consulta");
-  ok(/"aguardando_humano", "aguardando_pagamento", "retorno_proximo", "parou_no_preco"/.test(JS), "12an. e entra no 'Precisa de ação' da visão geral");
+  // A lista "Precisa de ação" virou as Pendências da tela Hoje (painel-hoje.js): as mesmas quatro situações continuam entrando.
+  const HOJE_JS = LER("painel-hoje.js");
+  ok(/"aguardando_humano"/.test(HOJE_JS) && /"aguardando_pagamento"/.test(HOJE_JS) && /"retorno_proximo"/.test(HOJE_JS) && /"parou_no_preco"/.test(HOJE_JS) && /function renderizarPendencias\(crm\)/.test(JS), "12an. e entra nas Pendências da tela Hoje");
 }
 
 // ------------------------------------------------- 13. quem já era paciente antes do registro
