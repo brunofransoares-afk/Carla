@@ -83,7 +83,7 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
     "4e. a primeira mensagem com pergunta de preço termina no menu, sem valor: a família escolhe antes (10/09)");
   ok(/[Qq]uem perguntou "quanto custa" não veio fazer tour do consultório/.test(SEM_COMENTARIO),
     "4c. com o motivo escrito");
-  ok(/seguido de "O atendimento é particular\. A consulta de puericultura é R\$ 450, em Pix ou cartão via link de pagamento\."/.test(SEM_COMENTARIO),
+  ok(/feche com "O atendimento é particular\. A consulta de puericultura é R\$ 450, em Pix ou cartão via link de pagamento\."/.test(SEM_COMENTARIO),
     "4d. e um exemplo do tamanho certo, senão 'curta' cada dia quer dizer uma coisa");
 }
 

@@ -41,8 +41,10 @@ function menuTexto() {
 {
   ok(/O Dr\. Bruno trabalha com 3 tipos de consulta 😊/.test(ESTAVEL), "1. o menu abre dizendo que são três tipos");
   ok(/1\. Consulta de urgência\nA queixa de agora: febre, tosse, dor, vômito, machucado\./.test(ESTAVEL), "1b. opção 1, numa linha");
-  ok(/2\. Consulta de puericultura\nA consulta de rotina, com avaliação completa da criança\./.test(ESTAVEL), "1d. opção 2, numa linha");
-  ok(/3\. Consulta de neurodesenvolvimento e saúde mental\nAutismo, TDAH, atraso de fala, comportamento e ansiedade\./.test(ESTAVEL), "1e. opção 3, numa linha");
+  ok(/2\. Consulta de puericultura\nA consulta de rotina da criança: queixas crônicas, crescimento, alimentação, sono, vacinas e o desenvolvimento esperado pra idade\./.test(ESTAVEL),
+    "1d. opção 2, com o que ela cobre de verdade");
+  ok(/3\. Consulta de neurodesenvolvimento e saúde mental\nQuando alguma coisa parece fora do esperado: atraso de fala, comportamento, atenção, sono, dificuldade na escola, investigação e acompanhamento de autismo, TDAH\./.test(ESTAVEL),
+    "1e. opção 3, que começa pela suspeita e não pelo diagnóstico");
 
   /*
    * O MENU CABE NA TELA. Ele tinha 230 palavras e descrevia os três tipos inteiros, com
@@ -53,8 +55,11 @@ function menuTexto() {
    * O teto é de palavras e não de caracteres porque é o que corresponde ao esforço de
    * leitura. Se alguém precisar mesmo passar dele, que passe de propósito, mexendo aqui.
    */
+  // O teto subiu de 70 pra 100 em 01/10/2026, quando o dono reescreveu as descrições: "Não
+   // deixa uma mensagem muito longa, mas explica um pouco melhor." O número nunca foi sagrado;
+   // o que ele existe pra impedir é o menu voltar às 230 palavras em que ninguém lia nada.
   const palavrasDoMenu = menuTexto().split(/\s+/).filter(Boolean).length;
-  ok(palavrasDoMenu <= 70, "1b2. o menu inteiro cabe em 70 palavras (tem " + palavrasDoMenu + ")");
+  ok(palavrasDoMenu <= 100, "1b2. o menu inteiro cabe em 100 palavras (tem " + palavrasDoMenu + ")");
 
   // E o que saiu do menu não sumiu do atendimento: continua na mensagem do valor, sobre o
   // tipo que a família escolheu. Cortar informação e cortar repetição são coisas diferentes.
