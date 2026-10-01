@@ -128,7 +128,8 @@ const lerPreco = extrairLeitorDePreco();
     "5h2. e a 3 tem a dela, diferente: é no que elas diferem que a família se perde");
   ok(!/Puericultura ou neurodesenvolvimento: "/.test(SEM_COMENTARIO),
     "5h3. e o texto compartilhado que apagava a diferença saiu");
-  ok(/O formato, igual nas duas: "Tem duração média de 1 hora/.test(SEM_COMENTARIO),
+  // A duração passou a ser a única diferença no formato (01/10/2026: neuro 1 hora e meia).
+  ok(/O formato, igual nas duas a não ser pela DURAÇÃO \(puericultura "1 hora", neurodesenvolvimento "1 hora e meia"\): "Tem duração média de 1 hora/.test(SEM_COMENTARIO),
     "5h4. o que é igual nas duas continua dito uma vez só, senão a mensagem dobra de tamanho");
   ok(/direcionada à queixa do momento: não vira consulta de puericultura nem investigação/.test(SEM_COMENTARIO), "5e. urgência não vira outra coisa");
   ok(/No fim de semana é a ÚNICA que existe, e custa R\$ 600/.test(SEM_COMENTARIO), "5f. fim de semana: só urgência, R$ 600");

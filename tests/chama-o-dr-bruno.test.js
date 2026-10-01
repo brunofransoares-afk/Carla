@@ -44,8 +44,9 @@ const TRIAGEM = fs.readFileSync(path.join(__dirname, "..", "triagem-emergencia.j
   ok(/\? "⏱️ Encaixe pra HOJE"/.test(SERVER), "1c2. e o encaixe diz, no cabeçalho, que é pra hoje");
   // "tipo:" com dois-pontos só aparece nas CHAMADAS; a definição da função usa "{ tipo," sem
   // valor. Contar sem isso pegava a própria definição e dava 3.
-  eq((SERVER.match(/notificarAtencao\(sock, \{\s*\n?\s*tipo:/g) || []).length, 2,
-    "1d. dois pontos de chamada: emergência e escalonamento");
+  // Três desde 01/10/2026: emergência, escalonamento da IA e o "digite 9" da abertura.
+  eq((SERVER.match(/notificarAtencao\(sock, \{\s*\n?\s*tipo:/g) || []).length, 3,
+    "1d. três pontos de chamada: emergência, escalonamento e o 9");
 }
 
 // ------------------------------------------------- 2. a emergência avisa ANTES de responder
