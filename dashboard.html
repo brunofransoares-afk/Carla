@@ -40,6 +40,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
 
   :root {
     --fundo-topo: #0a2129;
@@ -119,6 +120,7 @@
     min-height: var(--alvo); padding: 10px 16px; font-size: 15px; font-weight: 600;
     background: var(--ouro); color: var(--fundo-base); border-radius: 10px; border: 0;
   }
+  .portal-manual label:has(input[type="checkbox"]) { min-height: var(--alvo); align-items: center !important; }
   .portal-manual input:focus, .portal-manual textarea:focus { outline: 2px solid var(--ouro); outline-offset: 2px; }
 
   /* ---- a moldura: topo fixo, conteudo, barra de navegacao ------------------------ */
@@ -129,18 +131,19 @@
 
   .barra-topo {
     position: sticky; top: 0; z-index: 30;
-    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+    display: grid; grid-template-columns: 1fr auto; grid-template-areas: "marca pilula" "busca busca"; align-items: center; gap: 10px 12px;
     padding: calc(10px + var(--seguro-topo)) calc(16px + var(--seguro-dir)) 10px calc(16px + var(--seguro-esq));
     background: rgba(6, 22, 28, 0.94); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--ouro-linha);
   }
-  .marca { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .marca { grid-area: marca; display: flex; align-items: center; gap: 10px; min-width: 0; }
   .avatar { width: 44px; height: 44px; border-radius: 13px; flex-shrink: 0; object-fit: cover; display: block; border: 1px solid var(--vidro-borda-forte); box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
   h1 { font-size: 20px; font-weight: 500; letter-spacing: 0.06em; line-height: 1.1; }
   .subtitulo { color: var(--texto-fraco); font-size: 14px; display: flex; align-items: center; line-height: 1.2; }
   .marca .subtitulo { display: none; }
 
-  .busca-global { position: relative; min-width: 0; }
+  .busca-global { grid-area: busca; position: relative; min-width: 0; }
+  .pilula-carla { grid-area: pilula; }
   .busca-global input {
     width: 100%; padding: 0 14px 0 44px; border-radius: 14px; border: 1px solid var(--vidro-borda);
     background: var(--vidro-forte) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fadd7d' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 13px center / 20px 20px;
@@ -467,7 +470,7 @@
   .ficha-secao { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--vidro-borda); }
   .ficha-secao h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: var(--rotulo); font-weight: 600; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
   .ficha-secao h3 span { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--texto-apagado); font-size: 14px; }
-  .ficha-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .ficha-grade { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
   .dado { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 10px 12px; }
   .dado-rotulo { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--rotulo); }
   .dado-valor { font-size: 16px; color: var(--texto); margin-top: 2px; font-weight: 600; }
@@ -637,6 +640,7 @@
   /* ---- computador: barra de navegacao na lateral, duas colunas ------------------- */
   @media (min-width: 720px) {
     .resumo { grid-template-columns: repeat(4, 1fr); }
+    .resumo.duas { grid-template-columns: repeat(2, 1fr); }
     .metricas { grid-template-columns: repeat(4, 1fr); }
     .marca .subtitulo { display: flex; }
     .acompanhamento { grid-template-columns: 1fr 1fr; }
@@ -663,7 +667,7 @@
     #lista-contatos { max-height: 62vh; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
     .filtros { flex-wrap: wrap; overflow-x: visible; }
     .pendencias-filtros { flex-wrap: wrap; overflow-x: visible; }
-    .barra-topo { grid-template-columns: auto minmax(260px, 560px) auto; justify-content: space-between; }
+    .barra-topo { grid-template-columns: auto minmax(260px, 560px) auto; grid-template-areas: "marca busca pilula"; justify-content: space-between; }
     .resumo.grande .kpi-valor { font-size: 48px; }
   }
   @media (min-width: 1000px) and (max-width: 1100px) {
@@ -746,7 +750,7 @@
 
         <div class="cartao">
           <h2><span class="titulo-icone"><span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span>Resumo</span></h2>
-          <div class="resumo" style="margin-bottom:0">
+          <div class="resumo duas" style="margin-bottom:0">
             <button class="kpi" data-ir="agenda"><div class="kpi-rotulo">Próximos 7 dias</div><div class="kpi-valor" id="kpi-semana">0</div><div class="kpi-detalhe">consultas marcadas</div></button>
             <button class="kpi" data-ir="familias" data-filtro="lead"><div class="kpi-rotulo">Leads quentes</div><div class="kpi-valor" id="kpi-leads">0</div><div class="kpi-detalhe">falaram nas últimas 48 h</div></button>
             <button class="kpi" data-ir="familias" data-filtro="pos_consulta"><div class="kpi-rotulo">Pós-consulta</div><div class="kpi-valor" id="kpi-pos">0</div><div class="kpi-detalhe">dentro dos 30 dias</div></button>
