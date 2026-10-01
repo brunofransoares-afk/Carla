@@ -30,7 +30,9 @@ ok(/async function reconciliarReservasAtivasSemEfeito/.test(fonte)
 
 const chamadasEstado = fonte.match(/estadoAtendimento: sessao\.estadoAtendimento/g) || [];
 const chamadasTriagem = fonte.match(/triagemPendente: sessao\.triagemPendente/g) || [];
-ok(chamadasEstado.length >= 3 && chamadasTriagem.length >= 3,
+// Desde 01/10/2026 o reaquecimento só SUGERE texto, sem passar pela conversa da Carla: os
+// caminhos de IA que levam estado são a conversa e o recado do Dr. Bruno.
+ok(chamadasEstado.length >= 2 && chamadasTriagem.length >= 2,
   "estado explícito não acompanha todos os caminhos de IA");
 ok(/TriagemEmergencia\.respostaConfirmaPerigo\(texto\)/.test(fonte)
   && /sessao\.triagemPendente = \{[\s\S]*termo: avaliacaoEmergencia\.termo/.test(fonte),
@@ -45,8 +47,13 @@ const posSemSocket = fonte.indexOf("if (!sock) return", posPendente);
 ok(posPendente >= 0 && posSemSocket > posPendente,
   "queda do socket ainda acontece antes de persistir a resposta");
 ok(/registrarNoHistorico: true/.test(fonte), "mensagens fixas não entram no histórico");
-ok(/return filaMensagens\.enfileirar\(telefone, \(\) => reaquecerLeadNaFila/.test(fonte),
-  "reaquecimento não passa pela fila do telefone");
+{
+  // A sugestão de reaquecimento não toca em sessão nem manda nada; o envio é a mensagem
+  // manual, que passa pela fila do telefone.
+  const sugestao = fonte.slice(fonte.indexOf("async function sugerirReaquecimento("), fonte.indexOf("// MENSAGEM DO DR. BRUNO PRA FAMÍLIA"));
+  ok(sugestao.length > 0 && !/enviarResposta\(|salvarSessao\(|enfileirar/.test(sugestao),
+    "sugestão de reaquecimento não pode enviar nem gravar sessão");
+}
 
 const blocoAlerta = fonte.slice(
   fonte.indexOf("async function responderEscaladaNaFila"),

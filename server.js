@@ -165,6 +165,7 @@ async function avisarPagamentoConfirmadoNaFila(slotId) {
   if (a.pagamentoAvisadoEm) return { ok: true, jaAvisado: true };
 
   registrarPagamentoNaSessao(a.telefone, a);
+  descartarConfirmacoesDePagamentoPendentes(a.telefone);
   // Marcado aqui mesmo, e não como efeito de um envio que não existe mais: é o que impede a
   // reconciliação de ficar reprocessando a mesma consulta a cada reinício do processo.
   Storage.marcarPagamentoAvisado(slotId);
@@ -323,7 +324,7 @@ function iniciarTravaInstancia() {
     if (req.method === "POST" && req.url === "/interno/mensagem-manual") {
       lerCorpoJsonInterno(req, res, async (dados) => {
         try {
-          const r = await mensagemManual(dados.telefone, dados.texto, { carlaContinua: dados.carlaContinua === true });
+          const r = await mensagemManual(dados.telefone, dados.texto, { carlaContinua: dados.carlaContinua === true, reaquecimento: dados.reaquecimento === true });
           res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
           res.end(JSON.stringify(r));
         } catch (erro) {
@@ -361,7 +362,7 @@ function iniciarTravaInstancia() {
     if (req.method === "POST" && req.url === "/interno/reaquecer") {
       lerCorpoJsonInterno(req, res, async (dados) => {
         try {
-          const r = await reaquecerLead(dados.telefone);
+          const r = await sugerirReaquecimento(dados.telefone);
           res.writeHead(r.ok ? 200 : 422, { "Content-Type": "application/json" });
           res.end(JSON.stringify(r));
         } catch (erro) {
@@ -656,11 +657,29 @@ const caixaDeSaida = criarCaixaDeSaida({
   aplicarEfeito: aplicarEfeitoAposEnvio,
 });
 
+// CONFIRMAÇÃO DE PAGAMENTO VELHA NÃO SAI MAIS (2026-10-01). O dono marcou Pago depois da
+// mudança que tirou a mensagem e a família recebeu a confirmação mesmo assim. O botão já não
+// gera mensagem nenhuma, mas uma confirmação gerada ANTES, que ficou na caixa de saída (o
+// WhatsApp estava reconectando, por exemplo), continuava lá, e a caixa reenvia tudo que está
+// pendente a cada reconexão e a cada mensagem nova da família. Isto joga fora qualquer
+// "pagamento:" pendente antes de qualquer reenvio.
+function descartarConfirmacoesDePagamentoPendentes(telefone = null) {
+  let descartadas = 0;
+  for (const m of Storage.listarMensagensPendentes(telefone)) {
+    if (!String(m.chaveIdempotencia || "").startsWith("pagamento:")) continue;
+    if (Storage.removerMensagemPendentePorChave(m.chaveIdempotencia)) descartadas++;
+  }
+  if (descartadas) console.log(`[PAGAMENTO] Descartei ${descartadas} confirmação(ões) antiga(s) da caixa de saída`);
+  return descartadas;
+}
+
 async function reenviarPendentesDoTelefone(sock, telefone) {
+  descartarConfirmacoesDePagamentoPendentes(telefone);
   return caixaDeSaida.reenviarDoTelefone(sock, telefone);
 }
 
 async function reenviarMensagensPendentes(sock) {
+  descartarConfirmacoesDePagamentoPendentes();
   const telefones = [...new Set(Storage.listarMensagensPendentes().map((m) => m.telefone))];
   const resultados = await Promise.allSettled(telefones.map((telefone) =>
     filaMensagens.enfileirar(telefone, () => reenviarPendentesDoTelefone(sock, telefone))
@@ -1221,25 +1240,21 @@ async function responderEscaladaNaFila(alertaId, resposta) {
 // O contexto é convertido em FATOS antes de sair daqui. Os turnos antigos não vão junto de
 // propósito: a limpeza das 4h existe pra impedir a Carla de retomar assunto velho do meio,
 // e ressuscitar a conversa traria esse defeito de volta junto com a memória.
-async function reaquecerLead(telefone) {
+// REAQUECER = SUGERIR, NÃO ENVIAR (2026-10-01). O dono: "O botão de reaquecer tem que estar
+// disponível em todo o contato. Eu decido o tempo" e "na mensagem sugerida, o botão deve
+// levar a conversa em consideração ali e responder direito".
+//
+// O botão pede aqui uma SUGESTÃO, escrita pela Carla com a conversa à vista, e ela cai na
+// caixa de mensagem da ficha. Ele lê, ajusta e envia; o envio passa pela mensagem manual com
+// "a Carla continua" e a marca de reaquecimento (mensagemManualNaFila). Daqui não sai nada
+// pro WhatsApp, e a IA desta chamada não tem ferramenta: não marca nem cancela consulta.
+async function sugerirReaquecimento(telefone) {
   if (!telefone) return { ok: false, motivo: "Sem telefone." };
-  return filaMensagens.enfileirar(telefone, () => reaquecerLeadNaFila(telefone));
-}
-
-async function reaquecerLeadNaFila(telefone) {
-  if (!telefone) return { ok: false, motivo: "Sem telefone." };
-  const jid = telefone.replace("+", "") + "@s.whatsapp.net";
-  const sessaoExistente = Storage.obterSessao(telefone);
-  if (!sessaoExistente) return { ok: false, motivo: "Esse número nunca falou com a Carla." };
-  const sessao = normalizarSessao(telefone, sessaoExistente);
-  const ancoraReaquecimento = sessao.ultimaAtividade || "sem-atividade";
-
   const agora = new Date();
+  const sessaoExistente = Storage.obterSessao(telefone);
+  const sessao = sessaoExistente ? normalizarSessao(telefone, sessaoExistente) : { historico: [] };
   const doFunil = Eventos.funil().contatos.find((c) => c.telefone === telefone) || {};
-
-  // "Respondeu alguma vez" é o histórico ter turno da família. Quem só recebeu e nunca
-  // escreveu de volta não é lead esfriado, e é ali que mora o bloqueio de número.
-  const respondeuAlgumaVez = (sessao.historico || []).some((m) => m && m.role === "user");
+  const historico = sessao.historico || [];
 
   const veredito = Reaquecimento.podeReaquecer({
     silenciado: Storage.contatoSilenciado(telefone),
@@ -1247,77 +1262,27 @@ async function reaquecerLeadNaFila(telefone) {
     temConsultaFutura: !!Storage.proximaConsultaDoTelefone(telefone, agora),
     jaReaquecidoEm: sessao.reaquecidoEm || null,
     ultimaAtividade: sessao.ultimaAtividade || null,
-    respondeuAlgumaVez,
+    respondeuAlgumaVez: historico.some((m) => m && m.role === "user"),
   }, agora);
-  if (!veredito.pode) return { ok: false, motivo: veredito.motivo };
-  sincronizarUltimoAgendamento(sessao, telefone, agora);
 
-  const reaquecimento = {
-    fatos: Reaquecimento.montarContexto({
-      ultimaAtividade: sessao.ultimaAtividade,
-      primeiraPergunta: doFunil.primeiraPergunta || null,
-      recebeuPreco: !!doFunil.recebeuPreco,
-      recebeuHorario: !!doFunil.recebeuHorario,
-      crianca: (sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca) || null,
-    }, agora),
-    instrucao: Reaquecimento.montarInstrucao(),
-  };
+  const fatos = Reaquecimento.montarContexto({
+    ultimaAtividade: sessao.ultimaAtividade || null,
+    primeiraPergunta: doFunil.primeiraPergunta || null,
+    recebeuPreco: !!doFunil.recebeuPreco,
+    recebeuHorario: !!doFunil.recebeuHorario,
+    crianca: (sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca) || null,
+  }, agora);
 
-  // A conversa recomeça do zero de propósito: o que ela precisa saber está nos fatos.
-  const gatilho = "(o consultório está retomando o contato com esta família)";
   try {
-    const resultado = await CerebroIA.responder({
-      telefone, texto: gatilho, historico: [], now: agora,
-      idsOcupados: Storage.idsOcupados(),
-      agendamentoAtual: null,
-      pacienteConhecido: Storage.ehPacienteConhecido(telefone),
-      portalJaLiberado: false,
-      guiaJaLiberado: false,
-      horariosOferecidos: [],
-      consultaProxima: null,
-      recadoDoDoutor: null,
-      reaquecimento,
-      estadoAtendimento: sessao.estadoAtendimento,
-      triagemPendente: sessao.triagemPendente,
+    const bruto = await CerebroIA.sugerirReaquecimento({
+      system: Reaquecimento.montarInstrucaoDaSugestao(),
+      pedido: Reaquecimento.montarPedidoDaSugestao({ fatos, conversa: Reaquecimento.trechoDaConversa(historico) }),
     });
-    if (!resultado.resposta) return { ok: false, motivo: "A Carla não produziu mensagem." };
-
-    // A fila por telefone impede dois cliques simultâneos neste processo. A marca abaixo só
-    // é gravada depois que a mensagem já existe na caixa durável; assim uma queda nunca
-    // deixa "reaquecido" sem haver mensagem para entregar.
-    sessao.reaquecidoEm = agora.toISOString();
-    sessao.historico = resultado.historico;
-    sessao.horariosOferecidos = resultado.horariosOferecidos || [];
-    sessao.estadoAtendimento = EstadoAtendimento.normalizar(
-      resultado.estadoAtendimento || sessao.estadoAtendimento);
-    sessao.triagemPendente = resultado.triagemPendente ?? sessao.triagemPendente;
-    sessao.ultimaAtividade = agora.toISOString();
-
-    for (const acao of resultado.acoes || []) {
-      await enfileirarIntegracoesDaReserva(acao, telefone);
-      notificarNovoAgendamento(sockAtivo, acao, telefone);
-    }
-    for (const cancelado of resultado.cancelamentos || []) {
-      await enfileirarCancelamentoExterno(cancelado);
-    }
-    if (resultado.dadosDoPaciente) {
-      await enfileirarDadosDoPaciente(resultado.dadosDoPaciente, telefone);
-    }
-    sincronizarUltimoAgendamento(sessao, telefone, agora);
-
-    await enviarResposta(sockAtivo, jid, telefone, resultado.resposta, true, {
-      registrarPreco: true,
-      chaveIdempotencia: `reaquecimento:${telefone}:${ancoraReaquecimento}`,
-      efeitoAposEnvio: { tipo: "marcar_reaquecimento", telefone, em: agora.toISOString() },
-      aposPersistir: () => {
-        Storage.salvarSessao(telefone, sessao);
-        Eventos.registrar("reaquecido", telefone, {}, agora);
-      },
-    });
-    console.log(`[REAQUECIDO] ${telefone}: "${resultado.resposta.slice(0, 80)}"`);
-    return { ok: true, mensagem: resultado.resposta };
+    const texto = Reaquecimento.limparSugestao(bruto);
+    if (!texto) return { ok: false, motivo: "A Carla não produziu sugestão." };
+    return { ok: true, texto, avisos: veredito.avisos };
   } catch (erro) {
-    console.error("[REAQUECIDO] Erro:", erro.message);
+    console.error("[REAQUECER] Erro na sugestão:", erro.message);
     return { ok: false, motivo: erro.message };
   }
 }
@@ -1335,7 +1300,7 @@ const LIMITE_MENSAGEM_MANUAL = 1500;
 
 // carlaContinua: só os modelos do CRM que esperam uma resposta que a Carla sabe atender
 // (o convite pra rotina) deixam ela ligada. O padrão continua sendo calar.
-async function mensagemManual(telefone, texto, { carlaContinua = false } = {}) {
+async function mensagemManual(telefone, texto, { carlaContinua = false, reaquecimento = false } = {}) {
   const limpo = String(texto || "").trim();
   if (!telefone) return { ok: false, motivo: "Sem telefone." };
   if (!limpo) return { ok: false, motivo: "Mensagem vazia." };
@@ -1344,10 +1309,10 @@ async function mensagemManual(telefone, texto, { carlaContinua = false } = {}) {
   // NA FILA DESTE TELEFONE. Fora dela, a Carla podia estar montando uma resposta com a
   // sessão lida antes: ela terminava depois, gravava o estado velho por cima e a mensagem
   // do Dr. Bruno sumia do histórico, junto com a pausa que ela devia ter criado.
-  return filaMensagens.enfileirar(telefone, () => mensagemManualNaFila(telefone, limpo, carlaContinua));
+  return filaMensagens.enfileirar(telefone, () => mensagemManualNaFila(telefone, limpo, carlaContinua, reaquecimento));
 }
 
-async function mensagemManualNaFila(telefone, limpo, carlaContinua) {
+async function mensagemManualNaFila(telefone, limpo, carlaContinua, reaquecimento = false) {
   if (!sockAtivo) return { ok: false, motivo: "WhatsApp desconectado." };
   const jid = telefone.replace("+", "") + "@s.whatsapp.net";
   const agora = new Date();
@@ -1368,6 +1333,9 @@ async function mensagemManualNaFila(telefone, limpo, carlaContinua) {
   }
   sessao.historico = [...sessao.historico, { role: "assistant", content: limpo }].slice(-24);
   sessao.ultimaAtividade = agora.toISOString();
+  // Mensagem de reaquecimento que ele revisou e mandou: fica registrada como tal, pro funil
+  // e pro aviso de "já foi reaquecido" da próxima sugestão.
+  if (reaquecimento) sessao.reaquecidoEm = agora.toISOString();
   Storage.salvarSessao(telefone, sessao);
 
   // Contato silenciado no painel nunca recebe resposta da Carla, nem com a caixa marcada:
@@ -1378,7 +1346,7 @@ async function mensagemManualNaFila(telefone, limpo, carlaContinua) {
   try {
     await enviarResposta(sockAtivo, jid, telefone, limpo, true, {
       chaveIdempotencia: `manual:${telefone}:${agora.getTime()}`,
-      aposPersistir: () => Eventos.registrar("mensagem_manual", telefone, { trecho: Eventos.trecho(limpo) }, agora),
+      aposPersistir: () => Eventos.registrar(reaquecimento ? "reaquecido" : "mensagem_manual", telefone, { trecho: Eventos.trecho(limpo) }, agora),
     });
     console.log(`[MENSAGEM MANUAL] ${telefone}: "${limpo.slice(0, 80)}"`);
     return { ok: true, carlaVaiResponder, silenciado: Storage.contatoSilenciado(telefone) };

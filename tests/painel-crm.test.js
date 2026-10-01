@@ -205,9 +205,9 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
 // ------------------------------------------------- 9. o bot: calar continua sendo o padrão
 {
   const bloco = SERVER.slice(SERVER.indexOf("async function mensagemManual("), SERVER.indexOf("async function processarMensagem("));
-  ok(/\{ carlaContinua = false \} = \{\}/.test(bloco), "9. carlaContinua nasce false: texto livre cala a Carla, como sempre");
+  ok(/\{ carlaContinua = false, reaquecimento = false \} = \{\}/.test(bloco), "9. carlaContinua nasce false: texto livre cala a Carla, como sempre");
   ok(/\} else \{\s*\n\s*sessao\.aguardandoHumano = true;\s*\n\s*sessao\.aguardandoHumanoDesde = agora\.toISOString\(\);\s*\n\s*sessao\.pausadaPeloDoutor = true;/.test(bloco), "9b. e só não cala quando o painel pediu; quando cala, a pausa é a do doutor (não expira)");
-  ok(/mensagemManual\(dados\.telefone, dados\.texto, \{ carlaContinua: dados\.carlaContinua === true \}\)/.test(SERVER), "9c. a rota interna lê a flag como booleano estrito");
+  ok(/mensagemManual\(dados\.telefone, dados\.texto, \{ carlaContinua: dados\.carlaContinua === true, reaquecimento: dados\.reaquecimento === true \}\)/.test(SERVER), "9c. a rota interna lê a flag como booleano estrito");
 }
 
 // ------------------------------------------------- 10. a tela
@@ -234,7 +234,7 @@ function situacoes({ c = contato(), consultas = [], flags = null } = {}) {
   ok(/\.modelos button\[data-modelo\]/.test(JS) && /function usarModelo\(id, meses = null\)/.test(JS), "10k. os botões de pós-consulta");
   ok(/campo\.value = m\.texto;/.test(JS) && !/usarModelo[\s\S]{0,600}fetch\(/.test(JS.slice(JS.indexOf("function usarModelo"))), "10l. o botão só PREENCHE a caixa: nada sai sem o Enviar");
   ok(/class="input-carla-continua"/.test(JS) && /checked = !!m\.carlaContinua/.test(JS), "10m. o modelo marca a caixinha 'a Carla continua' do jeito dele");
-  ok(/body: JSON\.stringify\(\{ telefone, texto, carlaContinua \}\)/.test(JS), "10n. e o envio manda a caixinha junto");
+  ok(/body: JSON\.stringify\(\{ telefone, texto, carlaContinua, reaquecimento: caixa\.dataset\.reaquecimento === "1" \}\)/.test(JS), "10n. e o envio manda a caixinha junto");
   ok(/if \(!forcar && alguemDigitandoEm\("#ficha-contato textarea, #ficha-contato input"\)\) return;/.test(JS), "10o. a ficha não redesenha enquanto se digita nela");
   ok(/id="input-nota"/.test(JS) && /id="input-etiqueta"/.test(JS), "10p. nota e etiqueta na ficha");
   ok(/class="balao \$\{m\.role === "user" \? "user" : "assistant"\}"/.test(JS), "10q. últimas mensagens como balões, família de um lado e consultório do outro");

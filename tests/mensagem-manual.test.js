@@ -61,7 +61,7 @@ const JS = TELA.match(/<script>([\s\S]*)<\/script>/)[1];
 
 // ------------------------------------------------- 3. o painel só encaminha
 {
-  ok(/encaminharAoBot\("\/interno\/mensagem-manual", JSON\.stringify\(\{ telefone: corpo\.telefone, texto: corpo\.texto, carlaContinua: corpo\.carlaContinua === true \}\)\)/.test(PAINEL),
+  ok(/encaminharAoBot\("\/interno\/mensagem-manual", JSON\.stringify\(\{ telefone: corpo\.telefone, texto: corpo\.texto, carlaContinua: corpo\.carlaContinua === true, reaquecimento: corpo\.reaquecimento === true \}\)\)/.test(PAINEL),
     "3. o painel encaminha pro bot, que é quem tem o WhatsApp");
   ok(/req\.url === "\/interno\/mensagem-manual"/.test(SERVER), "3b. e o bot atende nessa rota");
 }
@@ -90,7 +90,7 @@ const JS = TELA.match(/<script>([\s\S]*)<\/script>/)[1];
   ok(!/CerebroIA\./.test(bloco), "6. não passa pela IA");
   ok(/await enviarResposta\(sockAtivo, jid, telefone, limpo, true, \{/.test(bloco), "6b. manda o texto como veio, sem atraso de digitação");
   ok(/chaveIdempotencia: `manual:\$\{telefone\}:\$\{agora\.getTime\(\)\}`/.test(bloco), "6c. com chave própria: a caixa de saída não manda duas vezes");
-  ok(/Eventos\.registrar\("mensagem_manual", telefone/.test(bloco), "6d. e o funil sabe que o Dr. Bruno entrou na conversa");
+  ok(/Eventos\.registrar\(reaquecimento \? "reaquecido" : "mensagem_manual", telefone/.test(bloco), "6d. e o funil sabe que o Dr. Bruno entrou na conversa");
 }
 
 // ------------------------------------------------- 7. as travas

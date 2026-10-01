@@ -10,6 +10,7 @@ const http = require("http");
 const { exec } = require("child_process");
 const Seguranca = require(path.join(__dirname, "painel-seguranca.js"));
 const Sso = require(path.join(__dirname, "sso-do-spi.js"));
+const VersaoDoCodigo = require(path.join(__dirname, "versao-do-codigo.js"));
 const SsoSupabase = require(path.join(__dirname, "sso-supabase.js"));
 const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
 
@@ -886,8 +887,9 @@ async function atenderRequisicao(req, res) {
     return;
   }
 
-  // Botão "reaquecer" da lista de contatos. Quem manda a mensagem é o bot (a conexão do
-  // WhatsApp vive lá), então isto só encaminha, igual aos avisos do portal e do guia.
+  // Botão "reaquecer" da ficha. Desde 01/10/2026 ele NÃO envia: pede ao bot uma sugestão
+  // escrita com a conversa à vista, que cai na caixa de mensagem da ficha. O envio é a
+  // mensagem manual, com o dedo do Dr. Bruno no Enviar.
   //
   // NÃO existe versão em lote aqui, de propósito. A Carla roda num cliente NÃO OFICIAL do
   // WhatsApp, e disparo em massa pra quem parou de responder é o padrão clássico de
@@ -1001,7 +1003,7 @@ async function atenderRequisicao(req, res) {
     const corpo = await lerCorpoJSON(req);
     // carlaContinua só vem dos modelos do CRM que esperam uma resposta que a Carla atende
     // (o convite pra rotina). Texto livre continua calando ela, como antes.
-    const r = await encaminharAoBot("/interno/mensagem-manual", JSON.stringify({ telefone: corpo.telefone, texto: corpo.texto, carlaContinua: corpo.carlaContinua === true }));
+    const r = await encaminharAoBot("/interno/mensagem-manual", JSON.stringify({ telefone: corpo.telefone, texto: corpo.texto, carlaContinua: corpo.carlaContinua === true, reaquecimento: corpo.reaquecimento === true }));
     res.writeHead(r.status, { "Content-Type": "application/json; charset=utf-8" });
     res.end(r.texto);
     return;
@@ -1024,7 +1026,9 @@ async function atenderRequisicao(req, res) {
   }
 
   if (req.url === "/api/status") {
-    const status = await statusDoBot();
+    // versaoPainel: o commit que ESTE processo carregou. A do bot vem do arquivo que o bot
+    // grava (status-whatsapp.js). Diferentes = um dos dois não reiniciou depois do deploy.
+    const status = { ...(await statusDoBot()), versaoPainel: VersaoDoCodigo.COMMIT_CARREGADO };
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(status));
     return;

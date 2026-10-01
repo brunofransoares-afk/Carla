@@ -169,7 +169,10 @@ for (const pac of [false, true])
 {
   // Cache é por modelo. Trocar o modelo joga fora tudo que estava guardado, então ele
   // precisa continuar sendo uma constante só, decidida uma vez.
-  eq((ATUAL.match(/model:\s*MODELO/g) || []).length, 1, "8. só existe um lugar decidindo o modelo da chamada");
+  // Desde 01/10/2026 há duas chamadas (a conversa e a sugestão de reaquecimento), e as duas
+  // usam a MESMA constante. O que não pode existir é um modelo escrito à mão em algum lugar.
+  const modelos = ATUAL.match(/model:\s*[^,\n]+/g) || [];
+  ok(modelos.length >= 1 && modelos.every((m) => /model:\s*MODELO$/.test(m)), "8. toda chamada usa a constante MODELO, nenhuma decide o modelo sozinha");
   ok(/^const MODELO = "[^"]+";$/m.test(ATUAL), "8b. o modelo é constante, não é montado em tempo de execução");
 }
 
