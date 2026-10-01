@@ -145,7 +145,10 @@ const conferir = (t, opcoes = {}) => Sso.verificarTicket(t, SEGREDO, { agora: AG
 
 // ------------------------------------------------- 9. a rota do painel
 {
-  const rota = PAINEL.slice(PAINEL.indexOf('caminhoPedido === "/sso"'), PAINEL.indexOf('caminhoPedido.startsWith("/webhook/")'));
+  // Ancorado na rota do TICKET. Desde 01/10/2026 existe uma segunda entrada, pela sessão do
+  // SPI (sso-supabase.js), que vem antes no arquivo e também abre sessão; sem a âncora, o
+  // recorte começava nela e a conferência de ordem olhava a rota errada.
+  const rota = PAINEL.slice(PAINEL.indexOf('if (caminhoPedido === "/sso" && req.method === "GET") {\n    if (!SSO_SEGREDO)'), PAINEL.indexOf('caminhoPedido.startsWith("/webhook/")'));
   ok(rota.length > 200, "9. a rota /sso existe");
   ok(PAINEL.indexOf('caminhoPedido === "/sso"') < PAINEL.indexOf("if (!autenticacao.ok)"), "9b. e fica ANTES da checagem de senha: a prova vem no ticket");
   ok(/if \(!SSO_SEGREDO\) \{[\s\S]{0,200}res\.writeHead\(503/.test(rota), "9c. sem o segredo, responde 503 dizendo qual variável falta, não 401");
