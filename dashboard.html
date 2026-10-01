@@ -441,6 +441,8 @@
   .alerta-pergunta .btn-sim { background: rgba(143,186,203,0.22); color: var(--sucesso); }
   .alerta-pergunta .btn-nao { background: rgba(255,90,90,0.18); color: #ffb3b3; }
   /* Alternativas (ex: os três tipos de consulta): uma caixa por opção, em dourado. */
+  .alerta-pergunta .encaixe { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+  .alerta-pergunta .encaixe-hora { width: 110px; flex: 0 0 auto; }
   .alerta-pergunta .btn-opcao { background: rgba(250,221,124,0.18); color: var(--ouro-claro); border: 1px solid var(--vidro-borda); }
   .alerta-pergunta .btn-opcao:hover:not(:disabled) { background: rgba(250,221,124,0.32); }
   .alerta-pergunta button:disabled { opacity: 0.5; cursor: default; }
@@ -1745,11 +1747,11 @@
 
   // Responder uma escalada. Desabilita os botões na hora: a resposta dispara uma mensagem
   // real pra família, e clique repetido enquanto a rede não volta mandaria duas.
-  async function responderEscalada(alertaId, resposta, elemento) {
+  async function responderEscalada(alertaId, resposta, elemento, horaEncaixe) {
     const card = elemento.closest(".alerta-pergunta");
     if (card) card.querySelectorAll("button, input").forEach((e) => { e.disabled = true; });
     try {
-      const r = await postJSON("/api/responder-escalada", { alertaId, resposta });
+      const r = await postJSON("/api/responder-escalada", { alertaId, resposta, horaEncaixe });
       const dados = await r.json().catch(() => ({}));
       if (!dados.ok) alert("Não consegui responder: " + (dados.motivo || dados.erro || "erro desconhecido"));
     } catch (e) {
@@ -1759,6 +1761,22 @@
   }
 
   function ligarBotoesDeEscalada() {
+    // O botão do encaixe lê o campo de horário ao lado dele. Sem hora não manda nada: uma
+    // resposta "consigo encaixar" sem horário abriria consulta em lugar nenhum e a Carla
+    // ficaria oferecendo um horário que não existe.
+    document.querySelectorAll("#lista-alertas button[data-encaixe]").forEach((botao) => {
+      botao.addEventListener("click", () => {
+        const id = botao.dataset.encaixe;
+        const campo = document.querySelector(`#lista-alertas input[data-encaixe-hora="${id}"]`);
+        const hora = campo && campo.value ? campo.value : "";
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) {
+          alert("Escolha o horário do encaixe antes.");
+          if (campo) campo.focus();
+          return;
+        }
+        responderEscalada(id, `Consigo encaixar hoje às ${hora}. O horário já está aberto na agenda: consulte a agenda de hoje e ofereça esse horário.`, botao, hora);
+      });
+    });
     document.querySelectorAll("#lista-alertas button[data-alerta]").forEach((botao) => {
       botao.addEventListener("click", () => {
         responderEscalada(botao.dataset.alerta, botao.dataset.resposta, botao);
@@ -2111,9 +2129,33 @@
           const abrindo = al.dataPedida && al.horaPedida
             ? `<div style="font-size:11px;color:var(--texto-fraco);margin-bottom:6px">Sim também abre ${escapeHtml(al.dataPedida)} às ${escapeHtml(al.horaPedida)} na agenda.</div>`
             : "";
+          /*
+           * O ENCAIXE DE HOJE tem painel próprio, e não os botões de Sim/Não.
+           *
+           * A diferença não é cosmética: no Sim/Não quem escolheu a hora foi a família, e ela
+           * já veio no alerta. Aqui a família pediu "hoje" sem hora, e quem decide que hora
+           * cabe é o Dr. Bruno, olhando o dia dele. Por isso existe um campo de horário, e é
+           * o que ele digitar ali que abre o horário na agenda.
+           *
+           * As duas recusas vêm escritas e diferentes de propósito: "não consigo hoje" e
+           * "não consigo hoje nem amanhã" levam a Carla a conversas diferentes, e escolher
+           * entre dois botões é mais rápido do que digitar com o celular na mão.
+           */
+          const ehEncaixe = al.assunto === "encaixe";
+          const blocoEncaixe = `<div class="encaixe">
+                 <input type="time" class="encaixe-hora" data-encaixe-hora="${escapeHtml(al.id)}" step="300">
+                 <button class="btn-sim" data-encaixe="${escapeHtml(al.id)}">Consigo encaixar hoje nesse horário</button>
+               </div>
+               <div class="botoes">
+                 <button class="btn-nao" data-alerta="${escapeHtml(al.id)}" data-resposta="Não consigo encaixar hoje. Ofereça os próximos horários que existem na agenda.">Hoje não dá</button>
+                 <button class="btn-nao" data-alerta="${escapeHtml(al.id)}" data-resposta="Não consigo encaixar hoje nem amanhã. Ofereça os próximos horários que existem na agenda.">Hoje nem amanhã</button>
+                 <input type="text" placeholder="ou responda por escrito e tecle Enter" data-alerta-texto="${escapeHtml(al.id)}">
+               </div>`;
           const corpo = al.respondidoEm
             ? `<span class="respondido">Respondido: ${escapeHtml(al.resposta || "")}</span>`
-            : `${abrindo}<div class="botoes">
+            : ehEncaixe
+              ? blocoEncaixe
+              : `${abrindo}<div class="botoes">
                  ${Array.isArray(al.opcoes) && al.opcoes.length >= 2
                    ? al.opcoes.map((o) => `<button class="btn-opcao" data-alerta="${escapeHtml(al.id)}" data-resposta="${escapeHtml(o.valor)}">${escapeHtml(o.rotulo)}</button>`).join("")
                    : `<button class="btn-sim" data-alerta="${escapeHtml(al.id)}" data-resposta="sim">Sim</button>

@@ -759,6 +759,13 @@ async function atenderRequisicao(req, res) {
   // a hora, e o SIM cria o horário extra ANTES de avisar o bot. Sem isso a Carla prometeria um
   // horário que a ferramenta ia recusar na hora de marcar, que é pior que ter dito não.
   if (req.url === "/api/responder-escalada" && req.method === "POST") {
+    // O dia de HOJE no fuso da máquina, que é o mesmo fuso da agenda. toISOString() daria UTC
+    // e viraria o dia seguinte toda noite depois das 21h, abrindo o encaixe no dia errado.
+    const hojeLocal = () => {
+      const d = new Date();
+      const p2 = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+    };
     const corpo = await lerCorpoJSON(req);
     const alerta = corpo.alertaId ? Storage.acharAlerta(corpo.alertaId) : null;
     const resposta = typeof corpo.resposta === "string" ? corpo.resposta.trim() : "";
@@ -775,6 +782,25 @@ async function atenderRequisicao(req, res) {
     if (ehSim && alerta.dataPedida && alerta.horaPedida) {
       Storage.adicionarHorarioExtra(alerta.dataPedida, alerta.horaPedida);
       horarioAberto = `${alerta.dataPedida} ${alerta.horaPedida}`;
+    }
+
+    /*
+     * O ENCAIXE DE HOJE: a hora vem do campo que o Dr. Bruno preencheu, não do alerta.
+     *
+     * No pedido de horário fora da grade, quem disse a hora foi a família, e ela já veio no
+     * alerta. No encaixe é o contrário: a família pediu "hoje", sem hora, e quem decide que
+     * hora cabe é ele, olhando o dia dele. Por isso a hora chega aqui pelo corpo.
+     *
+     * Abrir o horário ANTES de mandar a resposta pra Carla não é detalhe de ordem: é o que
+     * garante que, quando ela for consultar a agenda, o horário já exista. Sem isso ela
+     * responderia que não conhece o horário que ele acabou de autorizar.
+     */
+    const horaEncaixe = typeof corpo.horaEncaixe === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(corpo.horaEncaixe)
+      ? corpo.horaEncaixe : null;
+    if (horaEncaixe && alerta.assunto === "encaixe") {
+      const dia = alerta.dataPedida && /^\d{4}-\d{2}-\d{2}$/.test(alerta.dataPedida) ? alerta.dataPedida : hojeLocal();
+      Storage.adicionarHorarioExtra(dia, horaEncaixe);
+      horarioAberto = `${dia} ${horaEncaixe}`;
     }
 
     const r = await encaminharAoBot("/interno/resposta-do-doutor",

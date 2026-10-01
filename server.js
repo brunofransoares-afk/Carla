@@ -1622,6 +1622,7 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
       horaPedida: pagamento ? null : resultado.escalarHora,
       opcoes: pagamento ? (pagamento.opcoes || null) : resultado.escalarOpcoes,
       pagamentoSlotId: pagamento ? (pagamento.pagamentoSlotId || null) : null,
+      assunto: resultado.escalarAssunto === "encaixe" ? "encaixe" : null,
     });
     console.log(`[ALERTA: ESCALADO PELA IA] ${telefone}: "${resultado.escalar}"`);
     notificarAtencao(sock, {

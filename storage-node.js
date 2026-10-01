@@ -979,7 +979,7 @@ function lerAlertas() {
 // dataPedida e horaPedida só existem quando a pergunta é sobre abrir um horário que a grade
 // não tem. Com elas o botão "Sim" do painel cria o horário extra junto, senão a Carla
 // prometeria um horário que a ferramenta ia recusar na hora de marcar.
-function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", pergunta = null, dataPedida = null, horaPedida = null, opcoes = null, pagamentoSlotId = null }) {
+function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", pergunta = null, dataPedida = null, horaPedida = null, opcoes = null, pagamentoSlotId = null, assunto = null }) {
   const registro = {
     // Precisa de identidade pra o painel conseguir responder um alerta específico. Os alertas
     // antigos não têm, e tudo bem: não dá pra responder alerta de antes desta mudança.
@@ -990,6 +990,9 @@ function registrarAlertaUrgencia({ telefone, mensagem, tipo = "emergencia", perg
     registro.pergunta = String(pergunta).slice(0, 300);
     if (dataPedida) registro.dataPedida = dataPedida;
     if (horaPedida) registro.horaPedida = horaPedida;
+    // O assunto decide o que o painel desenha. "encaixe" ganha campo de horário, porque ali
+    // quem escolhe a hora é o Dr. Bruno, não a família nem a Carla.
+    if (assunto === "encaixe") registro.assunto = "encaixe";
     // A reserva que o Sim marca como paga. Vem da máquina, nunca do texto da pergunta.
     if (pagamentoSlotId) registro.pagamentoSlotId = String(pagamentoSlotId).slice(0, 80);
     // Alternativas viram botões no painel, uma por opção (ex: os três tipos de consulta).
