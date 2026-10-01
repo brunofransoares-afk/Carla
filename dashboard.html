@@ -1097,16 +1097,37 @@
 
   // Sem confirmação de propósito, diferente do cancelar: marcar pago não apaga nada e o
   // próprio botão desfaz. Um "tem certeza?" a cada conferência de extrato só atrapalha.
+  //
+  // O BOTÃO MUDA NA HORA, EM TODO LUGAR (2026-10-01). O dono: "O botão de pago agora não tá
+  // funcionando". O clique salvava, mas na ficha o botão ficava como estava: a ficha só se
+  // redesenha quando nenhum campo dela tem texto, e o campo de e-mail do portal já nasce
+  // preenchido. Agora o próprio botão (e os gêmeos dele na agenda e na ficha) troca assim
+  // que o servidor confirma, sem esperar redesenho nenhum. E recusa do servidor aparece:
+  // antes ela era engolida e o clique simplesmente não fazia nada.
   async function alternarPago(btn) {
     const novo = btn.dataset.pago !== "1";
+    const slotId = btn.dataset.slotId;
     btn.disabled = true;
+    let r = null;
     try {
-      await postJSON("/api/pagamento-toggle", { slotId: btn.dataset.slotId, pago: novo });
+      const resposta = await postJSON("/api/pagamento-toggle", { slotId, pago: novo });
+      r = await resposta.json().catch(() => null);
     } catch (e) {
-      btn.disabled = false;
-      alert("Não consegui salvar. Tenta de novo.");
+      r = null;
+    }
+    btn.disabled = false;
+    if (!r || !r.ok) {
+      alert("Não consegui marcar como " + (novo ? "pago" : "não pago") + ". A consulta pode ter sido cancelada ou vencido o prazo do Pix. Atualize a página e confira.");
       return;
     }
+    document.querySelectorAll(".btn-pago").forEach((b) => {
+      if (b.dataset.slotId !== slotId) return;
+      b.dataset.pago = novo ? "1" : "0";
+      b.classList.toggle("sim", novo);
+      b.classList.toggle("nao", !novo);
+      b.textContent = novo ? "✓" : "R$";
+      b.title = novo ? "Pago. Clique pra desmarcar" : "Ainda não pagou. Clique pra marcar como pago";
+    });
     atualizar();
     atualizarCrm();
   }
