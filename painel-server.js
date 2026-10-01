@@ -24,6 +24,7 @@ const { criarIntegracoesDuraveis } = require(path.join(__dirname, "integracoes-d
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const PainelWebhook = require(path.join(__dirname, "painel-webhook.js"));
 const Crm = require(path.join(__dirname, "crm.js"));
+const Hoje = require(path.join(__dirname, "painel-hoje.js"));
 const Avisos = require(path.join(__dirname, "avisos-texto.js"));
 
 // Notas e etiquetas do CRM. Arquivo próprio, fora do SQLite e das sessões: é anotação do
@@ -586,7 +587,7 @@ async function atenderRequisicao(req, res) {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     const f = Eventos.funil({ desde, ate });
     // A lista de contatos crus não vai pro navegador: ela cresce sem teto e a tela não usa.
-    res.end(JSON.stringify({ ...f, contatos: undefined, periodo, rotulo }));
+    res.end(JSON.stringify({ ...f, ...Hoje.passagensDoFunil(f.etapas), contatos: undefined, periodo, rotulo }));
     return;
   }
 
@@ -606,14 +607,72 @@ async function atenderRequisicao(req, res) {
   // devolve cada família já com a situação escrita. O cruzamento é aqui, não no navegador,
   // pelo mesmo motivo do funil: a lista de eventos cresce sem teto.
   if (caminhoPedido === "/api/crm" && req.method === "GET") {
+    const dadosCrm = Crm.lerCrm(ARQ_CRM);
     const crm = Crm.montarCrm({
       contatos: Storage.listarTodosContatos(),
       agendamentos: Storage.lerTodosAgendamentos(),
       funilContatos: Eventos.funil({}).contatos,
-      dadosCrm: Crm.lerCrm(ARQ_CRM),
+      dadosCrm,
     });
+    // A tela Hoje: as pendências do dia, já ordenadas. Calculadas aqui, junto do CRM, porque
+    // dependem do mesmo cruzamento e da lista de eventos, que não vai inteira pro navegador.
+    const pendencias = Hoje.pendenciasDoDia({ contatos: crm.contatos, eventos: Eventos.lerEventos({}) });
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ...crm, temLinkAvaliacao: !!LINK_AVALIACAO }));
+    res.end(JSON.stringify({
+      ...crm, temLinkAvaliacao: !!LINK_AVALIACAO, pendencias,
+      listaOrigens: Crm.listaDeOrigens(dadosCrm), motivosPerda: Crm.MOTIVOS_PERDA,
+    }));
+    return;
+  }
+
+  // Os NÚMEROS: mês contra mês, semana, faturamento recebido, origem e motivo de perda. Tudo
+  // sai de dado que a Carla já guarda; o que falta volta com semDado e a tela diz "sem dado ainda".
+  if (caminhoPedido === "/api/numeros" && req.method === "GET") {
+    const dadosCrm = Crm.lerCrm(ARQ_CRM);
+    const agendamentos = Storage.lerTodosAgendamentos();
+    const funilContatos = Eventos.funil({}).contatos;
+    const crm = Crm.montarCrm({ contatos: Storage.listarTodosContatos(), agendamentos, funilContatos, dadosCrm });
+    const pendencias = Hoje.pendenciasDoDia({ contatos: crm.contatos, eventos: Eventos.lerEventos({}) });
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(Hoje.numeros({
+      contatos: crm.contatos, contatosFunil: funilContatos, agendamentos,
+      motivosPerda: Crm.MOTIVOS_PERDA, pendenciasAbertas: pendencias.total,
+    })));
+    return;
+  }
+
+  if (caminhoPedido === "/api/crm/origem" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.definirOrigem(ARQ_CRM, corpo.telefone, corpo.origem);
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
+  // A lista de origens que o Dr. Bruno edita: acrescentar uma nova ou tirar uma da lista.
+  if (caminhoPedido === "/api/crm/origens" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = corpo.acao === "retirar" ? Crm.retirarOrigem(ARQ_CRM, corpo.nome) : Crm.acrescentarOrigem(ARQ_CRM, corpo.nome);
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
+  // Motivo de perda: marca a família como perdida (ou reabre, com motivo vazio).
+  if (caminhoPedido === "/api/crm/perda" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.definirPerda(ARQ_CRM, corpo.telefone, corpo.motivo || null);
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
+    return;
+  }
+
+  // Follow-up de 7 ou 30 dias feito por fora: tira a família da lista do dia.
+  if (caminhoPedido === "/api/crm/followup" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const r = Crm.registrarFollowup(ARQ_CRM, corpo.telefone, corpo.prazo);
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(r));
     return;
   }
 
@@ -664,6 +723,8 @@ async function atenderRequisicao(req, res) {
         modelo: Avisos.textoPortal({ endereco: String(process.env.PORTAL_URL || "").trim(), email: "{{EMAIL_RESPONSAVEL}}" }),
       },
       etiquetas: dadosCrm.etiquetas[telefone] || [],
+      listaOrigens: Crm.listaDeOrigens(dadosCrm),
+      motivosPerda: Crm.MOTIVOS_PERDA,
       linhaDoTempo: Crm.linhaDoTempo({ eventos, notas, consultasManuais: dadosCrm.consultasRealizadas[telefone] || [], retornosAvisados: dadosCrm.retornos[telefone] || {} }),
       // As últimas falas da conversa, do jeito que a Carla as guarda. É o que responde
       // "onde essa conversa parou?" sem abrir o WhatsApp.
