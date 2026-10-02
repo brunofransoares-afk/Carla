@@ -54,8 +54,10 @@ const SEM_COMENTARIO = PROMPT.split("\n").filter((l) => !l.trim().startsWith("//
     "1e. ela não consulta pra 'ver se tem': a grade não tem hoje, e consultar só produziria um não que não é dela");
   ok(/assunto "encaixe"/.test(SEM_COMENTARIO) && /dataPedida preenchida com a data de HOJE/.test(SEM_COMENTARIO),
     "1f. o escalonamento leva o assunto e o dia");
-  ok(/o nome da criança e o nome de quem vai levar/.test(SEM_COMENTARIO),
-    "1g. e ela colhe o que falta antes, senão o Dr. Bruno decide no escuro");
+  // Invertido em 02/10/2026: pedir nome antes de escalar fez uma mãe ouvir a mesma pergunta
+  // três vezes enquanto pedia só que alguém visse com o doutor.
+  ok(/NÃO PEÇA NOME ANTES DE ESCALAR/.test(SEM_COMENTARIO) && !/PEGUE O QUE FALTA/.test(SEM_COMENTARIO),
+    "1g. e escala sem pedir nome antes: o Dr. Bruno vê a conversa");
   ok(/chame consultar_horarios com data = hoje/.test(SEM_COMENTARIO),
     "2. quando a resposta chega, ela consulta a agenda de hoje");
   ok(/NUNCA diga que não conhece esse horário/.test(SEM_COMENTARIO),

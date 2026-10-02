@@ -33,6 +33,7 @@ const PedidoDeDados = require(path.join(__dirname, "pedido-de-dados.js"));
 const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
 const PedidoDeAjuda = require(path.join(__dirname, "pedido-de-ajuda.js"));
+const PedidoDeEncaixe = require(path.join(__dirname, "pedido-de-encaixe.js"));
 const PausaPeloCelular = require(path.join(__dirname, "pausa-pelo-celular.js"));
 const ConversaCompleta = require(path.join(__dirname, "conversa-completa.js"));
 const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
@@ -1556,6 +1557,36 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
       pergunta: null,
     });
     await enviarResposta(sock, jid, telefone, PedidoDeAjuda.MENSAGEM, semAtraso);
+    return;
+  }
+
+  // 2.6) URGÊNCIA QUE NÃO PODE ESPERAR (2026-10-02). Na conversa de urgência, pedido de
+  // encaixe, de hoje, de mais cedo, ou "não dá pra esperar" vai pro Dr. Bruno na hora, sem a
+  // IA e sem pedir nome antes. A Carla repetiu os horários três vezes pra uma mãe que pedia
+  // isso (ver pedido-de-encaixe.js).
+  const tipoTravado = Preco.tipoDoValor(EstadoAtendimento.primeiroPrecoInformado(sessao.estadoAtendimento));
+  if (PedidoDeEncaixe.pediuEncaixe(texto, { tipoTravado })) {
+    const crianca = (sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca) || null;
+    const motivo = `Urgência: a família pede encaixe/atendimento mais cedo${crianca ? ` (${crianca})` : ""}. Disse: "${texto.slice(0, 200)}"`;
+    sessao.aguardandoHumano = true;
+    sessao.aguardandoHumanoDesde = now.toISOString();
+    sessao.historico = [...(sessao.historico || []),
+      { role: "user", content: texto }, { role: "assistant", content: PedidoDeEncaixe.MENSAGEM }].slice(-24);
+    sessao.ultimaAtividade = now.toISOString();
+    sessao.ultimaMensagem = texto.slice(0, 140);
+    Storage.salvarSessao(telefone, sessao);
+    Eventos.registrar("escalou", telefone, { motivo: Eventos.trecho(motivo) }, now);
+    const alerta = Storage.registrarAlertaUrgencia({
+      telefone, tipo: "nao_entendida", mensagem: motivo,
+      pergunta: `Encaixe hoje${crianca ? ` pro ${crianca.split(/\s+/)[0]}` : ""}?`,
+      dataPedida: Agenda.toDateStr(now), assunto: "encaixe",
+    });
+    console.log(`[ALERTA: ENCAIXE DE URGÊNCIA] ${telefone}`);
+    notificarAtencao(sock, {
+      tipo: "encaixe", telefoneFamilia: telefone, texto: motivo, crianca,
+      pergunta: alerta.pergunta || null,
+    });
+    await enviarResposta(sock, jid, telefone, PedidoDeEncaixe.MENSAGEM, semAtraso);
     return;
   }
 
