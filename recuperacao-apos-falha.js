@@ -58,7 +58,7 @@ function respostaDepoisDosEfeitos(ctx) {
 // Se uma ferramenta já produziu efeito e a chamada seguinte ao modelo falhar, o efeito não
 // pode sumir do retorno. O servidor ainda precisa atualizar a sessão, notificar o Dr. Bruno e
 // dizer à família o que realmente aconteceu.
-function recuperarAposFalha({ historico, texto, ctx }) {
+function recuperarAposFalha({ historico, texto, ctx, erro = null }) {
   const respostaComEfeito = respostaDepoisDosEfeitos(ctx);
   const resposta = respostaComEfeito || "Deu uma instabilidade aqui do meu lado, pode repetir sua mensagem?";
   const novoHistorico = respostaComEfeito
@@ -79,6 +79,12 @@ function recuperarAposFalha({ historico, texto, ctx }) {
     dadosDoPaciente: ctx.dadosDoPacienteRegistrados || null,
     estadoAtendimento: ctx.estadoAtendimento || null,
     horariosOferecidos: [...(ctx.horariosOferecidos || [])].slice(-20),
+    // Falha SEM efeito nenhum: a família recebeu só "pode repetir?". Quem chama decide se
+    // isso já se repetiu e precisa ir pro Dr. Bruno (ver server.js, falhaDaIA).
+    falhaDaIA: respostaComEfeito ? null : {
+      motivo: String((erro && erro.message) || "erro desconhecido").slice(0, 300),
+      codigo: (erro && erro.code) || null,
+    },
   };
 }
 
