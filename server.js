@@ -34,6 +34,7 @@ const Eventos = require(path.join(__dirname, "registro-de-eventos.js"));
 const Reaquecimento = require(path.join(__dirname, "reaquecimento.js"));
 const PedidoDeAjuda = require(path.join(__dirname, "pedido-de-ajuda.js"));
 const PausaPeloCelular = require(path.join(__dirname, "pausa-pelo-celular.js"));
+const ConversaCompleta = require(path.join(__dirname, "conversa-completa.js"));
 const TextoDaMensagem = require(path.join(__dirname, "texto-da-mensagem.js"));
 const IdentidadeWhatsapp = require(path.join(__dirname, "identidade-whatsapp.js"));
 const { criarMemoriaMensagens } = require(path.join(__dirname, "memoria-mensagens-whatsapp.js"));
@@ -657,8 +658,36 @@ const caixaDeSaida = criarCaixaDeSaida({
   storage: Storage,
   prepararMensagem: Previa.mensagemDeTexto,
   aplicarEfeito: aplicarEfeitoAposEnvio,
-  aoEnviar: (id) => registroDeEnviosDaCarla.registrar(id),
+  aoEnviar: (id, enviada) => {
+    registroDeEnviosDaCarla.registrar(id);
+    registrarSaidaNaConversa(enviada);
+  },
 });
+// O REGISTRO DA CONVERSA INTEIRA (conversa-completa.js). Tudo que sai pela caixa entra aqui:
+// a mensagem manual do painel (chave "manual:") é do Dr. Bruno, o resto é da Carla. Os avisos
+// que a Carla manda pro número dele não são conversa com família nenhuma e ficam fora.
+function registrarSaidaNaConversa(enviada) {
+  if (!enviada || !enviada.telefone || !enviada.texto) return;
+  const telefoneDoDoutor = (process.env.DR_BRUNO_TELEFONE || "").trim();
+  if (telefoneDoDoutor && enviada.telefone === telefoneDoDoutor) return;
+  const doDoutor = String(enviada.chaveIdempotencia || "").startsWith("manual:");
+  ConversaCompleta.registrar(enviada.telefone, doDoutor ? "doutor" : "carla", enviada.texto,
+    doDoutor ? { origem: "painel" } : {});
+}
+
+// O que chegou da família, do jeito que dá pra mostrar: o texto, ou o que a mídia era.
+function textoParaRegistro(conteudo) {
+  const texto = conteudo ? TextoDaMensagem.textoDe(conteudo) : "";
+  if (texto && texto.trim()) return texto;
+  if (!conteudo) return "(mensagem)";
+  if (conteudo.audioMessage) return "(áudio)";
+  if (conteudo.imageMessage) return "(imagem)";
+  if (conteudo.videoMessage) return "(vídeo)";
+  if (conteudo.documentMessage || conteudo.documentWithCaptionMessage) return "(documento)";
+  if (conteudo.stickerMessage) return "(figurinha)";
+  return "(mídia)";
+}
+
 // Os ids do que a Carla enviou, pra o eco dela nunca ser lido como o Dr. Bruno digitando.
 const registroDeEnviosDaCarla = PausaPeloCelular.criarRegistroDeEnvios();
 // Quando o Dr. Bruno escreveu pelo celular em cada conversa. Marcado na chegada, FORA da fila
@@ -1194,6 +1223,7 @@ async function responderEscaladaNaFila(alertaId, resposta) {
         ehHoje: consultaReal.data === Agenda.toDateStr(new Date()),
       } : null,
       consultaRecente: consultaRecenteDe(telefone),
+      registroDaConversa: ConversaCompleta.trechoParaCarla(ConversaCompleta.ler(telefone)),
       recadoDoDoutor: sessao.recadoDoDoutor,
       estadoAtendimento: sessao.estadoAtendimento,
       triagemPendente: sessao.triagemPendente,
@@ -1587,6 +1617,9 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     // A consulta que já aconteceu há menos de 30 dias: a família está no acompanhamento,
     // e dúvida sobre a criança vai pro Dr. Bruno, não pra um agendamento novo.
     consultaRecente: consultaRecenteDe(telefone, now),
+    // Parte B do registro da conversa (2026-10-02): se o Dr. Bruno escreveu à mão nesta
+    // conversa, a Carla lê o trecho final, com a parte dele e as respostas da família a ele.
+    registroDaConversa: ConversaCompleta.trechoParaCarla(ConversaCompleta.ler(telefone), { agora: now }),
     estadoAtendimento: sessao.estadoAtendimento,
     triagemPendente: sessao.triagemPendente,
   });
@@ -2007,6 +2040,7 @@ async function iniciar() {
             ? normalizeMessageContent(msg.message) : msg.message) || msg.message;
           const textoDele = TextoDaMensagem.textoDe(conteudoDele) || "";
           doutorEscreveuEm.set(telefone, Date.now());
+          ConversaCompleta.registrar(telefone, "doutor", textoParaRegistro(conteudoDele), { origem: "celular" });
           await filaMensagens.enfileirar(telefone, () => pausarPelaMensagemDoDoutor(telefone, textoDele));
         }
         return;
@@ -2014,6 +2048,11 @@ async function iniciar() {
 
       if (sistema) return;
       if (memoriaMensagens.iniciar(telefone, msg, Storage.obterSessao(telefone)) !== "nova") return;
+      // No registro da conversa inteira, ANTES de qualquer decisão: o que a família manda
+      // enquanto a Carla está pausada ou silenciada é justamente o que se perdia (o Dr. Bruno
+      // respondendo à mão e a família respondendo a ele).
+      ConversaCompleta.registrar(telefone, "familia", textoParaRegistro(
+        (typeof normalizeMessageContent === "function" ? normalizeMessageContent(msg.message) : msg.message) || msg.message));
       const concluir = () => memoriaMensagens.concluir(telefone, msg);
       const falhar = (erro) => {
         memoriaMensagens.liberar(telefone, msg);

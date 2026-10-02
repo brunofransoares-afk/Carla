@@ -90,7 +90,7 @@ ok(!P.ehMensagemDoDoutor(base({ telefone: "+5531988887777" })), "2f. a conversa 
   ok(/PausaPeloCelular\.ehMensagemDoDoutor\(/.test(chegada) && /pausarPelaMensagemDoDoutor\(telefone, textoDele\)/.test(chegada),
     "6. mensagem dele na chegada vira pausa");
   ok(chegada.indexOf("doutorEscreveuEm.set(") < chegada.indexOf("filaMensagens.enfileirar("), "6b. a marca de 'ele escreveu' vem antes da fila, pra resposta em curso enxergar");
-  ok(/registro: registroDeEnviosDaCarla/.test(chegada) && /aoEnviar: \(id\) => registroDeEnviosDaCarla\.registrar\(id\)/.test(SERVER),
+  ok(/registro: registroDeEnviosDaCarla/.test(chegada) && /aoEnviar: \(id, enviada\) => \{\s*registroDeEnviosDaCarla\.registrar\(id\);/.test(SERVER),
     "6c. com o registro dos envios da Carla ligado nas duas pontas");
   const turno = SERVER.slice(SERVER.indexOf("async function processarMensagem("), SERVER.indexOf("async function enviarLembretes("));
   const pChecagem = turno.indexOf("const doutorEscreveuNoMeio = (doutorEscreveuEm.get(telefone) || 0) >= inicioDoTurno;");

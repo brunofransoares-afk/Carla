@@ -11,6 +11,7 @@ const { exec } = require("child_process");
 const Seguranca = require(path.join(__dirname, "painel-seguranca.js"));
 const Sso = require(path.join(__dirname, "sso-do-spi.js"));
 const VersaoDoCodigo = require(path.join(__dirname, "versao-do-codigo.js"));
+const ConversaCompleta = require(path.join(__dirname, "conversa-completa.js"));
 const SsoSupabase = require(path.join(__dirname, "sso-supabase.js"));
 const StatusWhatsapp = require(path.join(__dirname, "status-whatsapp.js"));
 
@@ -741,6 +742,9 @@ async function atenderRequisicao(req, res) {
         modelo: Avisos.textoPortal({ endereco: String(process.env.PORTAL_URL || "").trim(), email: "{{EMAIL_RESPONSAVEL}}" }),
       },
       etiquetas: dadosCrm.etiquetas[telefone] || [],
+      // A CONVERSA INTEIRA (conversa-completa.js): família, Carla e o que ele escreveu à mão,
+      // que a memória curta da Carla (historico, logo abaixo) não guarda.
+      conversa: ConversaCompleta.ler(telefone, { limite: 300 }),
       listaOrigens: Crm.listaDeOrigens(dadosCrm),
       motivosPerda: Crm.MOTIVOS_PERDA,
       linhaDoTempo: Crm.linhaDoTempo({ eventos, notas, consultasManuais: dadosCrm.consultasRealizadas[telefone] || [], retornosAvisados: dadosCrm.retornos[telefone] || {} }),
