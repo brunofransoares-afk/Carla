@@ -1655,6 +1655,35 @@ async function processarMensagem(sock, jid, telefone, texto, { semAtraso = false
     triagemPendente: sessao.triagemPendente,
   });
 
+  // A IA FALHOU E NÃO FEZ NADA (2026-10-02). A família recebe "deu uma instabilidade, pode
+  // repetir?", e o histórico fica como estava. Se a causa persiste (limite diário estourado,
+  // histórico que a API recusa), a próxima mensagem falha igual: foi o que aconteceu com uma
+  // mãe que ouviu a mesma frase três vezes logo depois de o Dr. Bruno ter combinado um encaixe
+  // com ela. Agora: o limite diário vai direto pro Dr. Bruno; outra falha, só na segunda
+  // seguida (uma oscilação da API acontece). E ele fica sabendo o motivo.
+  if (resultado.falhaDaIA) {
+    sessao.falhasSeguidasDaIA = (Number(sessao.falhasSeguidasDaIA) || 0) + 1;
+    const limite = resultado.falhaDaIA.codigo === "CARLA_LIMITE_IA";
+    if (limite || sessao.falhasSeguidasDaIA >= 2) {
+      const motivo = limite
+        ? "A Carla não respondeu: o limite diário de uso da IA foi atingido. Ela volta sozinha à meia-noite (UTC); até lá, quem escreve fica com você."
+        : `A Carla falhou ${sessao.falhasSeguidasDaIA} vezes seguidas nesta conversa (${resultado.falhaDaIA.motivo}).`;
+      sessao.falhasSeguidasDaIA = 0;
+      sessao.aguardandoHumano = true;
+      sessao.aguardandoHumanoDesde = now.toISOString();
+      resultado.resposta = "Vou verificar com o consultório e te retorno por aqui 😊";
+      Eventos.registrar("escalou", telefone, { motivo: Eventos.trecho(motivo) }, now);
+      Storage.registrarAlertaUrgencia({ telefone, tipo: "nao_entendida", mensagem: motivo });
+      console.error(`[ALERTA: FALHA DA IA] ${telefone}: ${motivo}`);
+      notificarAtencao(sock, {
+        tipo: "escalonamento", telefoneFamilia: telefone, texto: motivo,
+        crianca: sessao.ultimoAgendamento && sessao.ultimoAgendamento.crianca, pergunta: null,
+      });
+    }
+  } else {
+    sessao.falhasSeguidasDaIA = 0;
+  }
+
   sessao.historico = resultado.historico;
   sessao.estadoAtendimento = EstadoAtendimento.normalizar(
     resultado.estadoAtendimento || sessao.estadoAtendimento);

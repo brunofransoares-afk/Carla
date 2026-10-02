@@ -13,7 +13,10 @@ function inteiroPositivo(valor, padrao) {
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : padrao;
 }
 
-const MAX_CHAMADAS_DIA = inteiroPositivo(process.env.CARLA_MAX_CHAMADAS_IA_DIA, 300);
+// 1000 desde 02/10/2026: cada mensagem da família pode virar 2 a 4 chamadas (as ferramentas),
+// e 300 cabia em menos de 100 mensagens num dia. O teto existe contra laço descontrolado, não
+// pra cortar um dia cheio de consultório.
+const MAX_CHAMADAS_DIA = inteiroPositivo(process.env.CARLA_MAX_CHAMADAS_IA_DIA, 1000);
 const MAX_TOKENS_DIA = inteiroPositivo(process.env.CARLA_MAX_TOKENS_IA_DIA, 4_000_000);
 const MAX_CONCORRENCIA = inteiroPositivo(process.env.CARLA_MAX_CONCORRENCIA_IA, 4);
 
@@ -80,8 +83,12 @@ const reservarChamada = registrarChamada;
 function registrarTokens(usage, agora = new Date()) {
   if (!usage) return;
   const uso = ler(agora);
+  // O prompt lido do cache custa um décimo do normal, e é a maior parte de cada chamada (o
+  // bloco estável inteiro). Contado cheio, o teto diário estourava no meio do dia com a conta
+  // real ainda baixa, e a Carla passava a responder "deu uma instabilidade" pra todo mundo
+  // (2026-10-02). Aqui ele entra pelo que custa.
   uso.tokensEntrada += Number(usage.input_tokens || 0)
-    + Number(usage.cache_read_input_tokens || 0)
+    + Math.ceil(Number(usage.cache_read_input_tokens || 0) / 10)
     + Number(usage.cache_creation_input_tokens || 0);
   uso.tokensSaida += Number(usage.output_tokens || 0);
   gravar(uso);

@@ -1383,14 +1383,28 @@ async function chamarClaudeComFerramentas({ api, system, mensagensIniciais, ctx,
 // Ponto de entrada principal: recebe o texto novo + histórico da conversa, devolve a
 // resposta pronta pra mandar, o histórico atualizado, e sinaliza se uma reserva de verdade
 // foi feita ou se a IA pediu escalonamento pra atendimento humano.
+// FALAS SEGUIDAS DO MESMO LADO VIRAM UMA (2026-10-02). A mensagem que o Dr. Bruno escreve à
+// mão entra no histórico como fala do consultório, e cai logo depois de uma fala da Carla:
+// dois "assistant" em sequência. Juntar as duas é o que a conversa de fato foi (o mesmo
+// número falando duas vezes) e tira da API qualquer dúvida sobre a ordem dos papéis.
+function juntarFalasSeguidas(lista) {
+  const saida = [];
+  for (const h of lista) {
+    const anterior = saida[saida.length - 1];
+    if (anterior && anterior.role === h.role) anterior.content = `${anterior.content}\n\n${h.content}`;
+    else saida.push({ role: h.role, content: h.content });
+  }
+  return saida;
+}
+
 async function responder({ telefone, texto, historico, now, idsOcupados, agendamentoAtual = null, pacienteConhecido = false, portalJaLiberado = false, guiaJaLiberado = false, horariosOferecidos = [], consultaProxima = null, precisaSeApresentar = false, recadoDoDoutor = null, reaquecimento = null, estadoAtendimento = null, consultaRecente = null, registroDaConversa = null }) {
   const instante = now instanceof Date ? new Date(now) : new Date(now);
   if (Number.isNaN(instante.getTime())) throw new TypeError("Data atual inválida.");
   const textoSeguro = typeof texto === "string" ? texto.slice(0, 8000) : String(texto || "").slice(0, 8000);
-  const historicoSeguro = (Array.isArray(historico) ? historico : [])
+  const historicoSeguro = juntarFalasSeguidas((Array.isArray(historico) ? historico : [])
     .filter((h) => h && (h.role === "user" || h.role === "assistant") && typeof h.content === "string")
     .map((h) => ({ role: h.role, content: h.content.slice(0, 8000) }))
-    .slice(-24);
+    .slice(-24));
   const estadoNormalizado = EstadoAtendimento.normalizar(estadoAtendimento);
   const api = obterCliente();
   if (!api) {
@@ -1448,7 +1462,7 @@ async function responder({ telefone, texto, historico, now, idsOcupados, agendam
     if (efeitos > 0) {
       console.error(`[IA] A falha aconteceu depois de ${efeitos} efeito(s); usando resposta determinística de recuperação.`);
     }
-      return recuperarAposFalha({ historico: historicoSeguro, texto: textoSeguro, ctx });
+      return recuperarAposFalha({ historico: historicoSeguro, texto: textoSeguro, ctx, erro });
   }
 
   // Trava de segurança: nunca confia cegamente no texto da IA pra saber se um agendamento
@@ -1549,6 +1563,7 @@ module.exports = {
     validarNomeCrianca,
     executarFerramenta,
     chamarClaudeComFerramentas,
+    juntarFalasSeguidas,
     montarSystemPrompt,
   },
 };
