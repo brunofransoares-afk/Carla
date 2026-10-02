@@ -67,6 +67,10 @@ const SITUACOES = [
   // que isso aparecesse no painel: "seria interessante que isso aparecesse no painel, a pessoa
   // silenciada". Só o "Retomar atendimento automático" desfaz.
   { chave: "pausada_por_voce", rotulo: "Carla pausada: você escreveu", tom: "perda" },
+  // CONTATO COMERCIAL (2026-10-02). O dono: "tem um monte de gente que manda mensagem pra mim
+  // com contato comercial. Aí não fica ali aguardando, vai pra uma outra listinha de contatos
+  // comerciais." Quem está aqui não aparece em NENHUMA outra lista (ver montarCrm).
+  { chave: "comercial", rotulo: "Contatos comerciais", tom: "neutro" },
   { chave: "aguardando_pagamento", rotulo: "Aguardando pagamento", tom: "atencao" },
   { chave: "consulta_marcada", rotulo: "Consulta marcada", tom: "bom" },
   { chave: "fechou_com_voce", rotulo: "Fechou com você", tom: "bom" },
@@ -389,6 +393,7 @@ function recortarCrmDoTelefone(dadosCrm, telefone) {
     retornos: so(d.retornos, {}),
     origens: so(d.origens, {}),
     perdas: so(d.perdas, {}),
+    comerciais: so(d.comerciais, {}),
     followups: so(d.followups, {}),
     listaOrigens: d.listaOrigens || null,
   };
@@ -428,7 +433,10 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
     const perda = perdaBruta && !s.futuras.length && MOTIVOS_PERDA.find((m) => m.chave === perdaBruta.motivo)
       ? { motivo: perdaBruta.motivo, rotulo: MOTIVOS_PERDA.find((m) => m.chave === perdaBruta.motivo).rotulo, em: perdaBruta.em || null }
       : null;
-    const situacoes = perda ? [...s.situacoes, "perdido"] : s.situacoes;
+    // Contato comercial sai de todas as outras listas: não é família, não é lead, e não está
+    // esperando ninguém. Fica só na lista dele.
+    const comercial = (crm.comerciais && crm.comerciais[contato.telefone]) || null;
+    const situacoes = comercial ? ["comercial"] : perda ? [...s.situacoes, "perdido"] : s.situacoes;
     const followups = (crm.followups && crm.followups[contato.telefone]) || [];
     const criancas = [...new Set(consultas.map((c) => c.crianca).filter(Boolean))];
     const responsavel = consultas.map((c) => c.responsavel).find(Boolean) || null;
@@ -443,6 +451,7 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
       situacoes,
       origem: (crm.origens && crm.origens[contato.telefone]) || null,
       perda,
+      comercial: comercial ? { em: comercial.em || null } : null,
       followups,
       posConsulta: s.detalhes.posConsulta || null,
       retornos: s.retornos,
@@ -459,7 +468,7 @@ function montarCrm({ contatos = [], agendamentos = [], funilContatos = [], dados
   });
 
   // Ordem: quem precisa do Dr. Bruno primeiro, depois por atividade.
-  const peso = (c) => (c.situacoes.includes("aguardando_humano") ? 0 : c.situacoes.includes("aguardando_pagamento") ? 1 : c.situacoes.includes("retorno_proximo") ? 2 : 3);
+  const peso = (c) => (c.situacoes.includes("comercial") ? 4 : c.situacoes.includes("aguardando_humano") ? 0 : c.situacoes.includes("aguardando_pagamento") ? 1 : c.situacoes.includes("retorno_proximo") ? 2 : 3);
   lista.sort((a, b) => {
     const p = peso(a) - peso(b);
     if (p !== 0) return p;
@@ -605,7 +614,7 @@ function pacientesSemConversao({ pacientes = null, pacientesManuais = [], sessoe
 // ---------------------------------------------------------------- notas e etiquetas
 
 function crmVazio() {
-  return { notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {}, origens: {}, perdas: {}, followups: {}, listaOrigens: null };
+  return { notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {}, origens: {}, perdas: {}, comerciais: {}, followups: {}, listaOrigens: null };
 }
 
 // Lê o crm.json. Os campos novos (origens, perdas, followups, listaOrigens) podem não existir
@@ -617,7 +626,7 @@ function lerCrm(arquivo) {
   const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
   return {
     notas: dados.notas || {}, etiquetas: dados.etiquetas || {}, consultasRealizadas: dados.consultasRealizadas || {}, retornos: dados.retornos || {},
-    origens: obj(dados.origens), perdas: obj(dados.perdas), followups: obj(dados.followups),
+    origens: obj(dados.origens), perdas: obj(dados.perdas), comerciais: obj(dados.comerciais), followups: obj(dados.followups),
     listaOrigens: Array.isArray(dados.listaOrigens) ? dados.listaOrigens : null,
   };
 }
@@ -678,6 +687,19 @@ function definirPerda(arquivo, telefone, motivo, agora = new Date()) {
   dados.perdas[telefone] = { motivo: def.chave, em: agora.toISOString() };
   Atomico.escreverJSONAtomico(arquivo, dados);
   return { ok: true, perda: { ...dados.perdas[telefone], rotulo: def.rotulo } };
+}
+
+// Marca (ou desmarca) o número como contato comercial. silenciadoJunto diz se foi ESTA marca
+// que silenciou a Carla nesse número: desmarcar só tira o silêncio que ela mesma pôs, nunca
+// um silêncio que ele já tinha decidido antes.
+function definirComercial(arquivo, telefone, marcar, { silenciadoJunto = false } = {}, agora = new Date()) {
+  if (!telefone) return { ok: false, motivo: "Sem telefone." };
+  const dados = lerCrm(arquivo);
+  const anterior = dados.comerciais[telefone] || null;
+  if (marcar) dados.comerciais[telefone] = anterior || { em: agora.toISOString(), silenciadoJunto: !!silenciadoJunto };
+  else delete dados.comerciais[telefone];
+  Atomico.escreverJSONAtomico(arquivo, dados);
+  return { ok: true, comercial: marcar ? dados.comerciais[telefone] : null, anterior };
 }
 
 // O Dr. Bruno fez o follow-up de 7 ou de 30 dias (por fora, ou pelo botão de mensagem).
@@ -783,7 +805,7 @@ module.exports = {
   MESES_RETORNO, AVISO_ANTES_DIAS, AVISO_DEPOIS_DIAS,
   SITUACOES, ESTAGIOS, MODELOS_POS_CONSULTA, TIPO_NOME,
   ORIGENS_PADRAO, MOTIVOS_PERDA, FOLLOWUP_PRAZOS,
-  listaDeOrigens, acrescentarOrigem, retirarOrigem, definirOrigem, definirPerda, registrarFollowup,
+  listaDeOrigens, acrescentarOrigem, retirarOrigem, definirOrigem, definirPerda, definirComercial, registrarFollowup,
   consultasDoTelefone, consultasManuaisDoTelefone, todasAsConsultas, estagioDe, situacoesDe, montarCrm, linhaDoTempo,
   somarMeses, marcosDeRetorno, ultimaPorCrianca,
   preencherModelo, modelosPara,
