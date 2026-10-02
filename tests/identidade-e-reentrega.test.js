@@ -96,6 +96,8 @@ async function main() {
       clearTimeout: t => { t.cancelado = true; },
       permitirMensagemDoTelefone: () => true, deveAvisarLimiteDeTaxa: () => true,
       normalizeMessageContent: Texto.desembrulhar,
+      // O registro da conversa inteira (conversa-completa.js) não é o assunto desta bateria.
+      ConversaCompleta: { registrar() { return true; }, ler() { return []; } }, textoParaRegistro: () => "",
       reenviarPendentesDoTelefone: async () => {},
       processarMensagem: async (_sock, _jid, telefone, texto) => { atendimentos.push({ telefone, texto }); },
       processarAudioRecebido: async () => { formatos.push("audio"); },

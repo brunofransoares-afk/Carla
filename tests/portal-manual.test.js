@@ -91,9 +91,9 @@ async function main() {
     const fimGet = fontePainel.indexOf('  if (caminhoPedido === "/api/crm/nota"', inicioGet);
     let status, corpo;
     const res = { writeHead: s => { status = s; }, end: s => { corpo = JSON.parse(s); } };
-    const get = new Function("req", "res", "Storage", "Crm", "Avisos", "Eventos", "ARQ_CRM", "process", "LINK_AVALIACAO", "const caminhoPedido = '/api/crm/contato';\n" + fontePainel.slice(inicioGet, fimGet));
+    const get = new Function("req", "res", "Storage", "Crm", "Avisos", "Eventos", "ARQ_CRM", "process", "LINK_AVALIACAO", "ConversaCompleta", "const caminhoPedido = '/api/crm/contato';\n" + fontePainel.slice(inicioGet, fimGet));
     get({ method: "GET", url: "/api/crm/contato?telefone=" + encodeURIComponent(tel) }, res, storage, Crm, Avisos,
-      { funil: () => ({ contatos: [] }), lerEventos: () => [] }, arqCrm, { env: { PORTAL_URL: endereco } }, "");
+      { funil: () => ({ contatos: [] }), lerEventos: () => [] }, arqCrm, { env: { PORTAL_URL: endereco } }, "", { ler: () => [] });
     assert.equal(status, 200);
     assert.equal(corpo.consultas[0].estado, "realizada");
     assert.equal(corpo.portal.emailSugerido, "informado@example.test");

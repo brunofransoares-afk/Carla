@@ -9,8 +9,9 @@ function criarCaixaDeSaida({ storage, prepararMensagem, aplicarEfeito, logger = 
       let atual = pendente;
       if (!atual.enviadaEm) {
         const enviada = await sock.sendMessage(atual.jid, prepararMensagem(atual.texto));
-        if (aoEnviar && enviada && enviada.key && enviada.key.id) {
-          try { aoEnviar(enviada.key.id); } catch { /* registro é ajuda, nunca derruba o envio */ }
+        if (aoEnviar) {
+          // O id serve pra reconhecer o eco; a mensagem inteira, pro registro da conversa.
+          try { aoEnviar((enviada && enviada.key && enviada.key.id) || null, atual); } catch { /* registro é ajuda, nunca derruba o envio */ }
         }
         atual = storage.marcarMensagemPendenteEnviada(atual.id)
           || { ...atual, enviadaEm: new Date().toISOString() };

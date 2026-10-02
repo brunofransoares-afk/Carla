@@ -524,6 +524,10 @@
   .balao { max-width: 90%; padding: 9px 12px; border-radius: 14px; font-size: 15px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
   .balao.user { align-self: flex-start; background: rgba(255,255,255,0.07); color: var(--texto); border-bottom-left-radius: 4px; }
   .balao.assistant { align-self: flex-end; background: rgba(250,221,124,0.14); color: var(--ouro-claro); border-bottom-right-radius: 4px; }
+  /* O que ele escreveu à mão (painel ou celular): do lado do consultório, em outra cor, pra
+     ler de relance onde a Carla parou e onde ele assumiu. */
+  .balao.doutor { align-self: flex-end; background: rgba(143,186,203,0.16); color: var(--info); border-bottom-right-radius: 4px; }
+  .balao small { display: block; font-size: 12px; opacity: .7; margin-bottom: 3px; }
 
   .notas-lista { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
   .nota { background: rgba(250,221,124,0.06); border-left: 3px solid var(--ouro); border-radius: 0 10px 10px 0; padding: 8px 12px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -1747,7 +1751,17 @@
       </div>
     </div>`;
 
-    const historico = `<div class="ficha-secao"><h3>Últimas mensagens <span>o que a Carla guarda da conversa atual</span></h3>
+    // A CONVERSA INTEIRA (2026-10-02): família, Carla e o que ele escreveu à mão, cada um com
+    // seu nome e hora. Quem só tem conversa de antes do registro existir cai na memória curta
+    // da Carla, como antes.
+    const QUEM_FALOU = { familia: "Família", carla: "Carla", doutor: "Você" };
+    const conversa = Array.isArray(f.conversa) ? f.conversa : [];
+    const historico = conversa.length
+      ? `<div class="ficha-secao"><h3>Conversa <span>família, Carla e você, inclusive o que você escreveu à mão</span></h3>
+      <div class="historico">${conversa.map((m) =>
+        `<div class="balao ${m.quem === "familia" ? "user" : m.quem === "doutor" ? "doutor" : "assistant"}"><small>${escapeHtml(QUEM_FALOU[m.quem] || "")}${m.origem === "celular" ? " (celular)" : ""} · ${escapeHtml(quandoCurto(m.em))}</small>${escapeHtml(m.texto || "")}</div>`).join("")}</div>
+    </div>`
+      : `<div class="ficha-secao"><h3>Últimas mensagens <span>o que a Carla guarda da conversa atual</span></h3>
       ${f.historico.length === 0 ? "<div class='vazio'>Sem conversa recente guardada.</div>" : `<div class="historico">${f.historico.map((m) =>
         `<div class="balao ${m.role === "user" ? "user" : "assistant"}">${escapeHtml(m.content || "")}</div>`).join("")}</div>`}
     </div>`;
@@ -1767,6 +1781,11 @@
         `<div class="lt-item ${escapeHtml(i.tipo)}"><span class="lt-quando">${escapeHtml(quandoCurto(i.em))}</span><span class="lt-texto">${escapeHtml(i.texto)}</span></div>`).join("")}</div>`}
     </div>`;
 
+    // A conversa abre no fim (o mais recente embaixo, como no WhatsApp). Se ele rolou pra cima
+    // pra ler o começo, o redesenho a cada 12 segundos não o joga de volta pro fim.
+    const conversaAntes = alvo.querySelector(".historico");
+    const estavaNoFim = !conversaAntes || conversaAntes.scrollHeight - conversaAntes.scrollTop - conversaAntes.clientHeight < 40;
+    const posicaoAntes = conversaAntes ? conversaAntes.scrollTop : 0;
     alvo.innerHTML = `
       <div class="ficha-topo">
         <div>
@@ -1823,6 +1842,7 @@
       });
     }
 
+    alvo.querySelectorAll(".historico").forEach((h) => { h.scrollTop = estavaNoFim ? h.scrollHeight : posicaoAntes; });
     alvo.querySelector(".btn-fechar-ficha").addEventListener("click", fecharFicha);
     ligarBotoesDeConsulta(alvo);
     const selOrigem = alvo.querySelector("#select-origem");

@@ -89,8 +89,8 @@ function menuTexto() {
   ok(/chame escalar_humano com o resumo do que ela trouxe \(sem pergunta de sim ou não: ele vai ler e responder\)/.test(CONTEXTO), "2c. vai pro Dr. Bruno pelo escalar_humano, como texto livre");
   ok(/Não ofereça consulta nova nem pergunte o tipo de consulta, a não ser que a família peça pra marcar outra ou que o Dr\. Bruno mande/.test(CONTEXTO), "2d. e a Carla não empurra consulta nova nem menu pra quem acabou de passar");
   ok(/\$\{consultaRecente \? `/.test(CONTEXTO) && /consultaRecente\.diasDesde/.test(CONTEXTO), "2e. o bloco só entra quando o bot passa a consulta recente, e diz há quantos dias");
-  ok(/montarContextoDoAtendimento\(now, pacienteConhecido, portalJaLiberado, guiaJaLiberado, consultaProxima, precisaSeApresentar, recadoDoDoutor, reaquecimento, estadoAtendimento, consultaRecente\)/.test(CEREBRO), "2f. montarSystemPrompt repassa");
-  ok(/montarSystemPrompt\(instante, pacienteConhecido, portalJaLiberado, guiaJaLiberado, consultaProxima, precisaSeApresentar, recadoDoDoutor, reaquecimento, estadoNormalizado, consultaRecente\)/.test(CEREBRO), "2g. e responder\\(\\) também");
+  ok(/montarContextoDoAtendimento\(now, pacienteConhecido, portalJaLiberado, guiaJaLiberado, consultaProxima, precisaSeApresentar, recadoDoDoutor, reaquecimento, estadoAtendimento, consultaRecente, registroDaConversa\)/.test(CEREBRO), "2f. montarSystemPrompt repassa");
+  ok(/montarSystemPrompt\(instante, pacienteConhecido, portalJaLiberado, guiaJaLiberado, consultaProxima, precisaSeApresentar, recadoDoDoutor, reaquecimento, estadoNormalizado, consultaRecente, registroDaConversa\)/.test(CEREBRO), "2g. e responder\\(\\) também");
 
   // O bot calcula pela agenda de verdade, executado aqui com um Storage de mentira.
   const fonte = SERVER.slice(SERVER.indexOf("const JANELA_ACOMPANHAMENTO_DIAS"), SERVER.indexOf("function sincronizarUltimoAgendamento("));
