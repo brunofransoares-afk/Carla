@@ -1710,6 +1710,7 @@
       <button class="btn-reaquecer-contato" data-telefone="${escapeHtml(c.telefone)}" title="A Carla escreve uma mensagem de retomada levando a conversa em conta. Você lê, ajusta e envia.">Reaquecer</button>
       ${c.aguardandoHumano ? `<button class="btn-retomar-contato" data-telefone="${escapeHtml(c.telefone)}">Retomar atendimento automático</button>` : ""}
       <button class="btn-mini btn-marcar-contato ${c.ehPaciente ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}" title="${c.ehPaciente ? "Tira a marcação de paciente (e a conversão que ela contou, se foi você que marcou)" : "Fechou com você? Marca aqui: conta como conversão no funil, no anel e nesta ficha"}">${c.ehPaciente ? "É paciente · desmarcar" : "Marcar como paciente (fechou com você)"}</button>
+      <button class="btn-mini btn-comercial-contato ${c.comercial ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}" data-comercial="${c.comercial ? "1" : "0"}" title="${c.comercial ? "Volta pras listas normais, e a Carla volta a responder (se foi esta marca que a calou)" : "Representante, fornecedor, parceria: sai do Aguardando você e vai pra lista de Contatos comerciais. A Carla fica quieta nesse número."}">${c.comercial ? "É contato comercial · desfazer" : "Contato comercial"}</button>
       <button class="btn-mini perigo btn-silenciar-contato ${silenciado ? "ativo" : ""}" data-telefone="${escapeHtml(c.telefone)}">${silenciado ? "Silenciado · reativar" : "Silenciar"}</button>
       ${c.ultimaAtividade ? `<button class="btn-mini perigo btn-limpar-contato" data-telefone="${escapeHtml(c.telefone)}">Limpar conversa</button>` : ""}
     </div></div>`;
@@ -1837,6 +1838,7 @@
     alvo.querySelectorAll("[data-followup-feito]").forEach((btn) => btn.addEventListener("click", () => registrarFollowup(c.telefone, Number(btn.dataset.followupFeito))));
     alvo.querySelectorAll(".btn-silenciar-contato").forEach((btn) => btn.addEventListener("click", () => alternarSilencio(btn.dataset.telefone)));
     alvo.querySelectorAll(".btn-marcar-contato").forEach((btn) => btn.addEventListener("click", () => alternarMarcacaoPaciente(btn.dataset.telefone)));
+    alvo.querySelectorAll(".btn-comercial-contato").forEach((btn) => btn.addEventListener("click", () => alternarComercial(btn)));
     alvo.querySelectorAll(".btn-retomar-contato").forEach((btn) => btn.addEventListener("click", () => retomarAtendimentoContato(btn.dataset.telefone)));
     alvo.querySelectorAll(".btn-limpar-contato").forEach((btn) => btn.addEventListener("click", () => limparConversaContato(btn.dataset.telefone)));
     alvo.querySelectorAll(".btn-reaquecer-contato").forEach((btn) => btn.addEventListener("click", () => reaquecerContato(btn, btn.dataset.telefone)));
@@ -2159,6 +2161,28 @@
     document.querySelectorAll("#lista-alertas .btn-ficha[data-telefone]").forEach((btn) => {
       btn.addEventListener("click", () => abrirFicha(btn.dataset.telefone));
     });
+  }
+
+  // CONTATO COMERCIAL (2026-10-02): tira do "Aguardando você" e põe na lista de Contatos
+  // comerciais, com a Carla quieta nesse número. O próprio botão desfaz.
+  async function alternarComercial(btn) {
+    const marcar = btn.dataset.comercial !== "1";
+    btn.disabled = true;
+    let r = null;
+    try {
+      const resp = await postJSON("/api/crm/comercial", { telefone: btn.dataset.telefone, comercial: marcar });
+      r = await resp.json().catch(() => null);
+    } catch (e) {
+      r = null;
+    }
+    btn.disabled = false;
+    if (!r || !r.ok) {
+      alert("Não consegui " + (marcar ? "mover pra Contatos comerciais" : "desfazer") + ". Tenta de novo.");
+      return;
+    }
+    atualizar();
+    atualizarCrm();
+    atualizarFicha(true);
   }
 
   async function alternarMarcacaoPaciente(telefone) {

@@ -666,6 +666,25 @@ async function atenderRequisicao(req, res) {
     return;
   }
 
+  // Contato comercial (2026-10-02): sai do "Aguardando você" e de todas as listas, vai pra
+  // lista dele, e a Carla fica quieta nesse número (representante não é família). Desfazer
+  // devolve tudo, e só tira o silêncio se foi esta marca que o pôs.
+  if (caminhoPedido === "/api/crm/comercial" && req.method === "POST") {
+    const corpo = await lerCorpoJSON(req);
+    const telefone = corpo.telefone || null;
+    const marcar = corpo.comercial === true;
+    let silenciadoJunto = false;
+    if (telefone && marcar) {
+      Storage.retomarAtendimento(telefone);
+      if (!Storage.contatoSilenciado(telefone)) { Storage.silenciarContato(telefone); silenciadoJunto = true; }
+    }
+    const r = Crm.definirComercial(ARQ_CRM, telefone, marcar, { silenciadoJunto });
+    if (r.ok && !marcar && r.anterior && r.anterior.silenciadoJunto) Storage.dessilenciarContato(telefone);
+    res.writeHead(r.ok ? 200 : 400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: r.ok, comercial: r.comercial, motivo: r.motivo }));
+    return;
+  }
+
   // Follow-up de 7 ou 30 dias feito por fora: tira a família da lista do dia.
   if (caminhoPedido === "/api/crm/followup" && req.method === "POST") {
     const corpo = await lerCorpoJSON(req);

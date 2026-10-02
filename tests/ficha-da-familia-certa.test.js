@@ -38,8 +38,8 @@ const ARQUIVO = {
   eq(Object.keys(soB.notas).join(",") + "|" + Object.keys(soB.etiquetas).join(",") + "|" + Object.keys(soB.retornos).join(","), "+B|+B|+B", "1b. e o mesmo pras notas, etiquetas e retornos");
   eq(soB.consultasRealizadas["+B"][0].crianca, "Bruno", "1c. com o conteúdo intacto");
   const semNada = Crm.recortarCrmDoTelefone(ARQUIVO, "+Z");
-  eq(JSON.stringify(semNada), JSON.stringify({ notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {}, origens: {}, perdas: {}, followups: {}, listaOrigens: null }), "1d. quem não tem nada guardado recebe o recorte vazio, não o arquivo");
-  eq(JSON.stringify(Crm.recortarCrmDoTelefone(null, "+B")), JSON.stringify({ notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {}, origens: {}, perdas: {}, followups: {}, listaOrigens: null }), "1e. e sem arquivo nenhum não quebra");
+  eq(JSON.stringify(semNada), JSON.stringify({ notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {}, origens: {}, perdas: {}, comerciais: {}, followups: {}, listaOrigens: null }), "1d. quem não tem nada guardado recebe o recorte vazio, não o arquivo");
+  eq(JSON.stringify(Crm.recortarCrmDoTelefone(null, "+B")), JSON.stringify({ notas: {}, etiquetas: {}, consultasRealizadas: {}, retornos: {}, origens: {}, perdas: {}, comerciais: {}, followups: {}, listaOrigens: null }), "1e. e sem arquivo nenhum não quebra");
 }
 
 // ------------------------------------------------- 2. a ficha certa, com o bug e sem ele
